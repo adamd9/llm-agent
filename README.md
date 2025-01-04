@@ -30,10 +30,75 @@ The system consists of three main components:
 
 ## API Endpoints
 
-- `POST /chat`: Send messages to the agent
-  - Request body: `{ "message": "your message" }`
-  - Response: Agent's response with conversation or task results
+The agent uses WebSocket for real-time, bidirectional communication:
 
+### WebSocket Connection
+- Connect to `ws://<host>` to establish a WebSocket connection
+- Upon connection, you'll receive a session ID message:
+  ```json
+  {
+    "type": "session",
+    "sessionId": "unique-session-id"
+  }
+  ```
+
+### Message Types
+
+1. **Client to Server**
+   - Send messages in this format:
+     ```json
+     {
+       "message": "your message",
+       "sessionId": "your-session-id"
+     }
+     ```
+
+2. **Server to Client**
+   - **Session Message**:
+     ```json
+     {
+       "type": "session",
+       "sessionId": "unique-session-id"
+     }
+     ```
+   
+   - **Response Message**:
+     ```json
+     {
+       "type": "response",
+       "data": {
+         "type": "conversation|task",
+         "response": "agent's response"
+       }
+     }
+     ```
+   
+   - **Debug Message**:
+     ```json
+     {
+       "type": "debug",
+       "data": {
+         "context": "debug context",
+         "message": "debug message",
+         "data": {},
+         "timestamp": "ISO timestamp"
+       }
+     }
+     ```
+   
+   - **Error Message**:
+     ```json
+     {
+       "type": "error",
+       "error": "error message",
+       "details": {
+         "message": "detailed error message",
+         "timestamp": "ISO timestamp"
+       }
+     }
+     ```
+
+### Session History
 - `GET /chat/:sessionId/history`: Get chat history for a session
   - Response: Array of messages in the session
 
@@ -57,7 +122,7 @@ OPENAI_API_KEY=your_key_here
 
 3. Start the service:
 ```bash
-./scripts/restart.sh
+./scripts/deploy.sh
 ```
 
 ### Project Structure
@@ -81,31 +146,41 @@ On startup, the system automatically:
 
 ### Logging
 
-The application logs are stored in `data/logs/` with the following structure:
-- Each restart creates a new log file with timestamp (e.g. `app_20250105_091609.log`)
-- A symlink `current.log` always points to the latest log file
-- Previous logs are preserved for history
+The system uses a unified logging system that:
+- Provides consistent debug information across all modules
+- Automatically broadcasts debug info to connected WebSocket clients
+- Includes timestamps and context with all messages
+- Supports structured data logging
 
-### Personalities
+Debug messages follow this format:
+```json
+{
+  "context": "module:operation",
+  "message": "Human readable message",
+  "data": {
+    "relevant": "debug data",
+    "timestamp": "ISO timestamp"
+  }
+}
+```
 
-Personalities are defined in plain text files in `data/personalities/`. Each file:
-- Has a `.txt` extension
-- Filename (minus extension) is the personality name
-- Contains the raw personality prompt
-- First personality found is used as default
+These messages are:
+1. Logged to the console for development
+2. Sent to all connected WebSocket clients with type "debug"
+3. Stored in rotating log files under `data/logs/`
 
 ### Development Scripts
 
-#### Restart Container and Run Tests
+#### Deploy Container and Run Tests
 
-We have a helper script to restart the container and run tests:
+We have a helper script to deploy the container and run tests:
 
 ```bash
 # Make the script executable
-chmod +x scripts/restart.sh
+chmod +x scripts/deploy.sh
 
-# Run the restart script
-./scripts/restart.sh
+# Run the deploy script
+./scripts/deploy.sh
 ```
 
 This script will:
@@ -191,6 +266,31 @@ When testing components that use the OpenAI API, follow these best practices:
    ```
 
 ## Design Principles
+
+### Real-time Communication
+- WebSocket-based communication for instant responses
+- Bidirectional streaming of messages and debug information
+- Automatic reconnection handling for network interruptions
+- Session-based conversation history
+
+### Error Handling
+- Graceful error handling at all layers
+- Detailed error messages with timestamps and context
+- Debug information streaming for development
+- Proper cleanup of resources and connections
+
+### Testing
+- Independent test instances for reliable testing
+- No shared state between tests
+- Fast test execution (sub-second)
+- Comprehensive WebSocket connection testing
+- Session management verification
+
+### Code Organization
+- Clear separation of concerns between layers
+- Modular WebSocket message handling
+- Consistent message type definitions
+- Clean session and connection management
 
 ### Flat File Configuration
 The system follows a flat file configuration approach for extensible components:

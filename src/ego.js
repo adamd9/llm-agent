@@ -3,17 +3,7 @@ require('dotenv').config();
 const { coordinator } = require('./coordinator');
 const { planner } = require('./planner');
 const personalityManager = require('./personalities');
-const debug = require('debug')('llm-agent:ego');
-
-// Debug logging function
-const debugLog = (context, message, data = {}) => {
-    console.log(JSON.stringify({
-        timestamp: new Date().toISOString(),
-        context: `ego:${context}`,
-        message,
-        ...data
-    }, null, 2));
-};
+const logger = require('./logger');
 
 let openaiClient;
 
@@ -35,11 +25,16 @@ class Ego {
         this.personality = null;
         this.identity = identity;
         this.capabilities = ['conversation', 'tasks']; // System capabilities, not personality-dependent
+        this._initialized = false;
         
-        debugLog('constructor', 'Initializing Ego');
+        logger.debug('constructor', 'Initializing Ego');
     }
 
     async initialize() {
+        if (this._initialized) {
+            return;
+        }
+
         // Load personalities
         await personalityManager.loadPersonalities();
         const defaultPersonality = personalityManager.getDefaultPersonality();
@@ -49,7 +44,9 @@ class Ego {
             this.identity = this.personality.name;
         }
         
-        debugLog('initialize', 'Ego initialized', {
+        this._initialized = true;
+        
+        logger.debug('initialize', 'Ego initialized', {
             identity: this.identity,
             capabilities: this.capabilities,
             personality: this.personality,
@@ -58,6 +55,7 @@ class Ego {
     }
 
     async setPersonality(name) {
+        await this.initialize();
         const personality = personalityManager.getPersonality(name);
         if (!personality) {
             throw new Error(`Personality ${name} not found`);
@@ -68,7 +66,7 @@ class Ego {
             this.identity = personality.name;
         }
         
-        debugLog('setPersonality', 'Personality updated', {
+        logger.debug('setPersonality', 'Personality updated', {
             identity: this.identity,
             capabilities: this.capabilities,
             personality: this.personality
@@ -77,8 +75,8 @@ class Ego {
 
     async processMessage(message, sessionHistory = []) {
         try {
-            debug('Processing message:', { message, sessionHistory });
-            debugLog('process', 'Processing message', {
+            await this.initialize();
+            logger.debug('process', 'Processing message', {
                 message,
                 sessionHistory,
                 sessionHistoryLength: sessionHistory.length
@@ -97,12 +95,12 @@ class Ego {
             };
 
             // Get plan from planner
-            debugLog('process', 'Getting plan from planner');
+            logger.debug('process', 'Getting plan from planner');
             const planResult = await planner(enrichedMessage);
-            debugLog('process', 'Planner result', { planResult });
+            logger.debug('process', 'Planner result', { planResult });
             
             if (planResult.status === 'error') {
-                debugLog('process', 'Planning failed', { error: planResult.error });
+                logger.debug('process', 'Planning failed', { error: planResult.error });
                 return {
                     type: 'error',
                     error: {
@@ -113,7 +111,7 @@ class Ego {
 
             // If planner indicates this is a task, execute it
             if (planResult.requiresTools) {
-                debugLog('process', 'Executing task');
+                logger.debug('process', 'Executing task');
                 enrichedMessage.plan = planResult.plan;
                 const result = await coordinator(enrichedMessage);
                 return {
@@ -124,16 +122,16 @@ class Ego {
             }
 
             // Otherwise handle as conversation
-            debugLog('process', 'Handling as conversation');
+            logger.debug('process', 'Handling as conversation');
             try {
                 const response = await this.handleConversation(enrichedMessage, sessionHistory);
-                debugLog('process', 'Conversation handled successfully', { response });
+                logger.debug('process', 'Conversation handled successfully', { response });
                 return {
                     type: 'conversation',
                     response
                 };
             } catch (conversationError) {
-                debugLog('process', 'Error in conversation handling', {
+                logger.debug('process', 'Error in conversation handling', {
                     error: {
                         message: conversationError.message,
                         stack: conversationError.stack
@@ -142,7 +140,7 @@ class Ego {
                 throw conversationError;
             }
         } catch (error) {
-            debugLog('process', 'Error processing message', {
+            logger.debug('process', 'Error processing message', {
                 error: {
                     message: error.message,
                     stack: error.stack
@@ -158,10 +156,11 @@ class Ego {
     }
 
     async handleConversation(enrichedMessage, sessionHistory) {
+        await this.initialize();
         const client = this.openaiClient;
         const systemPrompt = this.buildSystemPrompt();
         
-        debugLog('handleConversation', 'Processing session history', {
+        logger.debug('handleConversation', 'Processing session history', {
             sessionHistory,
             enrichedMessage
         });
@@ -169,24 +168,24 @@ class Ego {
         // Convert session history to chat format and validate
         const chatHistory = Array.isArray(sessionHistory) ? sessionHistory.map(msg => {
             if (!msg || typeof msg !== 'object') {
-                debugLog('handleConversation', 'Invalid message format in history', { msg });
+                logger.debug('handleConversation', 'Invalid message format in history', { msg });
                 return null;
             }
             
             // Ensure required fields are present
             if (!msg.role || !msg.content) {
-                debugLog('handleConversation', 'Missing required fields in history message', { msg });
+                logger.debug('handleConversation', 'Missing required fields in history message', { msg });
                 return null;
             }
 
-            debugLog('handleConversation', 'Valid history message', { msg });
+            logger.debug('handleConversation', 'Valid history message', { msg });
             return {
                 role: msg.role,
                 content: String(msg.content)
             };
         }).filter(Boolean) : [];
 
-        debugLog('handleConversation', 'Processed chat history', {
+        logger.debug('handleConversation', 'Processed chat history', {
             chatHistoryLength: chatHistory.length,
             chatHistory
         });
@@ -198,7 +197,7 @@ class Ego {
             { role: 'user', content: enrichedMessage.original_message }
         ];
 
-        debugLog('handleConversation', 'Final messages array', { messages });
+        logger.debug('handleConversation', 'Final messages array', { messages });
 
         try {
             const completion = await client.chat.completions.create({
@@ -208,17 +207,17 @@ class Ego {
                 max_tokens: 1000
             });
 
-            debugLog('handleConversation', 'OpenAI response', { completion });
+            logger.debug('handleConversation', 'OpenAI response', { completion });
 
             if (!completion || !completion.choices || !completion.choices[0] || !completion.choices[0].message) {
                 throw new Error('Invalid response from OpenAI API');
             }
 
             const response = completion.choices[0].message.content;
-            debugLog('handleConversation', 'Response generated', { response });
+            logger.debug('handleConversation', 'Response generated', { response });
             return response;
         } catch (error) {
-            debugLog('handleConversation', 'Error generating response', {
+            logger.debug('handleConversation', 'Error generating response', {
                 error: {
                     message: error.message,
                     stack: error.stack

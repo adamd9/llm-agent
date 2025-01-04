@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Agent Chat Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #chat-container {
+            flex-grow: 1;
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin-bottom: 20px;
+            overflow-y: auto;
+            background: #f9f9f9;
+            margin: 20px 20px 10px 20px;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .user-message {
+            background: #e3f2fd;
+            margin-left: 20%;
+        }
+        .agent-message {
+            background: #f5f5f5;
+            margin-right: 20%;
+        }
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .debug-info {
+            font-family: monospace;
+            font-size: 0.9em;
+            background: #333;
+            color: #fff;
+            padding: 10px;
+            margin-top: 5px;
+            border-radius: 3px;
+            white-space: pre-wrap;
+            display: none;
+        }
+        #input-container {
+            display: flex;
+            gap: 10px;
+            padding: 10px 20px 20px 20px;
+        }
+        #message-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #1976d2;
+        }
+        #debug-toggle {
+            background: #666;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container"></div>
+    <div id="input-container">
+        <input type="text" id="message-input" placeholder="Type your message...">
+        <button onclick="sendMessage()">Send</button>
+        <button id="debug-toggle" onclick="toggleDebug()">Toggle Debug</button>
+    </div>
+
+    <script>
+        let ws;
+        let sessionId = null;
+        let showDebug = false;
+
+        function connect() {
+            ws = new WebSocket(`ws://${window.location.host}`);
+
+            ws.onopen = () => {
+                console.log('Connected to server');
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                switch (data.type) {
+                    case 'session':
+                        sessionId = data.sessionId;
+                        console.log('Session ID:', sessionId);
+                        break;
+                    
+                    case 'response':
+                        addMessage('agent', data.data.response || data.data.error);
+                        break;
+                    
+                    case 'debug':
+                        const messageDiv = document.querySelector('.message:last-child');
+                        if (messageDiv) {
+                            let debugDiv = messageDiv.querySelector('.debug-info');
+                            if (!debugDiv) {
+                                debugDiv = document.createElement('div');
+                                debugDiv.className = 'debug-info';
+                                debugDiv.style.display = showDebug ? 'block' : 'none';
+                                messageDiv.appendChild(debugDiv);
+                            }
+                            debugDiv.textContent = `[${data.data.context}] ${data.data.message}\n`;
+                            if (Object.keys(data.data.data).length > 0) {
+                                debugDiv.textContent += JSON.stringify(data.data.data, null, 2);
+                            }
+                        }
+                        break;
+                    
+                    case 'error':
+                        console.error('Server error:', data.error);
+                        addMessage('error', `Error: ${data.error}`);
+                        break;
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('Disconnected from server');
+                setTimeout(connect, 1000); // Reconnect after 1 second
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                addMessage('error', 'Connection error. Please try again.');
+            };
+        }
+
+        function addMessage(type, content) {
+            const container = document.getElementById('chat-container');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message`;
+            messageDiv.textContent = content;
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+            
+            if (message && ws.readyState === WebSocket.OPEN) {
+                addMessage('user', message);
+                ws.send(JSON.stringify({
+                    message: message,
+                    sessionId: sessionId
+                }));
+                
+                input.value = '';
+            }
+        }
+
+        function toggleDebug() {
+            showDebug = !showDebug;
+            document.querySelectorAll('.debug-info').forEach(el => {
+                el.style.display = showDebug ? 'block' : 'none';
+            });
+        }
+
+        // Handle Enter key
+        document.getElementById('message-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Connect when page loads
+        connect();
+    </script>
+</body>
+</html>

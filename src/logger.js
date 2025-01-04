@@ -1,0 +1,40 @@
+const WebSocket = require('ws');
+
+class Logger {
+    constructor() {
+        this.wsConnections = new Map();
+    }
+
+    setWSConnections(connections) {
+        this.wsConnections = connections;
+    }
+
+    debug(context, message, data = {}) {
+        const debugInfo = {
+            context,
+            message,
+            data,
+            timestamp: new Date().toISOString()
+        };
+
+        // Console output
+        console.log(`[${context}] ${message}`, data);
+
+        // Send to WebSocket clients
+        if (this.wsConnections) {
+            for (const [sessionId, ws] of this.wsConnections.entries()) {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'debug',
+                        data: debugInfo
+                    }));
+                }
+            }
+        }
+    }
+}
+
+// Create a singleton instance
+const logger = new Logger();
+
+module.exports = logger;
