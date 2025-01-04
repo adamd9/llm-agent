@@ -1,7 +1,18 @@
 const { OpenAI } = require('openai');
 require('dotenv').config();
 const { coordinator } = require('./coordinator');
-const { simplifiedPlanner } = require('./planner');
+const { planner } = require('./planner');
+const debug = require('debug')('llm-agent:ego');
+
+// Debug logging function
+const debugLog = (context, message, data = {}) => {
+    console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        context: `ego:${context}`,
+        message,
+        ...data
+    }, null, 2));
+};
 
 let openaiClient;
 
@@ -18,13 +29,27 @@ function getOpenAIClient() {
 }
 
 class Ego {
-    constructor(identity, capabilities = []) {
+    constructor(identity, capabilities = [], client = null) {
         this.identity = identity;
         this.capabilities = capabilities;
+        this.openaiClient = client || getOpenAIClient();
+        
+        debugLog('constructor', 'Initializing Ego', {
+            identity,
+            capabilities,
+            hasClient: !!this.openaiClient
+        });
     }
 
     async processMessage(message, sessionHistory = []) {
         try {
+            debug('Processing message:', { message, sessionHistory });
+            debugLog('process', 'Processing message', {
+                message,
+                sessionHistory,
+                sessionHistoryLength: sessionHistory.length
+            });
+
             if (!message || typeof message !== 'string' || message.trim() === '') {
                 throw new Error('Invalid message format: message must be a non-empty string');
             }
@@ -36,78 +61,101 @@ class Ego {
                     capabilities: this.capabilities
                 }
             };
+
+            // Get plan from planner
+            debugLog('process', 'Getting plan from planner');
+            const planResult = await planner(enrichedMessage);
+            debugLog('process', 'Planner result', { planResult });
             
-            // For now, use a simple heuristic to detect tasks
-            const isTask = this.requiresTools(message);
-            
-            if (isTask) {
-                // Use simplified planner for now
-                const planResult = await simplifiedPlanner(enrichedMessage);
-                if (planResult.status === 'error') {
-                    return {
-                        type: 'error',
-                        error: planResult.error
-                    };
-                }
-                
+            if (planResult.status === 'error') {
+                debugLog('process', 'Planning failed', { error: planResult.error });
+                return {
+                    type: 'error',
+                    error: {
+                        message: planResult.error
+                    }
+                };
+            }
+
+            // If planner indicates this is a task, execute it
+            if (planResult.requiresTools) {
+                debugLog('process', 'Executing task');
+                enrichedMessage.plan = planResult.plan;
                 const result = await coordinator(enrichedMessage);
                 return {
                     type: 'task',
                     response: result.response,
                     enriched_message: enrichedMessage
                 };
-            } else {
-                // Handle as conversation
-                try {
-                    const response = await this.handleConversation(enrichedMessage, sessionHistory);
-                    return {
-                        type: 'conversation',
-                        response
-                    };
-                } catch (error) {
-                    return {
-                        type: 'error',
-                        error: {
-                            message: error.message,
-                            type: error.constructor.name,
-                            timestamp: new Date().toISOString()
-                        }
-                    };
-                }
+            }
+
+            // Otherwise handle as conversation
+            debugLog('process', 'Handling as conversation');
+            try {
+                const response = await this.handleConversation(enrichedMessage, sessionHistory);
+                debugLog('process', 'Conversation handled successfully', { response });
+                return {
+                    type: 'conversation',
+                    response
+                };
+            } catch (conversationError) {
+                debugLog('process', 'Error in conversation handling', {
+                    error: {
+                        message: conversationError.message,
+                        stack: conversationError.stack
+                    }
+                });
+                throw conversationError;
             }
         } catch (error) {
-            console.error('Error processing message:', error);
+            debugLog('process', 'Error processing message', {
+                error: {
+                    message: error.message,
+                    stack: error.stack
+                }
+            });
             return {
                 type: 'error',
                 error: {
-                    message: error.message,
-                    type: error.constructor.name,
-                    timestamp: new Date().toISOString()
+                    message: error.message || 'Unknown error occurred'
                 }
             };
         }
     }
 
-    requiresTools(message) {
-        const fileRelatedKeywords = ['list', 'files', 'show', 'create', 'read', 'write', 'delete', 'compile'];
-        return fileRelatedKeywords.some(keyword => message.toLowerCase().includes(keyword));
-    }
-
     async handleConversation(enrichedMessage, sessionHistory) {
-        const client = getOpenAIClient();
+        const client = this.openaiClient;
         const systemPrompt = this.buildSystemPrompt();
         
-        // Convert session history to chat format
-        const chatHistory = sessionHistory.map(msg => {
-            if (!msg || typeof msg !== 'object' || !msg.role || !msg.content) {
-                console.warn('Invalid message in session history:', msg);
+        debugLog('handleConversation', 'Processing session history', {
+            sessionHistory,
+            enrichedMessage
+        });
+
+        // Convert session history to chat format and validate
+        const chatHistory = Array.isArray(sessionHistory) ? sessionHistory.map(msg => {
+            if (!msg || typeof msg !== 'object') {
+                debugLog('handleConversation', 'Invalid message format in history', { msg });
                 return null;
             }
+            
+            // Ensure required fields are present
+            if (!msg.role || !msg.content) {
+                debugLog('handleConversation', 'Missing required fields in history message', { msg });
+                return null;
+            }
+
+            debugLog('handleConversation', 'Valid history message', { msg });
             return {
                 role: msg.role,
-                content: msg.content
+                content: String(msg.content)
             };
-        }).filter(Boolean);
+        }).filter(Boolean) : [];
+
+        debugLog('handleConversation', 'Processed chat history', {
+            chatHistoryLength: chatHistory.length,
+            chatHistory
+        });
 
         // Add the new message
         const messages = [
@@ -115,6 +163,8 @@ class Ego {
             ...chatHistory,
             { role: 'user', content: enrichedMessage.original_message }
         ];
+
+        debugLog('handleConversation', 'Final messages array', { messages });
 
         try {
             const completion = await client.chat.completions.create({
@@ -124,19 +174,28 @@ class Ego {
                 max_tokens: 1000
             });
 
-            if (!completion.choices || !completion.choices[0] || !completion.choices[0].message) {
+            debugLog('handleConversation', 'OpenAI response', { completion });
+
+            if (!completion || !completion.choices || !completion.choices[0] || !completion.choices[0].message) {
                 throw new Error('Invalid response from OpenAI API');
             }
 
             const response = completion.choices[0].message.content;
+            debugLog('handleConversation', 'Response generated', { response });
             return response;
         } catch (error) {
-            throw error; // Let the error be caught by the outer try-catch
+            debugLog('handleConversation', 'Error generating response', {
+                error: {
+                    message: error.message,
+                    stack: error.stack
+                }
+            });
+            throw error;
         }
     }
 
     buildSystemPrompt() {
-        return `You are R2O1, an AI assistant with the following capabilities:
+        return `You are ${this.identity}, an AI assistant with the following capabilities:
             - Conversation: I can engage in natural language dialogue
             - Task Execution: I can help with file operations and other tasks
             

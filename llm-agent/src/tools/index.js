@@ -59,10 +59,35 @@ class ToolManager {
     }
 
     isValidTool(tool) {
-        return tool && 
-               tool.name && 
-               tool.description && 
-               typeof tool.execute === 'function';
+        // Basic tool properties
+        if (!tool || typeof tool !== 'object') return false;
+        if (!tool.name || typeof tool.name !== 'string') return false;
+        if (!tool.description || typeof tool.description !== 'string') return false;
+        if (!tool.execute || typeof tool.execute !== 'function') return false;
+
+        // Actions must be defined
+        if (!tool.getCapabilities || typeof tool.getCapabilities !== 'function') return false;
+        
+        const capabilities = tool.getCapabilities();
+        if (!capabilities || !Array.isArray(capabilities.actions)) return false;
+
+        // Validate each action
+        for (const action of capabilities.actions) {
+            if (!action.name || typeof action.name !== 'string') return false;
+            if (!action.description || typeof action.description !== 'string') return false;
+            if (!Array.isArray(action.parameters)) return false;
+            
+            // Validate parameters
+            for (const param of action.parameters) {
+                if (!param.name || typeof param.name !== 'string') return false;
+                if (!param.description || typeof param.description !== 'string') return false;
+                if (!param.type || typeof param.type !== 'string') return false;
+                if (!['string', 'number', 'boolean', 'object', 'array'].includes(param.type)) return false;
+                if (param.required === undefined) return false;
+            }
+        }
+
+        return true;
     }
 
     getTool(name) {

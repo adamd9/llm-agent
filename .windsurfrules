@@ -1,0 +1,4 @@
+1. before changing functionality, make sure to first review the readme and test files for any contradictions
+2. if you change the functionality, make sure to update the readme file
+3. if you change the functionality, make sure to update the test files
+4. make sure to run the tests before restarting the container

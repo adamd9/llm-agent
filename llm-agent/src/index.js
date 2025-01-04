@@ -4,6 +4,16 @@ const Ego = require('./ego');
 const { coordinator } = require('./coordinator');
 const path = require('path');
 
+// Debug logging function
+const debug = (context, message, data = {}) => {
+    console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        context,
+        message,
+        ...data
+    }, null, 2));
+};
+
 const app = express();
 app.use(express.json());
 app.use(express.static('public'));
@@ -18,7 +28,7 @@ const ego = new Ego('R2O1', ['conversation', 'file-system']);
 if (require.main === module) {
     const port = process.env.PORT || 3000;
     app.listen(port, () => {
-        console.log(`Server running on port ${port}`);
+        debug('server', `Server running on port ${port}`);
     });
 }
 
@@ -27,6 +37,7 @@ app.post('/chat', async (req, res) => {
     try {
         const { message } = req.body;
         if (!message) {
+            debug('chat', 'Missing message in request', { body: req.body });
             return res.status(400).json({ 
                 error: 'Message is required',
                 details: {
@@ -40,20 +51,32 @@ app.post('/chat', async (req, res) => {
         let sessionId = req.headers['session-id'];
         if (!sessionId) {
             sessionId = uuidv4();
-            console.log('Created new session:', sessionId);
+            debug('chat', 'Created new session', { sessionId });
         }
 
         // Get session history
         let sessionHistory = sessions.get(sessionId) || [];
-        console.log(`Processing message for session ${sessionId}, history length: ${sessionHistory.length}`);
+        debug('chat', 'Retrieved session history', { 
+            sessionId, 
+            historyLength: sessionHistory.length,
+            history: sessionHistory 
+        });
 
         // Process message through ego
+        debug('chat', 'Sending message to ego', { message, sessionId });
         const egoResponse = await ego.processMessage(message, sessionHistory);
-        console.log('Ego response:', JSON.stringify(egoResponse, null, 2));
+        debug('chat', 'Received response from ego', { 
+            sessionId,
+            response: egoResponse 
+        });
 
         let response;
         if (egoResponse.type === 'error') {
             // Handle error response
+            debug('chat', 'Error from ego', { 
+                sessionId,
+                error: egoResponse.error 
+            });
             return res.status(500).json({
                 error: 'Processing error',
                 details: egoResponse.error
@@ -61,15 +84,63 @@ app.post('/chat', async (req, res) => {
         } else if (egoResponse.type === 'task') {
             // If ego detected a task, send it to the coordinator
             try {
+                debug('chat', 'Sending task to coordinator', {
+                    sessionId,
+                    task: egoResponse.enriched_message
+                });
                 const result = await coordinator(egoResponse.enriched_message);
+                debug('chat', 'Received response from coordinator', {
+                    sessionId,
+                    result
+                });
+
+                // Check for errors in the result
+                if (result.status === 'error') {
+                    debug('chat', 'Error from coordinator result', {
+                        sessionId,
+                        error: result.error
+                    });
+                    return res.status(500).json({
+                        error: result.error,
+                        details: result.details || {},
+                        timestamp: new Date().toISOString()
+                    });
+                }
+
+                // Check for failed actions in the response if it exists
+                if (result.response) {
+                    const failedSteps = result.response.match(/Failed actions:\n([^]*?)(?=\n\n|$)/);
+                    if (failedSteps) {
+                        debug('chat', 'Found failed actions', {
+                            sessionId,
+                            failedSteps: failedSteps[1]
+                        });
+                        return res.status(500).json({
+                            error: 'Task execution error',
+                            details: {
+                                message: failedSteps[1],
+                                fullResponse: result.response,
+                                timestamp: new Date().toISOString()
+                            }
+                        });
+                    }
+                }
+
                 response = result.response || egoResponse.response;
             } catch (coordError) {
-                console.error('Coordinator error:', coordError);
+                debug('chat', 'Error from coordinator', {
+                    sessionId,
+                    error: coordError.message,
+                    stack: coordError.stack,
+                    details: coordError.details
+                });
                 return res.status(500).json({
-                    error: 'Task execution error',
+                    error: coordError.message || 'Task execution error',
+                    stack: coordError.stack,
                     details: {
-                        message: coordError.message,
+                        error: coordError.message,
                         stack: coordError.stack,
+                        details: coordError.details,
                         timestamp: new Date().toISOString()
                     }
                 });
@@ -87,7 +158,10 @@ app.post('/chat', async (req, res) => {
         ].slice(-10); // Keep last 10 messages
         sessions.set(sessionId, sessionHistory);
 
-        console.log(`Updated session ${sessionId}, new history length: ${sessionHistory.length}`);
+        debug('chat', 'Updated session history', {
+            sessionId,
+            newHistoryLength: sessionHistory.length
+        });
 
         res.json({
             message: response,
@@ -99,7 +173,12 @@ app.post('/chat', async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('Error in chat endpoint:', error);
+        debug('chat', 'Unhandled error in chat endpoint', {
+            error: {
+                message: error.message,
+                stack: error.stack
+            }
+        });
         res.status(500).json({
             error: 'Internal server error',
             details: {
@@ -115,6 +194,10 @@ app.post('/chat', async (req, res) => {
 app.get('/chat/:sessionId/history', (req, res) => {
     const { sessionId } = req.params;
     const history = sessions.get(sessionId) || [];
+    debug('history', 'Retrieved session history', {
+        sessionId,
+        historyLength: history.length
+    });
     res.json(history);
 });
 

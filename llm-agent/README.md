@@ -17,6 +17,11 @@ The system consists of three main components:
 - Plans task execution using the planner
 - Executes plans using available tools
 - Returns results back to the ego layer
+- Provides detailed error handling with:
+  - Full stack traces
+  - Step-by-step execution status
+  - Contextual error information
+  - Tool-specific error details
 
 ### 3. Tool Layer
 - Provides specific capabilities (file operations, etc.)
@@ -100,6 +105,58 @@ Run the test suite:
 npm test
 ```
 
+#### Testing OpenAI Implementations
+When testing components that use the OpenAI API, follow these best practices:
+
+1. **Mock the OpenAI Client**:
+   ```javascript
+   jest.mock('openai');
+   
+   const mockOpenAI = {
+     chat: {
+       completions: {
+         create: jest.fn()
+       }
+     }
+   };
+   ```
+
+2. **Inject the Mock Client**:
+   - Design your components to accept a client parameter
+   - Fall back to creating a real client if none is provided
+   ```javascript
+   function MyComponent(config, client = null) {
+     this.client = client || new OpenAI(config);
+   }
+   ```
+
+3. **Structure Mock Responses**:
+   - Match the exact structure of OpenAI API responses
+   - Include all required fields
+   ```javascript
+   mockOpenAI.chat.completions.create.mockResolvedValueOnce({
+     choices: [{
+       message: {
+         content: JSON.stringify({
+           // your mock response data
+         })
+       }
+     }]
+   });
+   ```
+
+4. **Validate Response Handling**:
+   - Test both successful and error scenarios
+   - Verify proper parsing of response content
+   - Check error handling for malformed responses
+
+5. **Reset Mocks Between Tests**:
+   ```javascript
+   beforeEach(() => {
+     jest.clearAllMocks();
+   });
+   ```
+
 ## Architecture Details
 
 ### Message Flow
@@ -118,13 +175,173 @@ npm test
 - Each tool must export:
   - `name`: Tool identifier
   - `description`: What the tool does
-  - `parameters`: Expected parameters
   - `execute()`: Function to run the tool
+  - `getCapabilities()`: Function that returns tool's actions and parameters
+
+### File System Operations
+The file system tool provides access to files in two directories:
+- `/usr/src/app/data`: Read-write directory for data files
+- `/usr/src/app/src`: Read-only directory for source code
+
+Features:
+- Supports relative paths (e.g., "config.json" instead of "/usr/src/app/data/config.json")
+- Defaults to data directory when no path is specified
+- Automatically resolves paths to the appropriate directory
+- Prevents access to files outside of allowed directories
+
+Actions:
+- `list`: List files in a directory (defaults to data directory)
+- `read`: Read a file from either directory
+- `write`: Write to a file (data directory only)
+- `delete`: Delete a file (data directory only)
+- `exists`: Check if a file exists
+
+#### Permissions Requirements
+The data directory requires specific permissions to function correctly:
+- Directory permissions: `777` (rwxrwxrwx)
+  - All users need read/write/execute permissions
+  - Execute permission is needed to list directory contents
+- File permissions: `666` (rw-rw-rw-)
+  - All users need read/write permissions
+  - Files are created with these permissions by default
+
+These permissions ensure that:
+1. The Node.js process in the container can read/write files
+2. The host user can read/write files
+3. The directory is accessible for listing and file creation
+
+You can set these permissions using:
+```bash
+chmod 777 data      # Set directory permissions
+chmod 666 data/*    # Set file permissions
+```
+
+### Error Handling
+
+The system provides comprehensive error handling at multiple levels:
+
+1. **Coordinator Errors**
+   - Invalid tool or action errors
+   - Plan execution failures
+   - JSON parsing errors
+   - Each error includes:
+     - Error message
+     - Full stack trace
+     - Failed step details
+     - Tool response (if available)
+
+2. **Tool Errors**
+   - File operation failures
+   - Permission issues
+   - Validation errors
+   - Each error includes:
+     - Error message
+     - Stack trace
+     - Operation parameters
+     - File paths (when relevant)
+
+3. **Response Format**
+   For any error, the response will have this structure:
+   ```json
+   {
+     "status": "error",
+     "error": "Error message",
+     "stack": "Full stack trace",
+     "details": {
+       "error": "Detailed error message",
+       "stack": "Stack trace",
+       "lastStep": "Failed step info",
+       "toolResponse": "Tool-specific error details"
+     }
+   }
+   ```
 
 ### Session Management
 - Each chat session has a unique ID
 - Session history is maintained for context
 - History can be retrieved via API
+
+## Tool Interface
+
+Each tool in the system must implement the following interface:
+
+```javascript
+interface Tool {
+    // Name of the tool
+    name: string;
+    
+    // Description of what the tool does
+    description: string;
+    
+    // Execute an action with parameters
+    execute(action: string, parameters: object): Promise<any>;
+    
+    // Get tool capabilities
+    getCapabilities(): {
+        name: string;
+        description: string;
+        actions: Array<{
+            name: string;
+            description: string;
+            parameters: Array<{
+                name: string;
+                description: string;
+                type: 'string' | 'number' | 'boolean' | 'object' | 'array';
+                required: boolean;
+            }>;
+        }>;
+    };
+}
+```
+
+### Creating a New Tool
+
+1. Create a new file in `src/tools/` for your tool
+2. Implement the Tool interface
+3. Export a singleton instance
+4. The tool will be automatically loaded by the tool manager
+
+Example:
+```javascript
+class MyTool {
+    constructor() {
+        this.name = 'myTool';
+        this.description = 'Does something useful';
+    }
+
+    async execute(action, parameters) {
+        switch (action) {
+            case 'doSomething':
+                return this.doSomething(parameters);
+            default:
+                throw new Error(`Unknown action: ${action}`);
+        }
+    }
+
+    getCapabilities() {
+        return {
+            name: this.name,
+            description: this.description,
+            actions: [
+                {
+                    name: 'doSomething',
+                    description: 'Does something useful',
+                    parameters: [
+                        {
+                            name: 'input',
+                            description: 'Input to process',
+                            type: 'string',
+                            required: true
+                        }
+                    ]
+                }
+            ]
+        };
+    }
+}
+
+module.exports = new MyTool();
+```
 
 ## Contributing
 1. Fork the repository

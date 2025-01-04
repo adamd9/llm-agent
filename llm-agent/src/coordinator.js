@@ -1,69 +1,225 @@
-const { planner } = require('./planner');
-const { executor } = require('./executor');
+const toolManager = require('./tools');
+const debug = require('debug')('llm-agent:coordinator');
 
 async function coordinator(enrichedMessage) {
     try {
-        // Get the plan with context
-        const planResult = await planner(enrichedMessage);
-        if (planResult.status === 'error') {
+        debug('Starting coordination', {
+            message: enrichedMessage.original_message
+        });
+
+        try {
+            // Get the plan from the message context
+            const plan = enrichedMessage.plan ? JSON.parse(enrichedMessage.plan) : null;
+            if (!plan) {
+                debug('No plan provided');
+                return {
+                    status: 'error',
+                    error: 'No plan provided',
+                    stack: new Error('No plan provided').stack,
+                    details: {
+                        error: 'No plan provided',
+                        stack: new Error('No plan provided').stack
+                    }
+                };
+            }
+
+            debug('Parsed plan', { plan });
+            return await executePlan(plan);
+
+        } catch (error) {
+            debug('Coordination failed', {
+                error: error.message,
+                stack: error.stack
+            });
             return {
                 status: 'error',
-                error: planResult.error,
-                phase: 'planning'
+                error: error.message,
+                stack: error.stack,
+                details: {
+                    error: error.message,
+                    stack: error.stack
+                }
             };
         }
 
-        // Execute the plan
-        const executionResult = await executor(planResult.plan);
-        if (executionResult.status === 'error') {
-            return {
-                status: 'error',
-                error: executionResult.error,
-                phase: 'execution',
-                plan: planResult.plan
-            };
-        }
-
-        // Format the response
-        return {
-            status: 'success',
-            response: formatResponse(executionResult.results),
-            context: enrichedMessage.context,
-            plan: planResult.plan,
-            results: executionResult.results
-        };
     } catch (error) {
-        console.error('Error in coordinator:', error);
+        debug('Coordination failed', {
+            error: error.message,
+            stack: error.stack
+        });
+        
         return {
             status: 'error',
             error: error.message,
-            phase: 'coordination'
+            details: {
+                error: error.message,
+                stack: error.stack
+            }
+        };
+    }
+}
+
+async function executePlan(plan) {
+    let results = [];
+    let hasErrors = false;
+    let step;
+
+    try {
+        const tools = await toolManager.loadTools();
+        const toolMap = new Map(tools.map(tool => [tool.name, tool]));
+
+        for (step of plan) {
+            debug('Executing step:', step);
+            const tool = toolMap.get(step.tool);
+
+            if (!tool) {
+                const error = new Error(`Tool not found: ${step.tool}`);
+                debug('Tool not found:', {
+                    error: error.message,
+                    stack: error.stack,
+                    step
+                });
+                return {
+                    status: 'error',
+                    error: error.message,
+                    stack: error.stack,
+                    details: {
+                        error: error.message,
+                        stack: error.stack,
+                        lastStep: step
+                    }
+                };
+            }
+
+            try {
+                const result = await tool.execute(step.action, step.parameters);
+                debug('Tool execution result:', {
+                    tool: step.tool,
+                    action: step.action,
+                    result
+                });
+
+                if (result.status === 'error') {
+                    debug('Tool execution error:', {
+                        tool: step.tool,
+                        action: step.action,
+                        error: result.error,
+                        stack: result.stack,
+                        details: result
+                    });
+                    return {
+                        status: 'error',
+                        error: result.error,
+                        stack: result.stack,
+                        details: {
+                            error: result.error,
+                            stack: result.stack,
+                            lastStep: step,
+                            toolResponse: result
+                        }
+                    };
+                }
+
+                // Handle the mock tool response format from tests
+                const normalizedResult = {
+                    status: result.status || 'success',
+                    data: result.files ? { files: result.files } : result
+                };
+
+                results.push({
+                    tool: step.tool,
+                    action: step.action,
+                    result: normalizedResult
+                });
+            } catch (error) {
+                debug('Tool execution error:', {
+                    error: error.message,
+                    stack: error.stack,
+                    step
+                });
+                return {
+                    status: 'error',
+                    error: error.message,
+                    stack: error.stack,
+                    details: {
+                        error: error.message,
+                        stack: error.stack,
+                        lastStep: step
+                    }
+                };
+            }
+        }
+
+        return {
+            status: 'success',
+            response: formatResponse(results),
+            results
+        };
+
+    } catch (error) {
+        debug('Plan execution failed:', error);
+        return {
+            status: 'error',
+            error: error.message,
+            stack: error.stack,
+            details: {
+                error: error.message,
+                stack: error.stack,
+                results,
+                lastStep: step
+            }
         };
     }
 }
 
 function formatResponse(results) {
-    // Convert execution results into a natural language response
-    const successfulSteps = results.filter(r => r.status === 'success');
-    const failedSteps = results.filter(r => r.status === 'error');
-
     let response = '';
+    const successfulSteps = results.filter(r => r.result.status === 'success');
+    const failedSteps = results.filter(r => r.result.status === 'error');
 
     if (successfulSteps.length > 0) {
-        response += 'I have completed the following steps:\n';
-        successfulSteps.forEach(step => {
-            response += `- ${step.step}\n`;
-        });
+        response = 'Completed actions:';
+        for (const step of successfulSteps) {
+            response += '\n- ' + step.action + ':';
+            let resultStr = '';
+            if (step.tool === 'fileSystem') {
+                switch (step.action) {
+                    case 'list':
+                        resultStr = (step.result.data.files || step.result.files).map(f => 
+                            `\n  - ${f.name} (${f.type}, ${f.size} bytes)${f.isReadOnly ? ' [read-only]' : ''}`
+                        ).join('');
+                        break;
+                    case 'read':
+                        resultStr = `\n  Content: ${step.result.data.content}`;
+                        break;
+                    case 'write':
+                        resultStr = `\n  Successfully wrote to the file. The new content is: "${step.result.data.content}"`;
+                        break;
+                    case 'delete':
+                        resultStr = `\n  Successfully deleted: ${step.result.data.path}`;
+                        break;
+                    case 'exists':
+                        resultStr = `\n  ${step.result.data.exists ? 'File exists' : 'File does not exist'}${step.result.data.isReadOnly ? ' [read-only]' : ''}`;
+                        break;
+                    default:
+                        resultStr = JSON.stringify(step.result.data);
+                }
+            } else {
+                resultStr = JSON.stringify(step.result.data);
+            }
+            response += resultStr;
+        }
     }
 
     if (failedSteps.length > 0) {
-        response += '\nHowever, I encountered some issues:\n';
-        failedSteps.forEach(step => {
-            response += `- Failed to ${step.step}: ${step.error}\n`;
-        });
+        if (response) response += '\n\n';
+        response += 'Failed actions:\n';
+        for (const step of failedSteps) {
+            response += `- ${step.action}: ${step.result.error}\n`;
+        }
     }
 
-    return response.trim();
+    return response;
 }
 
 module.exports = { coordinator };

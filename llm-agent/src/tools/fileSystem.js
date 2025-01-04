@@ -20,21 +20,38 @@ class FileSystemTool {
         }
     }
 
-    // Helper to check if path is within allowed directories
+    // Helper to check if path is within allowed directories and resolve it
     _validatePath(filePath, requireWritable = false) {
-        const normalizedPath = path.normalize(filePath);
-        const isInAppDir = normalizedPath.startsWith(this.appRoot);
-        const isInDataDir = normalizedPath.startsWith(this.dataRoot);
-
-        if (!isInAppDir && !isInDataDir) {
-            throw new Error('Access denied: Path must be within app or data directory');
+        // Handle empty or root path
+        if (!filePath || filePath === '/' || filePath === '.') {
+            return this.dataRoot;
         }
 
-        if (requireWritable && isInAppDir) {
-            throw new Error('Access denied: App directory is read-only');
+        // Try data directory first, then app directory
+        let resolvedPath;
+        if (filePath.startsWith('/')) {
+            // Absolute path - try to match with data or app root
+            resolvedPath = filePath.startsWith(this.dataRoot) ? filePath :
+                          filePath.startsWith(this.appRoot) ? filePath : null;
+        } else {
+            // Relative path - try data directory first, then app
+            resolvedPath = path.resolve(this.dataRoot, filePath);
+            if (!resolvedPath.startsWith(this.dataRoot)) {
+                resolvedPath = path.resolve(this.appRoot, filePath);
+            }
         }
 
-        return normalizedPath;
+        // Validate the resolved path
+        if (!resolvedPath || 
+            (!resolvedPath.startsWith(this.dataRoot) && !resolvedPath.startsWith(this.appRoot))) {
+            throw new Error('Path must be within app or data directory');
+        }
+
+        if (requireWritable && resolvedPath.startsWith(this.appRoot)) {
+            throw new Error('App directory is read-only');
+        }
+
+        return resolvedPath;
     }
 
     async execute(action, params) {
@@ -44,6 +61,20 @@ class FileSystemTool {
                 case 'read':
                     return await this.readFile(params.path);
                 case 'write':
+                    if (!params || !params.path || !params.content) {
+                        const error = new Error('Missing required parameters for write: path and content');
+                        console.error('Parameter validation error:', {
+                            error: error.message,
+                            stack: error.stack,
+                            params
+                        });
+                        return {
+                            status: 'error',
+                            error: error.message,
+                            stack: error.stack,
+                            params
+                        };
+                    }
                     return await this.writeFile(params.path, params.content);
                 case 'delete':
                     return await this.deleteFile(params.path);
@@ -52,13 +83,34 @@ class FileSystemTool {
                 case 'exists':
                     return await this.fileExists(params.path);
                 default:
-                    throw new Error(`Unknown action: ${action}`);
+                    const error = new Error(`Unknown action: ${action}`);
+                    console.error('Invalid action error:', {
+                        error: error.message,
+                        stack: error.stack,
+                        action,
+                        params
+                    });
+                    return {
+                        status: 'error',
+                        error: error.message,
+                        stack: error.stack,
+                        action,
+                        params
+                    };
             }
         } catch (error) {
-            console.error(`FileSystem tool error:`, error);
+            console.error('FileSystem tool error:', {
+                error: error.message,
+                stack: error.stack,
+                action,
+                params
+            });
             return {
                 status: 'error',
-                error: error.message
+                error: error.message,
+                stack: error.stack,
+                action,
+                params
             };
         }
     }
@@ -74,12 +126,56 @@ class FileSystemTool {
     }
 
     async writeFile(filePath, content) {
-        const validPath = this._validatePath(filePath, true);
-        await fs.writeFile(validPath, content, 'utf8');
-        return {
-            status: 'success',
-            path: validPath
-        };
+        if (!content) {
+            return {
+                status: 'error',
+                error: 'Content is required for write operation'
+            };
+        }
+
+        let fileHandle;
+        try {
+            const validPath = this._validatePath(filePath, true);
+            
+            // Use file handle for atomic write
+            fileHandle = await fs.open(validPath, 'w');
+            try {
+                await fileHandle.writeFile(content);
+                await fileHandle.sync(); // Force write to disk
+            } finally {
+                if (fileHandle) {
+                    await fileHandle.close();
+                }
+            }
+            
+            // Verify the write was successful
+            const written = await fs.readFile(validPath, 'utf8');
+            if (written !== content) {
+                throw new Error(`File content verification failed. Expected "${content}" but got "${written}"`);
+            }
+
+            return {
+                status: 'success',
+                path: validPath,
+                content: content,
+                size: Buffer.from(content).length
+            };
+        } catch (error) {
+            console.error('Write error:', {
+                error: error.message,
+                stack: error.stack,
+                path: filePath
+            });
+            return {
+                status: 'error',
+                error: `Failed to write file ${filePath}: ${error.message}`,
+                details: {
+                    originalError: error.message,
+                    stack: error.stack,
+                    path: filePath
+                }
+            };
+        }
     }
 
     async deleteFile(filePath) {
@@ -139,29 +235,62 @@ class FileSystemTool {
             description: this.description,
             actions: [
                 {
+                    name: 'list',
+                    description: 'List files in a directory',
+                    parameters: [{
+                        name: 'path',
+                        description: 'Path to list (defaults to data directory)',
+                        type: 'string',
+                        required: false
+                    }]
+                },
+                {
                     name: 'read',
                     description: 'Read a file',
-                    params: ['path']
+                    parameters: [{
+                        name: 'path',
+                        description: 'Path to the file to read',
+                        type: 'string',
+                        required: true
+                    }]
                 },
                 {
                     name: 'write',
                     description: 'Write to a file (only in data directory)',
-                    params: ['path', 'content']
+                    parameters: [
+                        {
+                            name: 'path',
+                            description: 'Path to write (relative to data directory)',
+                            type: 'string',
+                            required: true
+                        },
+                        {
+                            name: 'content',
+                            description: 'Content to write to the file',
+                            type: 'string',
+                            required: true
+                        }
+                    ]
                 },
                 {
                     name: 'delete',
                     description: 'Delete a file (only in data directory)',
-                    params: ['path']
-                },
-                {
-                    name: 'list',
-                    description: 'List files in a directory',
-                    params: ['path']
+                    parameters: [{
+                        name: 'path',
+                        description: 'Path to delete (relative to data directory)',
+                        type: 'string',
+                        required: true
+                    }]
                 },
                 {
                     name: 'exists',
                     description: 'Check if a file exists',
-                    params: ['path']
+                    parameters: [{
+                        name: 'path',
+                        description: 'Path to check',
+                        type: 'string',
+                        required: true
+                    }]
                 }
             ],
             rootDirectories: {
