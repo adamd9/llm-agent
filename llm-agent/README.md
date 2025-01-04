@@ -50,16 +50,49 @@ The system consists of three main components:
 npm install
 ```
 
-2. Set up your environment variables:
-```bash
-cp .env.example .env
-# Edit .env and add your OpenAI API key
+2. Create a `.env` file with your OpenAI API key:
+```
+OPENAI_API_KEY=your_key_here
 ```
 
-3. Start the development server:
+3. Start the service:
 ```bash
-docker-compose up --build
+./scripts/restart.sh
 ```
+
+### Project Structure
+
+```
+.
+├── src/                  # Source code
+├── data/                 # Data directory
+│   ├── logs/            # Application logs
+│   └── personalities/   # Personality definition files
+├── scripts/             # Utility scripts
+└── tests/               # Test files
+```
+
+### Initialization
+
+On startup, the system automatically:
+1. Creates required directories if they don't exist (`data/logs`, `data/personalities`)
+2. Creates a default personality (HK-47) if none exists
+3. Sets up logging with timestamp-based rotation
+
+### Logging
+
+The application logs are stored in `data/logs/` with the following structure:
+- Each restart creates a new log file with timestamp (e.g. `app_20250105_091609.log`)
+- A symlink `current.log` always points to the latest log file
+- Previous logs are preserved for history
+
+### Personalities
+
+Personalities are defined in plain text files in `data/personalities/`. Each file:
+- Has a `.txt` extension
+- Filename (minus extension) is the personality name
+- Contains the raw personality prompt
+- First personality found is used as default
 
 ### Development Scripts
 

@@ -7,7 +7,23 @@ services:
       - ./public:/usr/src/app/public
       - ./.env:/usr/src/app/.env
       - ./data:/usr/src/app/data  # Mount r2o1 as data directory
+      - ./scripts:/usr/src/app/scripts  # Mount scripts directory
     ports:  
       - "3000:3000"
     environment:
       - NODE_ENV=development
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    command: >
+      /bin/sh -c "
+        chmod +x /usr/src/app/scripts/init.sh;
+        /usr/src/app/scripts/init.sh;
+        LOG_DIR=/usr/src/app/data/logs;
+        mkdir -p $$LOG_DIR;
+        LOG_FILE=$$LOG_DIR/app_$$(date +%Y%m%d_%H%M%S).log;
+        ln -sf $$LOG_FILE $$LOG_DIR/current.log;
+        exec node src/index.js 2>&1 | tee $$LOG_FILE
+      "
