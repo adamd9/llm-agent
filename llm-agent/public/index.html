@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Agent Chat Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #chat-container {
+            flex-grow: 1;
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin-bottom: 20px;
+            overflow-y: auto;
+            background: #f9f9f9;
+            margin: 20px 20px 10px 20px;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .user-message {
+            background: #e3f2fd;
+            margin-left: 20%;
+        }
+        .agent-message {
+            background: #f5f5f5;
+            margin-right: 20%;
+        }
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .debug-info {
+            font-family: monospace;
+            font-size: 0.9em;
+            background: #333;
+            color: #fff;
+            padding: 10px;
+            margin-top: 5px;
+            border-radius: 3px;
+            white-space: pre-wrap;
+            display: none;
+        }
+        #input-container {
+            display: flex;
+            gap: 10px;
+            padding: 10px 20px 20px 20px;
+        }
+        #message-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #1976d2;
+        }
+        #debug-toggle {
+            background: #666;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container"></div>
+    <div id="input-container">
+        <input type="text" id="message-input" placeholder="Type your message...">
+        <button onclick="sendMessage()">Send</button>
+        <button id="debug-toggle" onclick="toggleDebug()">Toggle Debug</button>
+    </div>
+
+    <script>
+        let sessionId = null;
+        let showDebug = false;
+
+        function toggleDebug() {
+            showDebug = !showDebug;
+            document.querySelectorAll('.debug-info').forEach(el => {
+                el.style.display = showDebug ? 'block' : 'none';
+            });
+        }
+
+        function appendMessage(message, type, error = null, debugInfo = null) {
+            const chatContainer = document.getElementById('chat-container');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message`;
+            
+            // Main message
+            const messageContent = document.createElement('div');
+            messageContent.textContent = message;
+            messageDiv.appendChild(messageContent);
+            
+            // Error message if present
+            if (error) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.textContent = `Error: ${error}`;
+                messageDiv.appendChild(errorDiv);
+            }
+            
+            // Debug info if present
+            if (debugInfo) {
+                const debugDiv = document.createElement('div');
+                debugDiv.className = 'debug-info';
+                debugDiv.textContent = JSON.stringify(debugInfo, null, 2);
+                messageDiv.appendChild(debugDiv);
+            }
+            
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+            if (!message) return;
+
+            appendMessage(message, 'user');
+            input.value = '';
+
+            try {
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                if (sessionId) {
+                    headers['session-id'] = sessionId;
+                }
+
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({ message })
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Unknown error occurred');
+                }
+
+                sessionId = data.sessionId;
+                
+                const debugInfo = {
+                    statusCode: response.status,
+                    headers: Object.fromEntries(response.headers.entries()),
+                    responseData: data,
+                    sessionId: sessionId
+                };
+
+                appendMessage(
+                    data.message || 'No response message',
+                    'agent',
+                    null,
+                    debugInfo
+                );
+            } catch (error) {
+                console.error('Chat error:', error);
+                appendMessage(
+                    'Failed to process message',
+                    'agent',
+                    error.toString(),
+                    {
+                        error: error.toString(),
+                        stack: error.stack,
+                        timestamp: new Date().toISOString()
+                    }
+                );
+            }
+        }
+
+        // Handle Enter key
+        document.getElementById('message-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Initial greeting
+        appendMessage('Hello! I am R2O1, your AI agent. How can I assist you today?', 'agent');
+    </script>
+</body>
+</html>
