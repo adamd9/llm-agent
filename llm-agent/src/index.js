@@ -22,7 +22,7 @@ app.use(express.static('public'));
 const sessions = new Map();
 
 // Initialize ego instance
-const ego = new Ego('R2O1', ['conversation', 'file-system']);
+const ego = new Ego('r2o1', ['conversation', 'file-system']);
 
 // Start the server only if this file is run directly
 if (require.main === module) {

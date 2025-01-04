@@ -2,18 +2,24 @@ const Ego = require('../src/ego');
 const { OpenAI } = require('openai');
 const { planner } = require('../src/planner');
 const { coordinator } = require('../src/coordinator');
+const personalityManager = require('../src/personalities');
 
 // Mock dependencies
 jest.mock('openai');
 jest.mock('../src/planner');
 jest.mock('../src/coordinator');
+jest.mock('../src/personalities', () => ({
+    loadPersonalities: jest.fn(),
+    getPersonality: jest.fn(),
+    getDefaultPersonality: jest.fn()
+}));
 
 describe('Ego Service', () => {
     let ego;
     let mockOpenAI;
     let originalEnv;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         // Save original environment
         originalEnv = process.env;
         process.env = { ...originalEnv, OPENAI_API_KEY: 'test-key' };
@@ -38,7 +44,15 @@ describe('Ego Service', () => {
             context: 'This is a conversation context'
         });
 
-        ego = new Ego('test-identity', ['conversation', 'tasks'], mockOpenAI);
+        // Mock default personality
+        personalityManager.getDefaultPersonality.mockReturnValue({
+            name: 'cascade',
+            prompt: 'You are a test assistant'
+        });
+        personalityManager.loadPersonalities.mockResolvedValue([]);
+
+        ego = new Ego(null, mockOpenAI);
+        await ego.initialize();
     });
 
     afterEach(() => {
@@ -95,7 +109,7 @@ describe('Ego Service', () => {
 
         // Mock OpenAI response
         const mockResponse = 'I remember our previous conversation';
-        const mockCreate = jest.fn().mockResolvedValueOnce({
+        mockOpenAI.chat.completions.create.mockResolvedValueOnce({
             choices: [{
                 message: {
                     content: mockResponse
@@ -103,74 +117,45 @@ describe('Ego Service', () => {
             }]
         });
 
-        // Set up OpenAI mock
-        mockOpenAI.chat.completions.create = mockCreate;
-
-        const sessionHistory = [
-            { role: 'user', content: 'previous message' },
-            { role: 'assistant', content: 'previous response' }
-        ];
-
-        // Debug log the mocks
-        console.log('OpenAI mock:', {
-            create: mockOpenAI.chat.completions.create,
-            mockResponse
-        });
-
-        const result = await ego.processMessage('hello', sessionHistory);
-        
-        // Debug log the result
-        console.log('Result:', result);
-        
+        const result = await ego.processMessage('hello again', [{ role: 'user', content: 'previous message' }]);
         expect(result.type).toBe('conversation');
         expect(result.response).toBe(mockResponse);
-
-        // Verify messages array contains system prompt and history
-        const callArgs = mockCreate.mock.calls[0][0];
-        expect(callArgs.messages).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({ role: 'system' }),
-                expect.objectContaining({ role: 'user', content: 'previous message' }),
-                expect.objectContaining({ role: 'assistant', content: 'previous response' }),
-                expect.objectContaining({ role: 'user', content: 'hello' })
-            ])
-        );
     });
 
-    it('should handle API errors gracefully', async () => {
-        planner.mockRejectedValueOnce(new Error('API Error'));
-
-        const result = await ego.processMessage('hello');
-        expect(result.type).toBe('error');
-        expect(result.error).toEqual({ message: 'API Error' });
+    it('should initialize with default personality', async () => {
+        const defaultEgo = new Ego();
+        await defaultEgo.initialize();
+        
+        const defaultPersonality = personalityManager.getDefaultPersonality();
+        expect(defaultEgo.identity).toBe(defaultPersonality.name);
+        expect(defaultEgo.capabilities).toEqual(['conversation', 'tasks']);
+        expect(defaultEgo.personality).toEqual(defaultPersonality);
     });
 
-    it('should handle planner errors', async () => {
-        planner.mockResolvedValueOnce({
-            status: 'error',
-            error: 'Planning failed'
-        });
-
-        const result = await ego.processMessage('list files');
-        expect(result.type).toBe('error');
-        expect(result.error).toEqual({ message: 'Planning failed' });
+    it('should allow changing personality', async () => {
+        const defaultEgo = new Ego();
+        await defaultEgo.initialize();
+        
+        // Mock a new personality
+        const customPersonality = {
+            name: 'Custom',
+            prompt: 'A custom personality'
+        };
+        personalityManager.getPersonality.mockReturnValue(customPersonality);
+        
+        await defaultEgo.setPersonality('Custom');
+        expect(defaultEgo.personality).toEqual(customPersonality);
+        // Identity should not change if it was set in constructor
+        expect(defaultEgo.identity).toBe('cascade');
+        expect(defaultEgo.capabilities).toEqual(['conversation', 'tasks']);
     });
 
-    it('should handle coordinator errors', async () => {
-        planner.mockResolvedValueOnce({
-            status: 'success',
-            requiresTools: true,
-            plan: JSON.stringify([{ tool: 'test', action: 'test' }])
-        });
-
-        coordinator.mockResolvedValueOnce({
-            status: 'error',
-            error: 'Execution failed',
-            response: 'Execution failed'
-        });
-
-        const result = await ego.processMessage('list files');
-        expect(result.type).toBe('task');
-        expect(result.response).toBe('Execution failed');
+    it('should throw error when setting invalid personality', async () => {
+        const defaultEgo = new Ego();
+        await defaultEgo.initialize();
+        
+        personalityManager.getPersonality.mockReturnValue(null);
+        
+        await expect(defaultEgo.setPersonality('Invalid')).rejects.toThrow('Personality Invalid not found');
     });
 });

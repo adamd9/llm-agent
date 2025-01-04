@@ -2,6 +2,7 @@ const { OpenAI } = require('openai');
 require('dotenv').config();
 const { coordinator } = require('./coordinator');
 const { planner } = require('./planner');
+const personalityManager = require('./personalities');
 const debug = require('debug')('llm-agent:ego');
 
 // Debug logging function
@@ -29,15 +30,48 @@ function getOpenAIClient() {
 }
 
 class Ego {
-    constructor(identity, capabilities = [], client = null) {
-        this.identity = identity;
-        this.capabilities = capabilities;
+    constructor(identity = null, client = null) {
         this.openaiClient = client || getOpenAIClient();
+        this.personality = null;
+        this.identity = identity;
+        this.capabilities = ['conversation', 'tasks']; // System capabilities, not personality-dependent
         
-        debugLog('constructor', 'Initializing Ego', {
-            identity,
-            capabilities,
+        debugLog('constructor', 'Initializing Ego');
+    }
+
+    async initialize() {
+        // Load personalities
+        await personalityManager.loadPersonalities();
+        const defaultPersonality = personalityManager.getDefaultPersonality();
+        
+        this.personality = defaultPersonality;
+        if (!this.identity) {
+            this.identity = this.personality.name;
+        }
+        
+        debugLog('initialize', 'Ego initialized', {
+            identity: this.identity,
+            capabilities: this.capabilities,
+            personality: this.personality,
             hasClient: !!this.openaiClient
+        });
+    }
+
+    async setPersonality(name) {
+        const personality = personalityManager.getPersonality(name);
+        if (!personality) {
+            throw new Error(`Personality ${name} not found`);
+        }
+        
+        this.personality = personality;
+        if (!this.identity) {
+            this.identity = personality.name;
+        }
+        
+        debugLog('setPersonality', 'Personality updated', {
+            identity: this.identity,
+            capabilities: this.capabilities,
+            personality: this.personality
         });
     }
 
@@ -196,11 +230,12 @@ class Ego {
 
     buildSystemPrompt() {
         return `You are ${this.identity}, an AI assistant with the following capabilities:
-            - Conversation: I can engage in natural language dialogue
-            - Task Execution: I can help with file operations and other tasks
-            
-            Current Identity: ${this.identity}
-            Available Capabilities: ${this.capabilities.join(', ')}`;
+        - Conversation: I can engage in natural language dialogue
+        - Task Execution: I can help with file operations and other tasks
+        
+        Current Identity: ${this.identity}
+        Current Personality: ${this.personality.prompt}
+        Available Capabilities: ${this.capabilities.join(', ')}`;
     }
 }
 

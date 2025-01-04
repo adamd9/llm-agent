@@ -157,6 +157,67 @@ When testing components that use the OpenAI API, follow these best practices:
    });
    ```
 
+## Design Principles
+
+### Flat File Configuration
+The system follows a flat file configuration approach for extensible components:
+
+1. **Tool System**: Tools are loaded dynamically from:
+   - Core tools in `src/tools/`
+   - Custom tools in `data/tools/`
+   - Each tool is a JavaScript module with defined interface
+
+2. **Personality System**: Agent personalities are defined as plain text prompts:
+   - Core personalities in `src/personalities/*.txt`
+   - Custom personalities in `data/personalities/*.txt`
+   - Filename (minus extension) is the personality name
+   - File content is the raw personality prompt
+   - First personality found is used as default
+   - System capabilities (conversation, tasks) are independent of personality
+
+This design allows for:
+- Easy addition and modification of components through simple file operations
+- Clear separation between core and custom components
+- Version control friendly structure
+- Simple text-based configuration
+- No complex configuration management
+
+### Adding Custom Personalities
+
+To add a new personality:
+
+1. Create a new `.txt` file in `data/personalities/`
+   - Filename will be the personality name (e.g., `friendly.txt`)
+2. Write the raw personality prompt in the file:
+   ```
+   You are a friendly and approachable coding assistant...
+   [rest of personality prompt]
+   ```
+3. The personality will be automatically loaded on next startup
+4. If it's the only personality file present, it will become the default
+
+### System Architecture
+
+The system is designed with clear separation of concerns:
+
+1. **Ego Layer**: Core agent behavior
+   - Handles conversation and task routing
+   - Loads personality from flat files
+   - System capabilities are built-in (conversation, tasks)
+   - Personality only affects the agent's communication style
+
+2. **Tool Layer**: Extensible capabilities
+   - Tools are loaded dynamically
+   - Each tool is a separate module
+   - Clear interface definition
+   - Easy to add new tools
+
+3. **Configuration**: Flat file based
+   - No complex configuration management
+   - Text files for personalities
+   - JavaScript modules for tools
+   - Easy to version and modify
+
 ## Architecture Details
 
 ### Message Flow
