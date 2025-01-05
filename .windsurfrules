@@ -2,3 +2,4 @@
 2. if you change the functionality, make sure to update the readme file
 3. if you change the functionality, make sure to update the test files
 4. make sure to run the tests before restarting the container
+5. Any updates to read me should be to the existing read me in the root folder

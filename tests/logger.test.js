@@ -60,4 +60,17 @@ describe('Logger', () => {
         expect(wsMessage.data.data).toEqual(testObject);
         expect(wsMessage.data.timestamp).toBeDefined();
     });
+
+    test('sends response to chat window', () => {
+        const testMessage = 'Test response message';
+        
+        logger.response(testMessage);
+
+        expect(consoleSpy).toHaveBeenCalledTimes(1);
+        expect(mockWs.send).toHaveBeenCalledTimes(1);
+
+        const wsMessage = JSON.parse(mockWs.send.mock.calls[0][0]);
+        expect(wsMessage.type).toBe('response');
+        expect(wsMessage.data.response).toBe(testMessage);
+    });
 });

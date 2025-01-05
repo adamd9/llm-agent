@@ -103,8 +103,8 @@ The agent uses WebSocket for real-time, bidirectional communication:
      {
        "type": "response",
        "data": {
-         "type": "conversation|task",
-         "response": "agent's response"
+         "response": "agent's response",
+         "type": "conversation|task|progress|error"
        }
      }
      ```
@@ -116,7 +116,7 @@ The agent uses WebSocket for real-time, bidirectional communication:
        "data": {
          "context": "debug context",
          "message": "debug message",
-         "data": {},
+         "data": { /* debug data */ },
          "timestamp": "ISO timestamp"
        }
      }
@@ -597,3 +597,45 @@ module.exports = new MyTool();
 
 ## License
 MIT
+
+### Logging and Progress Updates
+
+The system provides two types of logging:
+
+1. **Debug Logging**
+   ```javascript
+   const logger = require('./logger');
+   
+   // Log debug information
+   logger.debug('context', 'message', { data: 'object' });
+   
+   // Log object directly
+   logger.debug('context', { someData: 'value' });
+   ```
+   Debug logs appear in:
+   - Console output
+   - Debug panel in UI
+   - Include timestamp and context
+
+2. **Progress Updates**
+   ```javascript
+   const logger = require('./logger');
+   
+   // Send progress message to chat window
+   logger.response('Working on your request...');
+   ```
+   Progress updates:
+   - Appear in main chat window
+   - Provide real-time status
+   - Show step-by-step progress
+   - Keep user informed of:
+     - Task start
+     - Plan creation
+     - Execution progress
+     - Evaluation status
+     - Retry attempts
+
+This dual logging system ensures:
+- Developers can debug with detailed information
+- Users get clear, real-time progress updates
+- System state is transparent at all times
