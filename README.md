@@ -11,17 +11,48 @@ The system consists of three main components:
 - Determines when a message requires tools vs. simple conversation
 - Maintains agent identity and capabilities
 - Uses GPT-4o-mini for natural language understanding
+- Manages task retry attempts based on evaluation results
+- Communicates progress and adjustments to the user
 
 ### 2. Coordinator Layer
 - Receives tasks from the ego layer when tools are needed
 - Plans task execution using the planner
 - Executes plans using available tools
-- Returns results back to the ego layer
+- Returns results and evaluation metrics to the ego layer
 - Provides detailed error handling with:
   - Full stack traces
   - Step-by-step execution status
   - Contextual error information
   - Tool-specific error details
+
+#### Task Evaluation System
+The system evaluates task outcomes to ensure quality:
+
+1. **Initial Planning**: Create a plan based on the original request
+2. **Execution**: Execute the plan using available tools
+3. **Evaluation**: Assess results against intended outcomes
+   - Compare execution output with original request context
+   - Generate a match percentage score (0-100%)
+   - Provide specific recommendations for improvements
+4. **Result Processing**: 
+   - Return evaluation results to ego layer:
+     - Match percentage score
+     - Execution output
+     - Improvement recommendations
+     - Success/failure indicators
+   - Ego layer decides next steps:
+     - If score >= threshold: Present results to user
+     - If score < threshold: 
+       - Inform user of adjustment attempt
+       - Incorporate recommendations
+       - Request new plan with adjustments
+5. **Retry Control**:
+   - Maximum 5 attempts per task
+   - Each attempt includes user feedback
+   - Final result presented even if threshold not met
+   - User kept informed of progress
+
+This feedback system allows for iterative improvement while maintaining user engagement and transparency throughout the process.
 
 ### 3. Tool Layer
 - Provides specific capabilities (file operations, etc.)
