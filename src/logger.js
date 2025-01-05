@@ -38,6 +38,25 @@ class Logger {
             }
         }
     }
+
+    response(message) {
+        // Console output for tracking
+        console.log(`[RESPONSE] ${message}`);
+
+        // Send to WebSocket clients
+        if (this.wsConnections) {
+            for (const [sessionId, ws] of this.wsConnections.entries()) {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'response',
+                        data: {
+                            response: message
+                        }
+                    }));
+                }
+            }
+        }
+    }
 }
 
 // Create a singleton instance

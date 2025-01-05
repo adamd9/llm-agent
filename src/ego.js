@@ -111,6 +111,10 @@ class Ego {
             message: enrichedMessage.original_message
         });
 
+        if (attempt === 1) {
+            logger.response('Starting to work on your request...');
+        }
+
         // Get plan from planner
         const planResult = await planner(enrichedMessage);
         logger.debug('executeWithEvaluation', 'Planner result', { planResult });
@@ -135,9 +139,13 @@ class Ego {
             };
         }
 
+        logger.response('I have a plan to help you. Starting execution...');
+
         // Execute the plan
         enrichedMessage.plan = planResult.plan;
         const executionResult = await coordinator(enrichedMessage);
+
+        logger.response('Execution complete. Evaluating results...');
 
         // Evaluate the results
         const evaluation = await evaluator({
@@ -153,6 +161,8 @@ class Ego {
 
         // Check if we need to retry
         if (evaluation.score < EVALUATION_THRESHOLD && attempt < MAX_RETRIES) {
+            logger.response(`Attempt ${attempt} scored ${evaluation.score}%. Making adjustments and trying again...`);
+
             // Prepare retry message
             const retryResponse = {
                 type: 'progress',

@@ -62,6 +62,7 @@ async function executePlan(plan) {
 
         for (step of plan) {
             logger.debug('Executing step:', step);
+            logger.response(`Executing: ${step.action}...`);
             const tool = toolMap.get(step.tool);
 
             if (!tool) {
@@ -82,6 +83,7 @@ async function executePlan(plan) {
             try {
                 const result = await tool.execute(step.action, step.parameters);
                 logger.debug('Tool execution result:', result);
+                logger.response(`Completed: ${step.action}`);
 
                 if (result.status === 'error') {
                     logger.debug('Tool execution error:', result);
