@@ -104,7 +104,9 @@ The agent uses WebSocket for real-time, bidirectional communication:
        "type": "response",
        "data": {
          "response": "agent's response",
-         "type": "conversation|task|progress|error"
+         "format": "text|markdown|code",
+         "language": "javascript|python|etc",
+         "metadata": {}
        }
      }
      ```
@@ -617,25 +619,48 @@ The system provides two types of logging:
    - Debug panel in UI
    - Include timestamp and context
 
-2. **Progress Updates**
+2. **Response Messages**
    ```javascript
    const logger = require('./logger');
    
-   // Send progress message to chat window
-   logger.response('Working on your request...');
+   // Plain text response
+   logger.response('Simple message');
+   
+   // Markdown formatted response
+   logger.markdown(`
+   # Task Complete
+   - File created: \`example.js\`
+   - Status: 
+   
+   ## Next Steps
+   1. Run the tests
+   2. Check the output
+   `);
+   
+   // Code block with syntax highlighting
+   logger.code(`
+   const result = await api.process(data);
+   console.log(result);
+   `, 'javascript');
+   
+   // Response with metadata
+   logger.response('Message', {
+     format: 'markdown',
+     metadata: { timestamp: new Date() }
+   });
    ```
-   Progress updates:
+   Response messages:
    - Appear in main chat window
-   - Provide real-time status
-   - Show step-by-step progress
-   - Keep user informed of:
-     - Task start
-     - Plan creation
-     - Execution progress
-     - Evaluation status
-     - Retry attempts
+   - Support multiple formats:
+     - Plain text (default)
+     - Markdown with full formatting
+     - Code blocks with syntax highlighting
+   - Can include metadata for tracking
+   - Support tables, lists, code blocks in markdown
+   - Automatically highlight code syntax
 
 This dual logging system ensures:
 - Developers can debug with detailed information
-- Users get clear, real-time progress updates
-- System state is transparent at all times
+- Users get clear, formatted feedback
+- Complex data is presented in a readable way
+- Code examples are properly highlighted

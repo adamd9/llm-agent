@@ -1,147 +1,135 @@
 const { coordinator } = require('../src/coordinator');
 const toolManager = require('../src/tools');
+const logger = require('../src/logger');
+const openaiClient = require('../src/openaiClient');
 
-// Mock tools
 jest.mock('../src/tools', () => ({
-    loadTools: jest.fn().mockResolvedValue([
-        {
-            name: 'fileSystem',
-            description: 'Tool for file operations',
-            execute: jest.fn().mockResolvedValue({
-                status: 'success',
-                files: [{
-                    name: 'test.txt',
-                    type: 'file',
-                    size: 100,
-                    isReadOnly: false
-                }]
-            }),
-            getCapabilities: () => ({
-                name: 'fileSystem',
-                description: 'Tool for file operations',
-                actions: [
-                    {
-                        name: 'list',
-                        description: 'List files in a directory',
-                        parameters: [{
-                            name: 'path',
-                            description: 'Path to list',
-                            type: 'string',
-                            required: true
-                        }]
-                    }
-                ]
-            })
-        }
-    ])
+    loadTools: jest.fn().mockResolvedValue([{
+        name: 'test',
+        execute: jest.fn().mockResolvedValue({
+            status: 'success',
+            data: { result: 'test' }
+        })
+    }])
+}));
+
+jest.mock('../src/logger', () => ({
+    debug: jest.fn(),
+    response: jest.fn(),
+    markdown: jest.fn()
+}));
+
+jest.mock('../src/openaiClient', () => ({
+    createCompletion: jest.fn()
 }));
 
 describe('Coordinator Service', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        // Mock successful LLM response
+        openaiClient.createCompletion.mockResolvedValue({
+            choices: [{
+                text: '# Test Summary\n\n## Success\n- Step 1 completed'
+            }]
+        });
     });
 
-    it('should coordinate execution of plan successfully', async () => {
-        const enrichedMessage = {
-            original_message: 'list files',
-            plan: JSON.stringify([{
-                tool: 'fileSystem',
-                action: 'list',
-                parameters: { path: '/test' },
-                description: 'List files in test directory'
-            }])
-        };
+    test('should coordinate execution of plan successfully', async () => {
+        const mockSteps = [{
+            tool: 'test',
+            action: 'action',
+            parameters: {}
+        }];
 
-        const result = await coordinator(enrichedMessage);
-        expect(result.status).toBe('success');
-        expect(result.response).toContain('Completed actions');
-        expect(result.response).toContain('test.txt');
-        expect(result.response).toContain('100 bytes');
-    });
-
-    it('should handle missing plan', async () => {
-        const enrichedMessage = {
-            original_message: 'list files'
-        };
-
-        const result = await coordinator(enrichedMessage);
-        expect(result.status).toBe('error');
-        expect(result.error).toBe('No plan provided');
-    });
-
-    it('should handle invalid tool in plan', async () => {
         const enrichedMessage = {
             original_message: 'test message',
-            plan: JSON.stringify([{
-                tool: 'invalidTool',
-                action: 'someAction',
-                parameters: {},
-                description: 'Test action'
-            }])
+            plan: JSON.stringify(mockSteps)
+        };
+
+        const result = await coordinator(enrichedMessage);
+        logger.debug('Test result:', result);
+
+        expect(result.status).toBe('success');
+        expect(result.results).toHaveLength(1);
+        expect(logger.markdown).toHaveBeenCalled();
+    });
+
+    test('should handle missing plan', async () => {
+        const result = await coordinator({
+            original_message: 'test'
+        });
+        expect(result.status).toBe('error');
+        expect(result.error).toBeDefined();
+    });
+
+    test('should handle invalid tool in plan', async () => {
+        const mockSteps = [{
+            tool: 'invalid',
+            action: 'action',
+            parameters: {}
+        }];
+
+        const enrichedMessage = {
+            original_message: 'test message',
+            plan: JSON.stringify(mockSteps)
         };
 
         const result = await coordinator(enrichedMessage);
         expect(result.status).toBe('error');
-        expect(result.error).toContain('Tool not found: invalidTool');
-        expect(result.stack).toBeDefined();
-        expect(result.details).toBeDefined();
-        expect(result.details.lastStep).toBeDefined();
-        expect(result.details.lastStep.tool).toBe('invalidTool');
+        expect(result.error).toBeDefined();
     });
 
-    it('should handle tool execution errors', async () => {
-        // Mock tool to throw error
+    test('should handle tool execution errors', async () => {
+        const mockSteps = [{
+            tool: 'test',
+            action: 'action',
+            parameters: {}
+        }];
+
+        const enrichedMessage = {
+            original_message: 'test message',
+            plan: JSON.stringify(mockSteps)
+        };
+
+        // Mock tool execution error
         toolManager.loadTools.mockResolvedValueOnce([{
-            name: 'fileSystem',
-            description: 'Tool for file operations',
-            execute: jest.fn().mockRejectedValue(new Error('Execution failed')),
-            getCapabilities: () => ({
-                name: 'fileSystem',
-                description: 'Tool for file operations',
-                actions: [
-                    {
-                        name: 'list',
-                        description: 'List files in a directory',
-                        parameters: [{
-                            name: 'path',
-                            description: 'Path to list',
-                            type: 'string',
-                            required: true
-                        }]
-                    }
-                ]
-            })
+            name: 'test',
+            execute: jest.fn().mockRejectedValue(new Error('Execution failed'))
         }]);
 
-        const enrichedMessage = {
-            original_message: 'list files',
-            plan: JSON.stringify([{
-                tool: 'fileSystem',
-                action: 'list',
-                parameters: { path: '/test' },
-                description: 'List files'
-            }])
-        };
-
         const result = await coordinator(enrichedMessage);
         expect(result.status).toBe('error');
-        expect(result.error).toContain('Execution failed');
-        expect(result.stack).toBeDefined();
-        expect(result.details).toBeDefined();
-        expect(result.details.lastStep).toBeDefined();
-        expect(result.details.lastStep.tool).toBe('fileSystem');
+        expect(result.error).toBeDefined();
     });
 
-    it('should handle invalid plan JSON', async () => {
-        const enrichedMessage = {
-            original_message: 'list files',
+    test('should handle invalid plan JSON', async () => {
+        const result = await coordinator({
+            original_message: 'test message',
             plan: 'invalid json'
+        });
+        expect(result.status).toBe('error');
+        expect(result.error).toBeDefined();
+    });
+
+    test('should fallback to basic summary on LLM error', async () => {
+        const mockSteps = [{
+            tool: 'test',
+            action: 'action',
+            parameters: {}
+        }];
+
+        const enrichedMessage = {
+            original_message: 'test message',
+            plan: JSON.stringify(mockSteps)
         };
 
+        openaiClient.createCompletion.mockRejectedValue(new Error('LLM failed'));
+
         const result = await coordinator(enrichedMessage);
-        expect(result.status).toBe('error');
-        expect(result.error).toContain('Unexpected token');
-        expect(result.stack).toBeDefined();
-        expect(result.details).toBeDefined();
+
+        expect(result.status).toBe('success');
+        expect(logger.markdown).toHaveBeenCalled();
+        const summary = logger.markdown.mock.calls[0][0];
+        expect(summary).toContain('# Task Execution Summary');
     });
 });

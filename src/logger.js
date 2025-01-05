@@ -39,7 +39,7 @@ class Logger {
         }
     }
 
-    response(message) {
+    response(message, options = {}) {
         // Console output for tracking
         console.log(`[RESPONSE] ${message}`);
 
@@ -50,12 +50,25 @@ class Logger {
                     ws.send(JSON.stringify({
                         type: 'response',
                         data: {
-                            response: message
+                            response: message,
+                            format: options.format || 'text', // 'text', 'markdown', 'code'
+                            language: options.language, // for code blocks
+                            metadata: options.metadata // any additional formatting metadata
                         }
                     }));
                 }
             }
         }
+    }
+
+    // Helper method for markdown responses
+    markdown(message, metadata = {}) {
+        this.response(message, { format: 'markdown', metadata });
+    }
+
+    // Helper method for code blocks
+    code(message, language = 'javascript', metadata = {}) {
+        this.response(message, { format: 'code', language, metadata });
     }
 }
 

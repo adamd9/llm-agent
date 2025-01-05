@@ -1,9 +1,11 @@
 // system.js
-// This tool provides the ability to restart the container.
+// Tool to restart the container
 
-module.exports = {
-  restart: function() {
+function restartContainer() {
     console.log('Restarting the container...');
     // Add logic to restart the container here
-  }
+}
+
+module.exports = {
+    restartContainer
 };

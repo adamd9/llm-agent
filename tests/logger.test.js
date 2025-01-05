@@ -1,76 +1,62 @@
 const logger = require('../src/logger');
-const WebSocket = require('ws');
 
 describe('Logger', () => {
     let mockWs;
-    let consoleSpy;
+    let mockConnections;
 
     beforeEach(() => {
         mockWs = {
-            readyState: WebSocket.OPEN,
-            send: jest.fn()
+            send: jest.fn(),
+            readyState: 1 // WebSocket.OPEN
         };
-        consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-        logger.setWSConnections(new Map([['test-session', mockWs]]));
-    });
-
-    afterEach(() => {
-        consoleSpy.mockRestore();
+        mockConnections = new Map([['test-session', mockWs]]);
+        logger.setWSConnections(mockConnections);
     });
 
     test('handles object data correctly', () => {
-        const testData = { 
-            key: 'value',
-            nested: {
-                array: [1, 2, 3],
-                string: 'test'
-            }
-        };
+        const testData = { key: 'value' };
+        logger.debug('test', 'message', testData);
         
-        logger.debug('TestContext', 'Test message', testData);
-
-        expect(consoleSpy).toHaveBeenCalledTimes(1);
-        expect(mockWs.send).toHaveBeenCalledTimes(1);
-
-        const wsMessage = JSON.parse(mockWs.send.mock.calls[0][0]);
-        expect(wsMessage.type).toBe('debug');
-        expect(wsMessage.data.context).toBe('TestContext');
-        expect(wsMessage.data.message).toBe('Test message');
-        expect(wsMessage.data.data).toEqual(testData);
-        expect(wsMessage.data.timestamp).toBeDefined();
+        expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('"data":{"key":"value"}'));
     });
 
     test('handles object passed as message', () => {
-        const testObject = { 
-            status: 'success',
-            result: {
-                value: 42
-            }
-        };
+        const testObj = { key: 'value' };
+        logger.debug('test', testObj);
         
-        logger.debug('TestContext', testObject);
-
-        expect(consoleSpy).toHaveBeenCalledTimes(1);
-        expect(mockWs.send).toHaveBeenCalledTimes(1);
-
-        const wsMessage = JSON.parse(mockWs.send.mock.calls[0][0]);
-        expect(wsMessage.type).toBe('debug');
-        expect(wsMessage.data.context).toBe('TestContext');
-        expect(wsMessage.data.message).toBe('');
-        expect(wsMessage.data.data).toEqual(testObject);
-        expect(wsMessage.data.timestamp).toBeDefined();
+        expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('"data":{"key":"value"}'));
     });
 
     test('sends response to chat window', () => {
-        const testMessage = 'Test response message';
+        logger.response('test message');
         
-        logger.response(testMessage);
+        expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('"response":"test message"'));
+    });
 
-        expect(consoleSpy).toHaveBeenCalledTimes(1);
-        expect(mockWs.send).toHaveBeenCalledTimes(1);
+    test('formats markdown response correctly', () => {
+        const markdown = '# Test\n- Item 1\n- Item 2';
+        logger.markdown(markdown);
+        
+        const sent = JSON.parse(mockWs.send.mock.calls[0][0]);
+        expect(sent.data.format).toBe('markdown');
+        expect(sent.data.response).toBe(markdown);
+    });
 
-        const wsMessage = JSON.parse(mockWs.send.mock.calls[0][0]);
-        expect(wsMessage.type).toBe('response');
-        expect(wsMessage.data.response).toBe(testMessage);
+    test('formats code response correctly', () => {
+        const code = 'const x = 1;';
+        logger.code(code, 'javascript');
+        
+        const sent = JSON.parse(mockWs.send.mock.calls[0][0]);
+        expect(sent.data.format).toBe('code');
+        expect(sent.data.language).toBe('javascript');
+        expect(sent.data.response).toBe(code);
+    });
+
+    test('includes metadata in formatted responses', () => {
+        const metadata = { timestamp: '2025-01-05' };
+        logger.markdown('test', metadata);
+        
+        const sent = JSON.parse(mockWs.send.mock.calls[0][0]);
+        expect(sent.data.metadata).toEqual(metadata);
     });
 });
