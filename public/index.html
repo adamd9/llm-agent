@@ -13,13 +13,31 @@
             overflow: hidden;
         }
         #chat-container {
-            flex-grow: 1;
+            width: 40%;
             border: 1px solid #ccc;
             padding: 20px;
             margin-bottom: 20px;
             overflow-y: auto;
             background: #f9f9f9;
             margin: 20px 20px 10px 20px;
+        }
+        #debug-container {
+            width: 50%;
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin-bottom: 20px;
+            overflow-y: auto;
+            background: #f9f9f9;
+            margin: 20px 20px 10px 20px;
+            background-color: #1e1e1e;
+            color: #a8e6cf;
+        }
+        #debug-output {
+            margin: 0;
+            padding: 0;
+            font-family: monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap;
         }
         .message {
             margin: 10px 0;
@@ -54,6 +72,7 @@
         }
         #input-container {
             display: flex;
+            height: 44px;
             gap: 10px;
             padding: 10px 20px 20px 20px;
         }
@@ -81,7 +100,13 @@
     </style>
 </head>
 <body>
-    <div id="chat-container"></div>
+    <div style="display: flex; height: calc(100% - 60px);">
+        <div id="chat-container"></div>
+        <div id="debug-container">
+            <h3>Debug Stream</h3>
+            <pre id="debug-output"></pre>
+        </div>
+    </div>
     <div id="input-container">
         <input type="text" id="message-input" placeholder="Type your message...">
         <button onclick="sendMessage()">Send</button>
@@ -128,6 +153,17 @@
                                 debugDiv.textContent += JSON.stringify(data.data.data, null, 2);
                             }
                         }
+                        const debugOutput = document.getElementById('debug-output');
+                        const debugContainer = document.getElementById('debug-container');
+                        
+                        debugOutput.textContent += `[${data.data.context}] ${data.data.message}\n`;
+                        if (Object.keys(data.data.data).length > 0) {
+                            debugOutput.textContent += JSON.stringify(data.data.data, null, 2) + '\n';
+                        }
+                        
+                        // Scroll both the debug output and container to the bottom
+                        debugOutput.scrollTop = debugOutput.scrollHeight;
+                        debugContainer.scrollTop = debugContainer.scrollHeight;
                         break;
                     
                     case 'error':

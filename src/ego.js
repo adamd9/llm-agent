@@ -1,23 +1,9 @@
-const { OpenAI } = require('openai');
+const { getOpenAIClient } = require('./openaiClient.js');
 require('dotenv').config();
 const { coordinator } = require('./coordinator');
 const { planner } = require('./planner');
 const personalityManager = require('./personalities');
 const logger = require('./logger');
-
-let openaiClient;
-
-function getOpenAIClient() {
-    if (!openaiClient) {
-        if (!process.env.OPENAI_API_KEY) {
-            throw new Error('OPENAI_API_KEY environment variable is not set');
-        }
-        openaiClient = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY
-        });
-    }
-    return openaiClient;
-}
 
 class Ego {
     constructor(identity = null, client = null) {
@@ -123,22 +109,11 @@ class Ego {
 
             // Otherwise handle as conversation
             logger.debug('process', 'Handling as conversation');
-            try {
-                const response = await this.handleConversation(enrichedMessage, sessionHistory);
-                logger.debug('process', 'Conversation handled successfully', { response });
-                return {
-                    type: 'conversation',
-                    response
-                };
-            } catch (conversationError) {
-                logger.debug('process', 'Error in conversation handling', {
-                    error: {
-                        message: conversationError.message,
-                        stack: conversationError.stack
-                    }
-                });
-                throw conversationError;
-            }
+            return {
+                type: 'task',
+                response: planResult.response,
+                enriched_message: enrichedMessage
+            };
         } catch (error) {
             logger.debug('process', 'Error processing message', {
                 error: {
@@ -157,7 +132,7 @@ class Ego {
 
     async handleConversation(enrichedMessage, sessionHistory) {
         await this.initialize();
-        const client = this.openaiClient;
+        const openai = getOpenAIClient();
         const systemPrompt = this.buildSystemPrompt();
         
         logger.debug('handleConversation', 'Processing session history', {
@@ -199,9 +174,12 @@ class Ego {
 
         logger.debug('handleConversation', 'Final messages array', { messages });
 
+        logger.debug('handleConversation', 'Client state before API call', { client: openai.baseURL });
+        logger.debug('handleConversation', 'Messages being sent', { messages });
+
         try {
-            const completion = await client.chat.completions.create({
-                model: "gpt-4",
+            const completion = await openai.chat.completions.create({
+                model: "gpt-4o",
                 messages,
                 temperature: 0.7,
                 max_tokens: 1000

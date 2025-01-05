@@ -12,8 +12,9 @@ RUN groupadd -g 501 appuser && \
 # Copy package files
 COPY --chown=appuser:appuser package*.json ./
   
-# Install dependencies  
-RUN npm install  
+# Install dependencies and nodemon
+RUN npm install && \
+    npm install --save-dev nodemon
   
 # Copy the source code and public files
 COPY --chown=appuser:appuser src/ ./src/

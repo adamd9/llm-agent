@@ -27,6 +27,11 @@ The system consists of three main components:
 - Provides specific capabilities (file operations, etc.)
 - Each tool has a defined interface with name, description, and parameters
 - Tools are loaded dynamically from the tools directory
+- Tools should be forgiving with parameter formatting:
+  - Handle both stringified and object parameters
+  - Provide clear error messages for invalid parameters
+  - Use sensible defaults where possible
+  - Don't assume perfect parameter formatting from the executor
 
 ## API Endpoints
 
@@ -120,10 +125,27 @@ npm install
 OPENAI_API_KEY=your_key_here
 ```
 
-3. Start the service:
+3. Run with Docker Compose:
 ```bash
-./scripts/deploy.sh
+docker-compose up --build
 ```
+
+The application runs in development mode by default, which includes:
+- Hot reloading using nodemon
+- Automatic restart when files in `src` directory change
+- Debug logging enabled
+- Log files stored in `data/logs` with timestamps
+
+To run in production mode, set `NODE_ENV=production` in the environment variables.
+
+### Development Mode
+During development, the application will automatically:
+- Detect changes to any files in the `src` directory
+- Restart the Node.js process (not the container)
+- Create a new timestamped log file
+- Maintain a symlink to the current log at `data/logs/current.log`
+
+You don't need to restart the container to see your changes - just edit and save your files.
 
 ### Project Structure
 

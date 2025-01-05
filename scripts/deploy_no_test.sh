@@ -5,17 +5,6 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Run tests locally first
-echo -e "${GREEN}Running local tests...${NC}"
-npm test
-if [ $? -ne 0 ]; then
-    echo -e "${RED}✗ Local tests failed${NC}"
-    echo -e "${RED}Fix the tests before restarting the container${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}Local tests passed, restarting container...${NC}"
-
 echo -e "${GREEN}Restarting containers...${NC}"
 docker-compose restart
 

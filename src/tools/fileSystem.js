@@ -1,11 +1,10 @@
 const fs = require('fs').promises;
 const path = require('path');
+const logger = require('../logger');
 
 class FileSystemTool {
     constructor() {
-        // Read-only directory for app source code
-        this.appRoot = path.resolve(__dirname, '..');
-        // Read-write directory for data
+        // Single root directory for all operations
         this.dataRoot = path.resolve(__dirname, '../../data');
         this.name = 'fileSystem';
         this.description = 'Tool for file system operations';
@@ -20,97 +19,95 @@ class FileSystemTool {
         }
     }
 
-    // Helper to check if path is within allowed directories and resolve it
-    _validatePath(filePath, requireWritable = false) {
+    // Helper to check if path is within data directory and resolve it
+    _validatePath(filePath) {
+        logger.debug('validatePath', 'Validating path', {
+            filePath: filePath,
+            dataRoot: this.dataRoot
+        });
         // Handle empty or root path
         if (!filePath || filePath === '/' || filePath === '.') {
             return this.dataRoot;
         }
 
-        // Try data directory first, then app directory
-        let resolvedPath;
-        if (filePath.startsWith('/')) {
-            // Absolute path - try to match with data or app root
-            resolvedPath = filePath.startsWith(this.dataRoot) ? filePath :
-                          filePath.startsWith(this.appRoot) ? filePath : null;
-        } else {
-            // Relative path - try data directory first, then app
-            resolvedPath = path.resolve(this.dataRoot, filePath);
-            if (!resolvedPath.startsWith(this.dataRoot)) {
-                resolvedPath = path.resolve(this.appRoot, filePath);
-            }
+        // Remove leading slash if present
+        const normalizedPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+        
+        const resolvedPath = path.resolve(this.dataRoot, normalizedPath);
+        
+        // Validate the resolved path is within data directory
+        if (!resolvedPath.startsWith(this.dataRoot)) {
+            throw new Error('Path must be within data directory');
         }
 
-        // Validate the resolved path
-        if (!resolvedPath || 
-            (!resolvedPath.startsWith(this.dataRoot) && !resolvedPath.startsWith(this.appRoot))) {
-            throw new Error('Path must be within app or data directory');
-        }
-
-        if (requireWritable && resolvedPath.startsWith(this.appRoot)) {
-            throw new Error('App directory is read-only');
-        }
+        logger.debug('validatePath', 'Path validated', {
+            filePath,
+            resolvedPath
+        });
 
         return resolvedPath;
     }
 
-    async execute(action, params) {
-        console.log('FileSystem executing:', { action, params });
+    async execute(action, parameters) {
+        logger.debug('FileSystem executing:', JSON.stringify({ action, parameters }));
         try {
-            switch (action) {
-                case 'read':
-                    return await this.readFile(params.path);
-                case 'write':
-                    if (!params || !params.path || !params.content) {
-                        const error = new Error('Missing required parameters for write: path and content');
-                        console.error('Parameter validation error:', {
-                            error: error.message,
-                            stack: error.stack,
-                            params
-                        });
-                        return {
-                            status: 'error',
-                            error: error.message,
-                            stack: error.stack,
-                            params
-                        };
-                    }
-                    return await this.writeFile(params.path, params.content);
-                case 'delete':
-                    return await this.deleteFile(params.path);
-                case 'list':
-                    return await this.listFiles(params.path);
-                case 'exists':
-                    return await this.fileExists(params.path);
-                default:
-                    const error = new Error(`Unknown action: ${action}`);
-                    console.error('Invalid action error:', {
-                        error: error.message,
-                        stack: error.stack,
-                        action,
-                        params
+            // Parse parameters if they're passed as a string
+            let parsedParams = parameters;
+            if (typeof parameters === 'string') {
+                try {
+                    parsedParams = JSON.parse(parameters);
+                } catch (parseError) {
+                    logger.error('Parameter parsing error:', {
+                        error: parseError.message,
+                        parameters
                     });
                     return {
                         status: 'error',
-                        error: error.message,
-                        stack: error.stack,
-                        action,
-                        params
+                        error: 'Invalid parameters format',
+                        details: parseError.message
                     };
+                }
+            }
+
+            switch (action) {
+                case 'read':
+                    if (!parsedParams.path) {
+                        throw new Error('Missing required parameter: path');
+                    }
+                    return await this.readFile(parsedParams.path);
+                case 'write':
+                    if (!parsedParams.path || !parsedParams.content) {
+                        throw new Error('Missing required parameters for write: path and content');
+                    }
+                    return await this.writeFile(parsedParams.path, parsedParams.content);
+                case 'delete':
+                    if (!parsedParams.path) {
+                        throw new Error('Missing required parameter: path');
+                    }
+                    return await this.deleteFile(parsedParams.path);
+                case 'list':
+                    return await this.listFiles(parsedParams.path || '.');
+                case 'exists':
+                    if (!parsedParams.path) {
+                        throw new Error('Missing required parameter: path');
+                    }
+                    return await this.fileExists(parsedParams.path);
+                default:
+                    throw new Error(`Unknown action: ${action}`);
             }
         } catch (error) {
             console.error('FileSystem tool error:', {
                 error: error.message,
                 stack: error.stack,
                 action,
-                params
+                parameters
             });
             return {
                 status: 'error',
                 error: error.message,
                 stack: error.stack,
                 action,
-                params
+                parameters
             };
         }
     }
@@ -135,7 +132,7 @@ class FileSystemTool {
 
         let fileHandle;
         try {
-            const validPath = this._validatePath(filePath, true);
+            const validPath = this._validatePath(filePath);
             
             // Use file handle for atomic write
             fileHandle = await fs.open(validPath, 'w');
@@ -179,7 +176,7 @@ class FileSystemTool {
     }
 
     async deleteFile(filePath) {
-        const validPath = this._validatePath(filePath, true);
+        const validPath = this._validatePath(filePath);
         await fs.unlink(validPath);
         return {
             status: 'success',
@@ -197,16 +194,14 @@ class FileSystemTool {
                 name: item.name,
                 path: fullPath,
                 type: item.isDirectory() ? 'directory' : 'file',
-                size: stats.size,
-                isReadOnly: fullPath.startsWith(this.appRoot)
+                size: stats.size
             };
         }));
 
         return {
             status: 'success',
             files,
-            path: validPath,
-            isReadOnly: validPath.startsWith(this.appRoot)
+            path: validPath
         };
     }
 
@@ -217,8 +212,7 @@ class FileSystemTool {
             return {
                 status: 'success',
                 exists: true,
-                path: validPath,
-                isReadOnly: validPath.startsWith(this.appRoot)
+                path: validPath
             };
         } catch {
             return {
@@ -256,11 +250,11 @@ class FileSystemTool {
                 },
                 {
                     name: 'write',
-                    description: 'Write to a file (only in data directory)',
+                    description: 'Write to a file',
                     parameters: [
                         {
                             name: 'path',
-                            description: 'Path to write (relative to data directory)',
+                            description: 'Path to write',
                             type: 'string',
                             required: true
                         },
@@ -274,10 +268,10 @@ class FileSystemTool {
                 },
                 {
                     name: 'delete',
-                    description: 'Delete a file (only in data directory)',
+                    description: 'Delete a file',
                     parameters: [{
                         name: 'path',
-                        description: 'Path to delete (relative to data directory)',
+                        description: 'Path to delete',
                         type: 'string',
                         required: true
                     }]
@@ -294,11 +288,6 @@ class FileSystemTool {
                 }
             ],
             rootDirectories: {
-                app: {
-                    path: this.appRoot,
-                    access: 'read-only',
-                    description: 'Application source code directory'
-                },
                 data: {
                     path: this.dataRoot,
                     access: 'read-write',

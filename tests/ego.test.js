@@ -36,12 +36,15 @@ describe('Ego Service', () => {
         // Reset all mocks
         jest.clearAllMocks();
 
+        // Mock getOpenAIClient to return our mock
+        jest.spyOn(require('../src/openaiClient'), 'getOpenAIClient').mockReturnValue(mockOpenAI);
+
         // Default planner response for conversation
         planner.mockResolvedValue({
             status: 'success',
             requiresTools: false,
             explanation: 'This is a conversation',
-            context: 'This is a conversation context'
+            response: 'Hello! How can I help you?'
         });
 
         // Mock default personality
@@ -51,7 +54,7 @@ describe('Ego Service', () => {
         });
         personalityManager.loadPersonalities.mockResolvedValue([]);
 
-        ego = new Ego(null, mockOpenAI);
+        ego = new Ego();
         await ego.initialize();
     });
 
@@ -61,16 +64,15 @@ describe('Ego Service', () => {
     });
 
     it('should handle conversation messages', async () => {
-        mockOpenAI.chat.completions.create.mockResolvedValueOnce({
-            choices: [{
-                message: {
-                    content: 'Hello! How can I help you?'
-                }
-            }]
+        planner.mockResolvedValueOnce({
+            status: 'success',
+            requiresTools: false,
+            explanation: 'This is a conversation',
+            response: 'Hello! How can I help you?'
         });
 
         const result = await ego.processMessage('hello');
-        expect(result.type).toBe('conversation');
+        expect(result.type).toBe('task');
         expect(result.response).toBe('Hello! How can I help you?');
     });
 
@@ -99,26 +101,17 @@ describe('Ego Service', () => {
     });
 
     it('should handle session history in conversations', async () => {
-        // Mock planner to indicate conversation
+        const mockResponse = 'I remember our previous conversation';
+        
         planner.mockResolvedValueOnce({
             status: 'success',
             requiresTools: false,
-            explanation: 'This is a conversation',
-            context: 'This is a conversation context'
-        });
-
-        // Mock OpenAI response
-        const mockResponse = 'I remember our previous conversation';
-        mockOpenAI.chat.completions.create.mockResolvedValueOnce({
-            choices: [{
-                message: {
-                    content: mockResponse
-                }
-            }]
+            explanation: 'This is a conversation with history',
+            response: mockResponse
         });
 
         const result = await ego.processMessage('hello again', [{ role: 'user', content: 'previous message' }]);
-        expect(result.type).toBe('conversation');
+        expect(result.type).toBe('task');
         expect(result.response).toBe(mockResponse);
     });
 
