@@ -215,15 +215,18 @@
             });
         }
 
+        // Connect on page load
+        connect();
+
+        // Focus input field on page load
+        document.getElementById('message-input').focus();
+
         // Handle Enter key
         document.getElementById('message-input').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 sendMessage();
             }
         });
-
-        // Connect when page loads
-        connect();
     </script>
 </body>
 </html>

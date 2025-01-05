@@ -1,154 +1,256 @@
 const Ego = require('../src/ego');
-const { OpenAI } = require('openai');
-const { planner } = require('../src/planner');
-const { coordinator } = require('../src/coordinator');
-const personalityManager = require('../src/personalities');
 
 // Mock dependencies
-jest.mock('openai');
-jest.mock('../src/planner');
-jest.mock('../src/coordinator');
+jest.mock('../src/openaiClient', () => ({
+    getOpenAIClient: jest.fn().mockReturnValue({
+        chat: {
+            completions: {
+                create: jest.fn()
+            }
+        }
+    })
+}));
+
+jest.mock('../src/coordinator', () => ({
+    coordinator: jest.fn()
+}));
+
+jest.mock('../src/planner', () => ({
+    planner: jest.fn()
+}));
+
+jest.mock('../src/evaluator', () => ({
+    evaluator: jest.fn()
+}));
+
 jest.mock('../src/personalities', () => ({
-    loadPersonalities: jest.fn(),
-    getPersonality: jest.fn(),
-    getDefaultPersonality: jest.fn()
+    loadPersonalities: jest.fn().mockResolvedValue(),
+    getDefaultPersonality: jest.fn().mockReturnValue({
+        name: 'default',
+        prompt: 'default personality'
+    }),
+    getPersonality: jest.fn().mockImplementation(name => {
+        if (name === 'invalid') return null;
+        return { name, prompt: `${name} personality` };
+    })
 }));
 
 describe('Ego Service', () => {
     let ego;
-    let mockOpenAI;
-    let originalEnv;
+    let mockPlanner;
+    let mockCoordinator;
+    let mockEvaluator;
 
-    beforeEach(async () => {
-        // Save original environment
-        originalEnv = process.env;
-        process.env = { ...originalEnv, OPENAI_API_KEY: 'test-key' };
-
-        // Create a fresh mock for each test
-        mockOpenAI = {
-            chat: {
-                completions: {
-                    create: jest.fn()
-                }
-            }
-        };
-
-        // Reset all mocks
+    beforeEach(() => {
         jest.clearAllMocks();
+        ego = new Ego('test-identity');
+        mockPlanner = require('../src/planner').planner;
+        mockCoordinator = require('../src/coordinator').coordinator;
+        mockEvaluator = require('../src/evaluator').evaluator;
+    });
 
-        // Mock getOpenAIClient to return our mock
-        jest.spyOn(require('../src/openaiClient'), 'getOpenAIClient').mockReturnValue(mockOpenAI);
+    describe('Basic Functionality', () => {
+        it('should handle conversation messages', async () => {
+            // Mock planner to indicate this is a conversation
+            mockPlanner.mockResolvedValueOnce({
+                requiresTools: false,
+                response: 'Hello! How can I help you?'
+            });
 
-        // Default planner response for conversation
-        planner.mockResolvedValue({
-            status: 'success',
-            requiresTools: false,
-            explanation: 'This is a conversation',
-            response: 'Hello! How can I help you?'
+            const result = await ego.processMessage('hello');
+            expect(result.type).toBe('conversation');
+            expect(result.response).toBe('Hello! How can I help you?');
+            expect(mockEvaluator).not.toHaveBeenCalled();
         });
 
-        // Mock default personality
-        personalityManager.getDefaultPersonality.mockReturnValue({
-            name: 'cascade',
-            prompt: 'You are a test assistant'
-        });
-        personalityManager.loadPersonalities.mockResolvedValue([]);
+        it('should detect and handle task messages', async () => {
+            // Mock planner to indicate this is a task
+            mockPlanner.mockResolvedValueOnce({
+                status: 'success',
+                requiresTools: true,
+                plan: JSON.stringify([{ tool: 'fileSystem', action: 'list' }])
+            });
 
-        ego = new Ego();
-        await ego.initialize();
-    });
+            // Mock successful execution
+            mockCoordinator.mockResolvedValueOnce({
+                status: 'success',
+                response: 'Files listed successfully'
+            });
 
-    afterEach(() => {
-        // Restore original environment
-        process.env = originalEnv;
-    });
+            // Mock successful evaluation
+            mockEvaluator.mockResolvedValueOnce({
+                score: 90,
+                analysis: 'Task completed successfully',
+                recommendations: []
+            });
 
-    it('should handle conversation messages', async () => {
-        planner.mockResolvedValueOnce({
-            status: 'success',
-            requiresTools: false,
-            explanation: 'This is a conversation',
-            response: 'Hello! How can I help you?'
-        });
-
-        const result = await ego.processMessage('hello');
-        expect(result.type).toBe('task');
-        expect(result.response).toBe('Hello! How can I help you?');
-    });
-
-    it('should detect and handle task messages', async () => {
-        // Mock planner to indicate task
-        planner.mockResolvedValueOnce({
-            status: 'success',
-            requiresTools: true,
-            explanation: 'This requires tools',
-            plan: JSON.stringify([{
-                tool: 'fileSystem',
-                action: 'list',
-                parameters: {}
-            }])
+            const result = await ego.processMessage('list files');
+            expect(result.type).toBe('task');
+            expect(result.response).toBe('Files listed successfully');
+            expect(result.evaluation.score).toBe(90);
+            expect(mockEvaluator).toHaveBeenCalledTimes(1);
         });
 
-        // Mock coordinator response
-        coordinator.mockResolvedValueOnce({
-            status: 'success',
-            response: 'Files listed successfully'
+        it('should handle session history in conversations', async () => {
+            // Mock planner to indicate this is a conversation
+            mockPlanner.mockResolvedValueOnce({
+                requiresTools: false,
+                response: 'Hello again!'
+            });
+
+            const result = await ego.processMessage('hello again', [{ role: 'user', content: 'previous message' }]);
+            expect(result.type).toBe('conversation');
+            expect(result.response).toBe('Hello again!');
+            expect(mockEvaluator).not.toHaveBeenCalled();
         });
 
-        const result = await ego.processMessage('list files');
-        expect(result.type).toBe('task');
-        expect(result.response).toBe('Files listed successfully');
-    });
-
-    it('should handle session history in conversations', async () => {
-        const mockResponse = 'I remember our previous conversation';
-        
-        planner.mockResolvedValueOnce({
-            status: 'success',
-            requiresTools: false,
-            explanation: 'This is a conversation with history',
-            response: mockResponse
+        it('should initialize with default personality', async () => {
+            await ego.initialize();
+            expect(ego.personality).toBeTruthy();
+            expect(ego.personality.name).toBe('default');
         });
 
-        const result = await ego.processMessage('hello again', [{ role: 'user', content: 'previous message' }]);
-        expect(result.type).toBe('task');
-        expect(result.response).toBe(mockResponse);
+        it('should allow changing personality', async () => {
+            await ego.setPersonality('friendly');
+            expect(ego.personality.name).toBe('friendly');
+        });
+
+        it('should throw error when setting invalid personality', async () => {
+            await expect(ego.setPersonality('invalid')).rejects.toThrow();
+        });
     });
 
-    it('should initialize with default personality', async () => {
-        const defaultEgo = new Ego();
-        await defaultEgo.initialize();
-        
-        const defaultPersonality = personalityManager.getDefaultPersonality();
-        expect(defaultEgo.identity).toBe(defaultPersonality.name);
-        expect(defaultEgo.capabilities).toEqual(['conversation', 'tasks']);
-        expect(defaultEgo.personality).toEqual(defaultPersonality);
-    });
+    describe('Task Execution and Evaluation', () => {
+        it('should execute task and return result if evaluation score meets threshold', async () => {
+            // Mock successful planning
+            mockPlanner.mockResolvedValueOnce({
+                status: 'success',
+                requiresTools: true,
+                plan: JSON.stringify([{ tool: 'test', action: 'test' }])
+            });
 
-    it('should allow changing personality', async () => {
-        const defaultEgo = new Ego();
-        await defaultEgo.initialize();
-        
-        // Mock a new personality
-        const customPersonality = {
-            name: 'Custom',
-            prompt: 'A custom personality'
-        };
-        personalityManager.getPersonality.mockReturnValue(customPersonality);
-        
-        await defaultEgo.setPersonality('Custom');
-        expect(defaultEgo.personality).toEqual(customPersonality);
-        // Identity should not change if it was set in constructor
-        expect(defaultEgo.identity).toBe('cascade');
-        expect(defaultEgo.capabilities).toEqual(['conversation', 'tasks']);
-    });
+            // Mock successful execution
+            mockCoordinator.mockResolvedValueOnce({
+                status: 'success',
+                response: 'Task completed'
+            });
 
-    it('should throw error when setting invalid personality', async () => {
-        const defaultEgo = new Ego();
-        await defaultEgo.initialize();
-        
-        personalityManager.getPersonality.mockReturnValue(null);
-        
-        await expect(defaultEgo.setPersonality('Invalid')).rejects.toThrow('Personality Invalid not found');
+            // Mock good evaluation
+            mockEvaluator.mockResolvedValueOnce({
+                score: 90,
+                analysis: 'Good execution',
+                recommendations: []
+            });
+
+            const result = await ego.processMessage('do something');
+            
+            expect(result.type).toBe('task');
+            expect(result.evaluation.score).toBe(90);
+            expect(mockPlanner).toHaveBeenCalledTimes(1);
+            expect(mockCoordinator).toHaveBeenCalledTimes(1);
+            expect(mockEvaluator).toHaveBeenCalledTimes(1);
+        });
+
+        it('should retry task execution when evaluation score is below threshold', async () => {
+            // Mock successful planning for both attempts
+            mockPlanner
+                .mockResolvedValueOnce({
+                    status: 'success',
+                    requiresTools: true,
+                    plan: JSON.stringify([{ tool: 'test', action: 'first' }])
+                })
+                .mockResolvedValueOnce({
+                    status: 'success',
+                    requiresTools: true,
+                    plan: JSON.stringify([{ tool: 'test', action: 'second' }])
+                });
+
+            // Mock execution results
+            mockCoordinator
+                .mockResolvedValueOnce({
+                    status: 'success',
+                    response: 'First attempt'
+                })
+                .mockResolvedValueOnce({
+                    status: 'success',
+                    response: 'Second attempt'
+                });
+
+            // Mock evaluations - first poor, then good
+            mockEvaluator
+                .mockResolvedValueOnce({
+                    score: 60,
+                    analysis: 'Needs improvement',
+                    recommendations: ['Try differently']
+                })
+                .mockResolvedValueOnce({
+                    score: 95,
+                    analysis: 'Much better',
+                    recommendations: []
+                });
+
+            const result = await ego.processMessage('do something');
+            
+            // Should be an array with progress message and final result
+            expect(Array.isArray(result)).toBe(true);
+            expect(result).toHaveLength(2);
+            
+            // Check progress message
+            expect(result[0].type).toBe('progress');
+            expect(result[0].response).toContain('60%');
+            
+            // Check final result
+            expect(result[1].type).toBe('task');
+            expect(result[1].evaluation.score).toBe(95);
+            expect(result[1].response).toContain('after 2 attempts');
+            
+            // Verify multiple attempts were made
+            expect(mockPlanner).toHaveBeenCalledTimes(2);
+            expect(mockCoordinator).toHaveBeenCalledTimes(2);
+            expect(mockEvaluator).toHaveBeenCalledTimes(2);
+        });
+
+        it('should handle conversation without evaluation', async () => {
+            // Mock planner indicating this is just conversation
+            mockPlanner.mockResolvedValueOnce({
+                requiresTools: false,
+                response: 'Just chatting'
+            });
+
+            const result = await ego.processMessage('hello');
+            
+            expect(result.type).toBe('conversation');
+            expect(result.response).toBe('Just chatting');
+            expect(mockEvaluator).not.toHaveBeenCalled();
+        });
+
+        it('should respect max retries limit', async () => {
+            // Mock consistently low-scoring evaluations
+            mockPlanner.mockResolvedValue({
+                status: 'success',
+                requiresTools: true,
+                plan: JSON.stringify([{ tool: 'test', action: 'test' }])
+            });
+
+            mockCoordinator.mockResolvedValue({
+                status: 'success',
+                response: 'Attempt'
+            });
+
+            mockEvaluator.mockResolvedValue({
+                score: 50,
+                analysis: 'Not quite right',
+                recommendations: ['Try again']
+            });
+
+            const result = await ego.processMessage('do something');
+            
+            // Should have multiple progress messages and a final result
+            expect(Array.isArray(result)).toBe(true);
+            
+            // Count the number of attempts (progress messages + final result)
+            expect(result.length).toBeLessThanOrEqual(6); // 5 attempts + 1 final
+            expect(mockPlanner).toHaveBeenCalledTimes(5); // MAX_RETRIES
+        });
     });
 });

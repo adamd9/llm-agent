@@ -10,6 +10,12 @@ class Logger {
     }
 
     debug(context, message, data = {}) {
+        // Handle if message is an object
+        if (typeof message === 'object') {
+            data = message;
+            message = '';
+        }
+
         const debugInfo = {
             context,
             message,
@@ -18,7 +24,7 @@ class Logger {
         };
 
         // Console output
-        console.log(`[${context}] ${message}`, data);
+        console.log(`[${context}] ${message}`, typeof data === 'object' ? JSON.stringify(data, null, 2) : data);
 
         // Send to WebSocket clients
         if (this.wsConnections) {

@@ -1,17 +1,15 @@
 const toolManager = require('./tools');
-const debug = require('debug')('llm-agent:coordinator');
+const logger = require('./logger');
 
 async function coordinator(enrichedMessage) {
     try {
-        debug('Starting coordination', {
-            message: enrichedMessage.original_message
-        });
+        logger.debug('Starting coordination', enrichedMessage.original_message);
 
         try {
             // Get the plan from the message context
             const plan = enrichedMessage.plan ? JSON.parse(enrichedMessage.plan) : null;
             if (!plan) {
-                debug('No plan provided');
+                logger.debug('No plan provided');
                 return {
                     status: 'error',
                     error: 'No plan provided',
@@ -23,14 +21,11 @@ async function coordinator(enrichedMessage) {
                 };
             }
 
-            debug('Parsed plan', { plan });
+            logger.debug('Parsed plan', plan);
             return await executePlan(plan);
 
         } catch (error) {
-            debug('Coordination failed', {
-                error: error.message,
-                stack: error.stack
-            });
+            logger.debug('Coordination failed', error);
             return {
                 status: 'error',
                 error: error.message,
@@ -43,10 +38,7 @@ async function coordinator(enrichedMessage) {
         }
 
     } catch (error) {
-        debug('Coordination failed', {
-            error: error.message,
-            stack: error.stack
-        });
+        logger.debug('Coordination failed', error);
         
         return {
             status: 'error',
@@ -69,16 +61,12 @@ async function executePlan(plan) {
         const toolMap = new Map(tools.map(tool => [tool.name, tool]));
 
         for (step of plan) {
-            debug('Executing step:', step);
+            logger.debug('Executing step:', step);
             const tool = toolMap.get(step.tool);
 
             if (!tool) {
                 const error = new Error(`Tool not found: ${step.tool}`);
-                debug('Tool not found:', {
-                    error: error.message,
-                    stack: error.stack,
-                    step
-                });
+                logger.debug('Tool not found:', error);
                 return {
                     status: 'error',
                     error: error.message,
@@ -93,20 +81,10 @@ async function executePlan(plan) {
 
             try {
                 const result = await tool.execute(step.action, step.parameters);
-                debug('Tool execution result:', {
-                    tool: step.tool,
-                    action: step.action,
-                    result
-                });
+                logger.debug('Tool execution result:', result);
 
                 if (result.status === 'error') {
-                    debug('Tool execution error:', {
-                        tool: step.tool,
-                        action: step.action,
-                        error: result.error,
-                        stack: result.stack,
-                        details: result
-                    });
+                    logger.debug('Tool execution error:', result);
                     return {
                         status: 'error',
                         error: result.error,
@@ -132,11 +110,7 @@ async function executePlan(plan) {
                     result: normalizedResult
                 });
             } catch (error) {
-                debug('Tool execution error:', {
-                    error: error.message,
-                    stack: error.stack,
-                    step
-                });
+                logger.debug('Tool execution error:', error);
                 return {
                     status: 'error',
                     error: error.message,
@@ -157,7 +131,7 @@ async function executePlan(plan) {
         };
 
     } catch (error) {
-        debug('Plan execution failed:', error);
+        logger.debug('Plan execution failed:', error);
         return {
             status: 'error',
             error: error.message,

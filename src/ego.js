@@ -2,8 +2,13 @@ const { getOpenAIClient } = require('./openaiClient.js');
 require('dotenv').config();
 const { coordinator } = require('./coordinator');
 const { planner } = require('./planner');
+const { evaluator } = require('./evaluator');
 const personalityManager = require('./personalities');
 const logger = require('./logger');
+
+// Configuration
+const MAX_RETRIES = 5;
+const EVALUATION_THRESHOLD = 80; // Score threshold for success
 
 class Ego {
     constructor(identity = null, client = null) {
@@ -80,40 +85,7 @@ class Ego {
                 }
             };
 
-            // Get plan from planner
-            logger.debug('process', 'Getting plan from planner');
-            const planResult = await planner(enrichedMessage);
-            logger.debug('process', 'Planner result', { planResult });
-            
-            if (planResult.status === 'error') {
-                logger.debug('process', 'Planning failed', { error: planResult.error });
-                return {
-                    type: 'error',
-                    error: {
-                        message: planResult.error
-                    }
-                };
-            }
-
-            // If planner indicates this is a task, execute it
-            if (planResult.requiresTools) {
-                logger.debug('process', 'Executing task');
-                enrichedMessage.plan = planResult.plan;
-                const result = await coordinator(enrichedMessage);
-                return {
-                    type: 'task',
-                    response: result.response,
-                    enriched_message: enrichedMessage
-                };
-            }
-
-            // Otherwise handle as conversation
-            logger.debug('process', 'Handling as conversation');
-            return {
-                type: 'task',
-                response: planResult.response,
-                enriched_message: enrichedMessage
-            };
+            return await this.executeWithEvaluation(enrichedMessage, sessionHistory);
         } catch (error) {
             logger.debug('process', 'Error processing message', {
                 error: {
@@ -128,6 +100,102 @@ class Ego {
                 }
             };
         }
+    }
+
+    /**
+     * Executes a task with evaluation and retry loop
+     */
+    async executeWithEvaluation(enrichedMessage, sessionHistory, attempt = 1) {
+        logger.debug('executeWithEvaluation', 'Starting execution', {
+            attempt,
+            message: enrichedMessage.original_message
+        });
+
+        // Get plan from planner
+        const planResult = await planner(enrichedMessage);
+        logger.debug('executeWithEvaluation', 'Planner result', { planResult });
+        
+        if (planResult.status === 'error') {
+            logger.debug('executeWithEvaluation', 'Planning failed', { error: planResult.error });
+            return {
+                type: 'error',
+                error: {
+                    message: planResult.error
+                }
+            };
+        }
+
+        // If it's just a conversation, handle it directly
+        if (!planResult.requiresTools) {
+            logger.debug('executeWithEvaluation', 'Handling as conversation');
+            return {
+                type: 'conversation',
+                response: planResult.response,
+                enriched_message: enrichedMessage
+            };
+        }
+
+        // Execute the plan
+        enrichedMessage.plan = planResult.plan;
+        const executionResult = await coordinator(enrichedMessage);
+
+        // Evaluate the results
+        const evaluation = await evaluator({
+            originalRequest: enrichedMessage.original_message,
+            executionResult,
+            plan: JSON.parse(planResult.plan)
+        });
+
+        logger.debug('executeWithEvaluation', 'Evaluation results', {
+            score: evaluation.score,
+            hasRecommendations: evaluation.recommendations.length > 0
+        });
+
+        // Check if we need to retry
+        if (evaluation.score < EVALUATION_THRESHOLD && attempt < MAX_RETRIES) {
+            // Prepare retry message
+            const retryResponse = {
+                type: 'progress',
+                response: `I'm adjusting my approach (attempt ${attempt}/${MAX_RETRIES}):\n` +
+                         `Previous attempt scored ${evaluation.score}%.\n` +
+                         `Adjustments: ${evaluation.recommendations.join(', ')}\n` +
+                         `Let me try again with these improvements.`,
+                enriched_message: enrichedMessage
+            };
+
+            // Add recommendations to context for next attempt
+            enrichedMessage.context.previousAttempt = {
+                score: evaluation.score,
+                recommendations: evaluation.recommendations,
+                attempt
+            };
+
+            // Return both the progress message and the next attempt
+            return [
+                retryResponse,
+                await this.executeWithEvaluation(enrichedMessage, sessionHistory, attempt + 1)
+            ];
+        }
+
+        // Return final result
+        const response = {
+            type: 'task',
+            response: executionResult.response,
+            enriched_message: enrichedMessage,
+            evaluation: {
+                score: evaluation.score,
+                analysis: evaluation.analysis,
+                recommendations: evaluation.recommendations
+            }
+        };
+
+        // If this was a retry, add context about the attempts
+        if (attempt > 1) {
+            response.response = `Final result (after ${attempt} attempts, score: ${evaluation.score}%):\n` +
+                              executionResult.response;
+        }
+
+        return response;
     }
 
     async handleConversation(enrichedMessage, sessionHistory) {

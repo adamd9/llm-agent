@@ -25,9 +25,5 @@ services:
         mkdir -p $$LOG_DIR;
         LOG_FILE=$$LOG_DIR/app_$$(date +%Y%m%d_%H%M%S).log;
         ln -sf $$LOG_FILE $$LOG_DIR/current.log;
-        if [ "$$NODE_ENV" = "development" ]; then
-          exec npm run dev 2>&1 | tee $$LOG_FILE;
-        else
-          exec node src/index.js 2>&1 | tee $$LOG_FILE;
-        fi
+        exec npm run dev 2>&1 | tee $$LOG_FILE;
       "
