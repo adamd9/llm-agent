@@ -27,9 +27,12 @@ Return ONLY a JSON object (do not include any other text outside of the JSON obj
 - requiresTools: boolean indicating if tools are needed
 - explanation: brief explanation of why tools are or aren't needed`;
 
-        logger.debug('prompt', 'Generated task analysis prompt', {
-            prompt: taskAnalysisPrompt
-        });
+        const taskAnalysisPrompts = [
+            { role: 'system', content: taskAnalysisPrompt },
+            { role: 'user', content: `Request: "${enrichedMessage.original_message}"\nDoes this request require tools?` }
+        ];
+
+        logger.debug('prompt', 'Generated task analysis prompts', taskAnalysisPrompts);
 
         const openai = client || getOpenAIClient();
         const analysisResponse = await openai.chat.completions.create({
@@ -37,10 +40,7 @@ Return ONLY a JSON object (do not include any other text outside of the JSON obj
             "response_format": {
                 "type": "json_object"
             },
-            messages: [
-                { role: 'system', content: taskAnalysisPrompt },
-                { role: 'user', content: `Request: "${enrichedMessage.original_message}"\nDoes this request require tools?` }
-            ],
+            messages: taskAnalysisPrompts,
             temperature: 0.1,
             max_tokens: 200,
         });
@@ -117,9 +117,12 @@ Create a plan containing ALL steps to handle the user's request. The plan should
 
    `;
 
-        logger.debug('prompt', 'Generated planning prompt', {
-            prompt: planningPrompt
-        });
+        const planningPrompts = [
+            { role: 'system', content: planningPrompt },
+            { role: 'user', content: `Request: "${enrichedMessage.original_message}"\nCreate a plan using the available tools.` }
+        ];
+
+        logger.debug('handleBubble', 'Planning prompt messages being sent to OpenAI', { planningPrompts });
 
         const planningResponse = await openai.chat.completions.create({
             model: 'gpt-4o',
@@ -151,10 +154,7 @@ Create a plan containing ALL steps to handle the user's request. The plan should
                   "strict": true
                 }
             },
-            messages: [
-                { role: 'system', content: planningPrompt },
-                { role: 'user', content: `Request: "${enrichedMessage.original_message}"\nCreate a plan using the available tools.` }
-            ],
+            messages: planningPrompts,
             temperature: 0.3,
             max_tokens: 1000
         });

@@ -1,5 +1,7 @@
 const { getOpenAIClient } = require('./openaiClient');
 const logger = require('./logger');
+const sharedEventEmitter = require('./eventEmitter');
+const { response } = require('express');
 
 /**
  * Evaluates the execution results against the original request
@@ -19,16 +21,16 @@ async function evaluator({ originalRequest, executionResult, plan }) {
 
         // Construct the evaluation prompt
         const prompt = constructEvaluationPrompt(originalRequest, executionResult, plan);
+        logger.debug('Evaluation prompt', {
+            prompt
+         });
 
         // Get evaluation from OpenAI
         const evaluation = await getEvaluation(prompt);
 
-        // Parse and format the evaluation results
-        const result = parseEvaluation(evaluation);
+        logger.debug('Evaluation complete', evaluation);
 
-        logger.debug('Evaluation complete', result);
-
-        return result;
+        return evaluation;
     } catch (error) {
         logger.debug('Evaluation failed', error);
 
@@ -53,7 +55,7 @@ Executed Plan:
 ${JSON.stringify(plan, null, 2)}
 
 Execution Result:
-${executionResult.response}
+${JSON.stringify(executionResult.response)}
 
 Please evaluate:
 1. How well does the execution result match the original request's intent? (Score 0-100)
@@ -75,6 +77,35 @@ async function getEvaluation(prompt) {
     const openai = getOpenAIClient();
     const response = await openai.chat.completions.create({
         model: process.env.OPENAI_MODEL || "gpt-4",
+        response_format: {
+            "type": "json_schema",
+            "json_schema": {
+              "name": "evaluation",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "score": {
+                    "type": "number",
+                    "description": "The evaluation score as a numeric value, typically percentage-based."
+                  },
+                  "recommendations": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "A list of recommendations for improving the execution."
+                  },
+                  "analysis": {
+                    "type": "string",
+                    "description": "Detailed analysis or textual feedback on the execution."
+                  }
+                },
+                "required": ["score", "recommendations", "analysis"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          },
         messages: [{
             role: "system",
             content: "You are an expert evaluator that assesses task execution results. Always respond in valid JSON format."
@@ -87,27 +118,6 @@ async function getEvaluation(prompt) {
     });
 
     return response.choices[0].message.content;
-}
-
-/**
- * Parses the evaluation response
- */
-function parseEvaluation(evaluationResponse) {
-    try {
-        const result = JSON.parse(evaluationResponse);
-        return {
-            score: result.score || 0,
-            analysis: result.analysis || 'No analysis provided',
-            recommendations: result.recommendations || []
-        };
-    } catch (error) {
-        logger.debug('Failed to parse evaluation', error);
-        return {
-            score: 0,
-            analysis: 'Invalid evaluation response format',
-            recommendations: ['Retry with different approach']
-        };
-    }
 }
 
 module.exports = { evaluator };

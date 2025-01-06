@@ -13,6 +13,7 @@ The system consists of three main components:
 - Uses GPT-4o-mini for natural language understanding
 - Manages task retry attempts based on evaluation results
 - Communicates progress and adjustments to the user
+- Updated the event handling logic to utilize the `handleBubble` function for `bubble` events.
 
 ### 2. Coordinator Layer
 - Receives tasks from the ego layer when tools are needed
@@ -510,6 +511,34 @@ The system provides comprehensive error handling at multiple levels:
 - Session history is maintained for context
 - History can be retrieved via API
 
+## Shared Event System
+
+A shared event system has been implemented using Node.js's built-in `events` module. This allows various modules to emit and listen for events.
+
+### Usage
+
+To use the shared event system, import the `sharedEventEmitter` from `src/eventEmitter.js`:
+
+```javascript
+const sharedEventEmitter = require('./eventEmitter');
+```
+
+You can listen for events using:
+
+```javascript
+sharedEventEmitter.on('eventName', (data) => {
+    console.log('Event received:', data);
+});
+```
+
+And emit events using:
+
+```javascript
+await sharedEventEmitter.emit('eventName', { key: 'value' });
+```
+
+This system allows for better modularity and decoupling of components within the application.
+
 ## Tool Interface
 
 Each tool in the system must implement the following interface:
@@ -664,3 +693,8 @@ This dual logging system ensures:
 - Users get clear, formatted feedback
 - Complex data is presented in a readable way
 - Code examples are properly highlighted
+
+### Updates to Event Handling
+
+- Implemented a message queue to manage sending messages from `assistantResponse` and `debugResponse` events in order.
+- Created a `processQueue` function to ensure messages are sent sequentially, preventing race conditions in event handling.

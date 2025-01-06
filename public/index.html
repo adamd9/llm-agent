@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>AI Agent Chat Interface</title>
     <style>
@@ -12,8 +13,9 @@
             height: 100vh;
             overflow: hidden;
         }
+
         #chat-container {
-            width: 40%;
+            flex-grow: 1;
             border: 1px solid #ccc;
             padding: 20px;
             margin-bottom: 20px;
@@ -21,6 +23,7 @@
             background: #f9f9f9;
             margin: 20px 20px 10px 20px;
         }
+
         #debug-container {
             width: 50%;
             border: 1px solid #ccc;
@@ -31,7 +34,9 @@
             margin: 20px 20px 10px 20px;
             background-color: #1e1e1e;
             color: #a8e6cf;
+            display: none;
         }
+
         #debug-output {
             margin: 0;
             padding: 0;
@@ -39,19 +44,25 @@
             font-size: 0.9em;
             white-space: pre-wrap;
         }
+
         .message {
             margin: 10px 0;
             padding: 10px;
             border-radius: 5px;
         }
+
         .user-message {
             background: #e3f2fd;
             margin-left: 20%;
+            width: 600px;
         }
+
         .agent-message {
             background: #f5f5f5;
             margin-right: 20%;
+            width: 600px;
         }
+
         .error-message {
             background: #ffebee;
             color: #c62828;
@@ -59,7 +70,8 @@
             margin: 10px 0;
             border-radius: 5px;
         }
-        .debug-info {
+
+        .debug-message {
             font-family: monospace;
             font-size: 0.9em;
             background: #333;
@@ -67,21 +79,35 @@
             padding: 10px;
             margin-top: 5px;
             border-radius: 3px;
-            white-space: pre-wrap;
+        }
+
+        .debug-message span.title {
+            color: greenyellow;
+            display: flex;
+        }
+
+        .debug-message pre {
+            overflow-y: scroll;
+        }
+
+        .debug-message {
             display: none;
         }
+
         #input-container {
             display: flex;
             height: 44px;
             gap: 10px;
             padding: 10px 20px 20px 20px;
         }
+
         #message-input {
             flex-grow: 1;
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 5px;
         }
+
         button {
             padding: 10px 20px;
             background: #2196f3;
@@ -90,15 +116,18 @@
             border-radius: 5px;
             cursor: pointer;
         }
+
         button:hover {
             background: #1976d2;
         }
+
         #debug-toggle {
             background: #666;
             margin-left: 10px;
         }
     </style>
 </head>
+
 <body>
     <div style="display: flex; height: calc(100% - 60px);">
         <div id="chat-container"></div>
@@ -127,45 +156,50 @@
 
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                
+                console.log('Received:', data);
                 switch (data.type) {
                     case 'session':
                         sessionId = data.sessionId;
                         console.log('Session ID:', sessionId);
                         break;
-                    
+
                     case 'response':
                         addMessage('agent', data.data.response || data.data.error);
                         break;
-                    
+
                     case 'debug':
-                        const messageDiv = document.querySelector('.message:last-child');
-                        if (messageDiv) {
-                            let debugDiv = messageDiv.querySelector('.debug-info');
-                            if (!debugDiv) {
-                                debugDiv = document.createElement('div');
-                                debugDiv.className = 'debug-info';
-                                debugDiv.style.display = showDebug ? 'block' : 'none';
-                                messageDiv.appendChild(debugDiv);
-                            }
-                            debugDiv.textContent = `[${data.data.context}] ${data.data.message}\n`;
-                            if (Object.keys(data.data.data).length > 0) {
-                                debugDiv.textContent += JSON.stringify(data.data.data, null, 2);
-                            }
+                        // Create a new debug message element to handle multiple messages
+                        const debugMessage = document.createElement('div');
+                        debugMessage.className = 'debug-message';
+
+                        // Use innerHTML to allow HTML content and styling
+                        let htmlContent = `
+        <span class="title">[${data.data.context}] ${data.data.message}</span>
+    `;
+
+                        if (Object.keys(data.data.data).length > 0) {
+                            htmlContent += `
+            <pre>${JSON.stringify(data.data.data, null, 2)}</pre>
+        `;
                         }
+
+                        debugMessage.innerHTML = htmlContent;
+
+                        addMessage('debug', htmlContent, 'html');
+
                         const debugOutput = document.getElementById('debug-output');
                         const debugContainer = document.getElementById('debug-container');
-                        
+
                         debugOutput.textContent += `[${data.data.context}] ${data.data.message}\n`;
                         if (Object.keys(data.data.data).length > 0) {
                             debugOutput.textContent += JSON.stringify(data.data.data, null, 2) + '\n';
                         }
-                        
+
                         // Scroll both the debug output and container to the bottom
                         debugOutput.scrollTop = debugOutput.scrollHeight;
                         debugContainer.scrollTop = debugContainer.scrollHeight;
                         break;
-                    
+
                     case 'error':
                         console.error('Server error:', data.error);
                         addMessage('error', `Error: ${data.error}`);
@@ -184,11 +218,42 @@
             };
         }
 
-        function addMessage(type, content) {
+        function addMessage(type, content, format = 'basic') {
             const container = document.getElementById('chat-container');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${type}-message`;
-            messageDiv.textContent = content;
+
+            // Function to handle line breaks
+            const convertNewlinesToBreaks = (text) => {
+                return text.replace(/\n/g, '<br>');
+            };
+
+            switch (format) {
+                case 'basic':
+                    // Use innerHTML and handle new line conversion
+                    messageDiv.innerHTML = convertNewlinesToBreaks(content);
+                    break;
+
+                case 'html':
+                    messageDiv.innerHTML = content;
+                    break;
+
+                case 'markdown':
+                    // Convert Markdown to HTML
+                    if (window.marked) {
+                        messageDiv.innerHTML = marked(content);
+                    } else {
+                        console.warn("Markdown library not available, defaulting to basic text.");
+                        messageDiv.innerHTML = convertNewlinesToBreaks(content);
+                    }
+                    break;
+
+                default:
+                    console.warn(`Unsupported format "${format}", defaulting to basic text.`);
+                    messageDiv.innerHTML = convertNewlinesToBreaks(content);
+                    break;
+            }
+
             container.appendChild(messageDiv);
             container.scrollTop = container.scrollHeight;
         }
@@ -196,21 +261,21 @@
         function sendMessage() {
             const input = document.getElementById('message-input');
             const message = input.value.trim();
-            
+
             if (message && ws.readyState === WebSocket.OPEN) {
                 addMessage('user', message);
                 ws.send(JSON.stringify({
                     message: message,
                     sessionId: sessionId
                 }));
-                
+
                 input.value = '';
             }
         }
 
         function toggleDebug() {
             showDebug = !showDebug;
-            document.querySelectorAll('.debug-info').forEach(el => {
+            document.querySelectorAll('.debug-message').forEach(el => {
                 el.style.display = showDebug ? 'block' : 'none';
             });
         }
@@ -222,11 +287,12 @@
         document.getElementById('message-input').focus();
 
         // Handle Enter key
-        document.getElementById('message-input').addEventListener('keypress', function(e) {
+        document.getElementById('message-input').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') {
                 sendMessage();
             }
         });
     </script>
 </body>
+
 </html>

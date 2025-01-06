@@ -5,9 +5,11 @@ const { planner } = require('./planner');
 const { evaluator } = require('./evaluator');
 const personalityManager = require('./personalities');
 const logger = require('./logger');
+const sharedEventEmitter = require('./eventEmitter');
+const memory = require('./memory');
 
 // Configuration
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 1;
 const EVALUATION_THRESHOLD = 80; // Score threshold for success
 
 class Ego {
@@ -17,7 +19,7 @@ class Ego {
         this.identity = identity;
         this.capabilities = ['conversation', 'tasks']; // System capabilities, not personality-dependent
         this._initialized = false;
-        
+
         logger.debug('constructor', 'Initializing Ego');
     }
 
@@ -29,20 +31,22 @@ class Ego {
         // Load personalities
         await personalityManager.loadPersonalities();
         const defaultPersonality = personalityManager.getDefaultPersonality();
-        
+
         this.personality = defaultPersonality;
         if (!this.identity) {
             this.identity = this.personality.name;
         }
-        
+
         this._initialized = true;
-        
+
         logger.debug('initialize', 'Ego initialized', {
             identity: this.identity,
             capabilities: this.capabilities,
             personality: this.personality,
             hasClient: !!this.openaiClient
         });
+
+        sharedEventEmitter.on('bubble', async (data) => await this.handleBubble(data));
     }
 
     async setPersonality(name) {
@@ -51,12 +55,12 @@ class Ego {
         if (!personality) {
             throw new Error(`Personality ${name} not found`);
         }
-        
+
         this.personality = personality;
         if (!this.identity) {
             this.identity = personality.name;
         }
-        
+
         logger.debug('setPersonality', 'Personality updated', {
             identity: this.identity,
             capabilities: this.capabilities,
@@ -77,6 +81,8 @@ class Ego {
                 throw new Error('Invalid message format: message must be a non-empty string');
             }
 
+            await memory.storeShortTerm('User message', message);
+
             const enrichedMessage = {
                 original_message: message,
                 context: {
@@ -85,7 +91,9 @@ class Ego {
                 }
             };
 
-            return await this.executeWithEvaluation(enrichedMessage, sessionHistory);
+            const result = await this.executeWithEvaluation(enrichedMessage, sessionHistory);
+            await sharedEventEmitter.emit('bubble', result);
+            return;
         } catch (error) {
             logger.debug('process', 'Error processing message', {
                 error: {
@@ -93,12 +101,14 @@ class Ego {
                     stack: error.stack
                 }
             });
-            return {
+            const errorResult = {
                 type: 'error',
                 error: {
                     message: error.message || 'Unknown error occurred'
                 }
-            };
+            }
+            await sharedEventEmitter.emit('assistantResponse', errorResult);
+            return;
         }
     }
 
@@ -112,13 +122,13 @@ class Ego {
         });
 
         if (attempt === 1) {
-            logger.response('Starting to work on your request...');
+            await sharedEventEmitter.emit('bubble', 'Starting to work on your request...');
         }
 
         // Get plan from planner
         const planResult = await planner(enrichedMessage);
         logger.debug('executeWithEvaluation', 'Planner result', { planResult });
-        
+
         if (planResult.status === 'error') {
             logger.debug('executeWithEvaluation', 'Planning failed', { error: planResult.error });
             return {
@@ -132,20 +142,22 @@ class Ego {
         // If it's just a conversation, handle it directly
         if (!planResult.requiresTools) {
             logger.debug('executeWithEvaluation', 'Handling as conversation');
+            const conversationResponse = await this.handleBubble(planResult.explanation);
             return {
                 type: 'conversation',
-                response: planResult.response,
+                response: conversationResponse,
                 enriched_message: enrichedMessage
             };
         }
 
-        logger.response('I have a plan to help you. Starting execution...');
+        await sharedEventEmitter.emit('bubble', 'Starting execution of the plan...');
 
         // Execute the plan
         enrichedMessage.plan = planResult.plan;
         const executionResult = await coordinator(enrichedMessage);
-
-        logger.response('Execution complete. Evaluating results...');
+        this.handleBubble(executionResult);
+        await memory.storeShortTerm('Plan execution result', executionResult);
+        await sharedEventEmitter.emit('bubble', 'Execution complete. Evaluating results...');
 
         // Evaluate the results
         const evaluation = await evaluator({
@@ -156,20 +168,22 @@ class Ego {
 
         logger.debug('executeWithEvaluation', 'Evaluation results', {
             score: evaluation.score,
-            hasRecommendations: evaluation.recommendations.length > 0
+            hasRecommendations: evaluation.recommendations?.length > 0
         });
+
+        // await sharedEventEmitter.emit('bubble', evaluation);
 
         // Check if we need to retry
         if (evaluation.score < EVALUATION_THRESHOLD && attempt < MAX_RETRIES) {
-            logger.response(`Attempt ${attempt} scored ${evaluation.score}%. Making adjustments and trying again...`);
+            await sharedEventEmitter.emit('bubble', `Attempt ${attempt} scored ${evaluation.score}%. Making adjustments and trying again...`);
 
             // Prepare retry message
             const retryResponse = {
                 type: 'progress',
                 response: `I'm adjusting my approach (attempt ${attempt}/${MAX_RETRIES}):\n` +
-                         `Previous attempt scored ${evaluation.score}%.\n` +
-                         `Adjustments: ${evaluation.recommendations.join(', ')}\n` +
-                         `Let me try again with these improvements.`,
+                    `Previous attempt scored ${evaluation.score}%.\n` +
+                    `Adjustments: ${evaluation.recommendations.join(', ')}\n` +
+                    `Let me try again with these improvements.`,
                 enriched_message: enrichedMessage
             };
 
@@ -202,7 +216,7 @@ class Ego {
         // If this was a retry, add context about the attempts
         if (attempt > 1) {
             response.response = `Final result (after ${attempt} attempts, score: ${evaluation.score}%):\n` +
-                              executionResult.response;
+                executionResult.response;
         }
 
         return response;
@@ -212,7 +226,7 @@ class Ego {
         await this.initialize();
         const openai = getOpenAIClient();
         const systemPrompt = this.buildSystemPrompt();
-        
+
         logger.debug('handleConversation', 'Processing session history', {
             sessionHistory,
             enrichedMessage
@@ -224,7 +238,7 @@ class Ego {
                 logger.debug('handleConversation', 'Invalid message format in history', { msg });
                 return null;
             }
-            
+
             // Ensure required fields are present
             if (!msg.role || !msg.content) {
                 logger.debug('handleConversation', 'Missing required fields in history message', { msg });
@@ -263,7 +277,7 @@ class Ego {
                 max_tokens: 1000
             });
 
-            logger.debug('handleConversation', 'OpenAI response', { completion });
+            logger.debug('handleConversation', 'Final message OpenAI response', { completion });
 
             if (!completion || !completion.choices || !completion.choices[0] || !completion.choices[0].message) {
                 throw new Error('Invalid response from OpenAI API');
@@ -282,6 +296,52 @@ class Ego {
             throw error;
         }
     }
+
+async handleBubble(input) {
+    let message;
+
+    if (typeof input === 'string') {
+        message = input;
+    } else if (typeof input === 'object') {
+        message = JSON.stringify(input);
+    } else {
+        throw new Error('Input must be a string or an object');
+    }
+
+    logger.debug('handleBubble', 'Processing bubble', { message });
+
+    // Count the number of words in the message
+    const wordCount = message.split(/\s+/).filter(word => word.length > 0).length;
+
+    let userPrompt = `Translate the supplied data/text into a plain text summary. You don't need to explain what you are doing, just provide the 'translated version'. Keep it simple, to the point, and avoid unnecessary details. 
+    Don't use any indicators like plaintext etc, as it is assumed it will be plaintext.
+    Make sure the response is in keeping with the current personality.
+    Data/text: ${message}`;
+
+    // If the word count is less than 10, add an additional instruction
+    if (wordCount < 10) {
+        userPrompt += "\nAdditionally, ensure the response is less than 10 words.";
+    }
+
+    const systemPrompt = this.buildSystemPrompt();
+
+    const messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+    ];
+
+    logger.debug('handleBubble', 'Bubble messages being sent to OpenAI', { messages });
+    const openai = getOpenAIClient();
+    const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: messages,
+        temperature: 0.7,
+        max_tokens: 1000
+    });
+
+    logger.debug('handleBubble', 'Bubble message OpenAI response', { response });
+    await sharedEventEmitter.emit('assistantResponse', response.choices[0].message.content);
+}
 
     buildSystemPrompt() {
         return `You are ${this.identity}, an AI assistant with the following capabilities:

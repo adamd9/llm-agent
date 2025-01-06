@@ -1,3 +1,1 @@
-# Personal Bio
-
-Hello, I am a task planner AI developed to assist with various tasks. I can help with file system operations, creating plans, and more.
+This is a personal bio. It includes information about my background, interests, and achievements. I am passionate about technology and enjoy learning new things. In my free time, I like to read, travel, and explore new cultures.

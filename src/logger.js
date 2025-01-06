@@ -1,5 +1,4 @@
-const WebSocket = require('ws');
-
+const sharedEventEmitter = require('./eventEmitter');
 class Logger {
     constructor() {
         this.wsConnections = new Map();
@@ -9,7 +8,7 @@ class Logger {
         this.wsConnections = connections;
     }
 
-    debug(context, message, data = {}) {
+    async debug(context, message, data = {}, sendToUser = true) {
         // Handle if message is an object
         if (typeof message === 'object') {
             data = message;
@@ -23,47 +22,12 @@ class Logger {
             timestamp: new Date().toISOString()
         };
 
-        // Console output
-        console.log(`[${context}] ${message}`, typeof data === 'object' ? JSON.stringify(data, null, 2) : data);
+        const dataString = typeof data === 'object' ? JSON.stringify(data, null, 2) : data;
+        console.log(`[${context}] ${message}`, dataString);
 
-        // Send to WebSocket clients
-        if (this.wsConnections) {
-            for (const [sessionId, ws] of this.wsConnections.entries()) {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({
-                        type: 'debug',
-                        data: debugInfo
-                    }));
-                }
-            }
+        if (sendToUser) {
+            await sharedEventEmitter.emit('debugResponse', debugInfo);
         }
-    }
-
-    response(message, options = {}) {
-        // Console output for tracking
-        console.log(`[RESPONSE] ${message}`);
-
-        // Send to WebSocket clients
-        if (this.wsConnections) {
-            for (const [sessionId, ws] of this.wsConnections.entries()) {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({
-                        type: 'response',
-                        data: {
-                            response: message,
-                            format: options.format || 'text', // 'text', 'markdown', 'code'
-                            language: options.language, // for code blocks
-                            metadata: options.metadata // any additional formatting metadata
-                        }
-                    }));
-                }
-            }
-        }
-    }
-
-    // Helper method for markdown responses
-    markdown(message, metadata = {}) {
-        this.response(message, { format: 'markdown', metadata });
     }
 
     // Helper method for code blocks
