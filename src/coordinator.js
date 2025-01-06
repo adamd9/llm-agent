@@ -63,6 +63,7 @@ async function executePlan(plan) {
 
     try {
         const tools = await toolManager.loadTools();
+        console.log('CONSOLE Loaded tools:', tools);
         logger.debug('Loaded tools:', tools);
         const toolMap = new Map(tools.map(tool => [tool.name, tool]));
 

@@ -30,7 +30,7 @@ async function evaluator({ originalRequest, executionResult, plan }) {
 
         logger.debug('Evaluation complete', evaluation);
 
-        return evaluation;
+        return JSON.parse(evaluation);
     } catch (error) {
         logger.debug('Evaluation failed', error);
 

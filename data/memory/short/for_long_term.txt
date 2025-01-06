@@ -1,22 +1,13 @@
-[User message][1736143667] hello
-[User message][1736143667] list files
-[Plan execution result][1736143667] {"status":"success","response":"Files listed successfully"}
-[User message][1736143667] hello again
-[User message][1736143667] do something
-[Plan execution result][1736143667] {"status":"success","response":"Task completed"}
-[User message][1736143667] do something
-[Plan execution result][1736143667] {"status":"success","response":"First attempt"}
-[User message][1736143667] hello
-[Plan execution result][1736143667] {"status":"success","response":"Second attempt"}
-[User message][1736143667] do something
-[User message][1736143667] hello
-[User message][1736143667] list files
-[Plan execution result][1736143667] {"status":"success","response":"Files listed successfully"}
-[User message][1736143667] hello again
-[User message][1736143667] do something
-[Plan execution result][1736143667] {"status":"success","response":"Task completed"}
-[User message][1736143667] do something
-[Plan execution result][1736143667] {"status":"success","response":"First attempt"}
-[User message][1736143667] hello
-[Plan execution result][1736143667] {"status":"success","response":"Second attempt"}
-[User message][1736143667] do something
+[User message][1736159433] hello
+[User message][1736159433] list files
+[User message][1736159433] hello again
+[User message][1736159433] do something
+[User message][1736159433] do something
+[User message][1736159433] hello
+[User message][1736159433] do something
+[Tools loaded][1736159433] {"tools":[{"name":"fileSystem","description":"Tool for file operations"}]}
+[Task analysis complete][1736159433] {"analysis":{"requiresTools":true,"explanation":"This task requires file system tools"}}
+[Tools loaded][1736159433] {"tools":[{"name":"fileSystem","description":"Tool for file operations"}]}
+[Task analysis complete][1736159433] {"analysis":{"requiresTools":false,"explanation":"This is a simple conversation"}}
+[Tools loaded][1736159433] {"tools":[{"name":"fileSystem","description":"Tool for file operations"}]}
+[Tools loaded][1736159433] {"tools":[{"name":"fileSystem","description":"Tool for file operations"}]}

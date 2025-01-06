@@ -28,14 +28,14 @@ class Memory {
     const filePath = path.join(shortTermPath, CURRENT_FILE);
     const timestamp = Math.floor(Date.now() / 1000);
     let fileContent = '';
-    
+
     // Check if the file exists
     if (fs.existsSync(filePath)) {
       fileContent = fs.readFileSync(filePath, 'utf-8');
     }
-  
+
     const lines = fileContent.split('\n').filter(line => line.trim() !== '');
-    
+
     // Convert data to string if it's not already
     let dataString;
     if (typeof data === 'string') {
@@ -48,19 +48,19 @@ class Memory {
         return;
       }
     }
-  
+
     const newLines = dataString.split('\n').filter(line => line.trim() !== '');
     const totalLines = lines.length + newLines.length;
-  
+
     if (totalLines > maxLines) {
       const linesToMove = totalLines - maxLines;
       const linesToRetain = lines.slice(linesToMove);
-  
+
       // Move the oldest lines to the long term storage
       const longTermFilePath = path.join(shortTermPath, LONG_TERM_FILE);
       const linesToMoveContent = lines.slice(0, linesToMove).join('\n') + '\n';
       fs.appendFileSync(longTermFilePath, linesToMoveContent);
-  
+
       // Retain only recent lines and add new data
       const updatedContent = linesToRetain.join('\n') + '\n' + newLines.join('\n') + '\n';
       fs.writeFileSync(filePath, `[${context}][${timestamp}] ${updatedContent}`);
@@ -68,17 +68,15 @@ class Memory {
       // Append new data if within limits
       fs.appendFileSync(filePath, `[${context}][${timestamp}] ${dataString}\n`);
     }
-  
+
     logger.debug('Memory', 'Stored short-term memory', { data: dataString }, false);
   }
 
   // Retrieve short term memory
   retrieveShortTerm() {
-    logger.debug('Memory', 'Retrieving short-term memory');
     const filePath = path.join(shortTermPath, CURRENT_FILE);
     if (fs.existsSync(filePath)) {
       const memContent = fs.readFileSync(filePath, 'utf-8');
-      logger.debug('Memory', 'Short-term memory found', { memContent });
       return memContent;
     } else {
       return null;
@@ -87,17 +85,44 @@ class Memory {
 
   // Store long term memory
   async storeLongTerm(data) {
+    logger.debug("Memory", "Storing long term memory", { data });
+    const dataString = typeof data === 'object' ? JSON.stringify(data, null, 2) : data;
     // Use LLM to categorize data into a subject
-    const userPrompt = `Categorize the following data into a one-word description related to these modules: 
-        - ego (conversation style preferences, user preferences)
-        - execution (tool usage)
+    const userPrompt = `Categorize the following data into a one-word description. Unless there is an explicit category, categorize it as one of the following: 
+        - ego (conversation style preferences, user preferences) This is also the dedault category
+        - execution (sklls / tool usage)
         - planning (how to structure plans)
         - evaluation (how to evaluate plans)
-        If it doesn't fit, suggest a unique, single word category: ${data}`;
+        If it doesn't fit, suggest a unique, single word category: ${dataString}`;
 
     try {
       const response = await this.openaiClient.chat.completions.create({
         model: "gpt-4o-mini",
+        response_format: {
+          "type": "json_schema",
+          "json_schema": {
+            "name": "evaluation",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "category": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "A single-word category describing the evaluation."
+                    }
+                  },
+                  "required": ["name"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["category"],
+              "additionalProperties": false
+            },
+            "strict": true
+          }
+        },
         messages: [
           { role: "system", content: "You are a categorization assistant." },
           { role: "user", content: userPrompt },
@@ -106,11 +131,13 @@ class Memory {
         max_tokens: 10,
       });
 
-      const category = response.choices[0].message.content.trim();
-      logger.debug("Memory", "Categorized long term memory", { data, category });
+      // logger.debug("Memory", "Long term memory categorization OpenAI response", response.choices[0].message.content);
+      console.log("XXXX", response.choices[0].message.content);
+      const category = JSON.parse(response.choices[0].message.content).category.name.trim(); 
+      logger.debug("Memory", "Categorized long term memory", { dataString, category });
 
       const filePath = path.join(longTermPath, `${category}.txt`);
-      fs.appendFileSync(filePath, `${data}\n`);
+      fs.appendFileSync(filePath, `${dataString}\n`);
     } catch (error) {
       logger.debug("Memory", "Error categorizing long term memory", {
         error: {
@@ -123,7 +150,7 @@ class Memory {
   }
 
   // Retrieve long term memory by subject
-  async retrieveLongTerm(context, question) {
+  async retrieveLongTerm(context = "ego", question) {
     const subjects = fs.readdirSync(longTermPath).map((file) => path.basename(file, ".txt"));
     const initialPrompt = `Given the following list of subjects: ${subjects.join(
       ", "

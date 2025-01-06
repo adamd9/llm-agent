@@ -65,6 +65,11 @@ This feedback system allows for iterative improvement while maintaining user eng
   - Use sensible defaults where possible
   - Don't assume perfect parameter formatting from the executor
 
+### Conversations Tool
+- A new tool has been added in `src/tools/conversations.js` to handle conversations generically.
+- The tool includes methods for `request`, `response`, `getCapabilities`, and `execute`.
+- The `request` method utilizes the system prompt from `Ego.buildSystemPrompt` and an appropriate user prompt.
+
 ## API Endpoints
 
 The agent uses WebSocket for real-time, bidirectional communication:
@@ -516,6 +521,11 @@ The system provides comprehensive error handling at multiple levels:
 #### Reset Memory Functionality
 
 The `resetMemory` function allows the user to reset the current memory by transferring all contents from `current.txt` to `for_long_term.txt`. After the transfer, `current.txt` will be cleared to start fresh. This function is essential for managing long-term memory and ensuring that the current memory reflects only the most relevant information.
+
+## Updates
+
+- Removed extraneous properties from the `response_format` in `memory.js`, retaining only the `category` property for a more streamlined response schema.
+- **Corrected the category assignment in `memory.js` to correctly extract the `name` from the `category` object in the response format.**
 
 ## Shared Event System
 

@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const logger = require('../logger');
 
 class ToolManager {
     constructor() {
@@ -31,6 +32,7 @@ class ToolManager {
         try {
             console.log(`Loading tools from ${directory}`);
             const files = await fs.readdir(directory);
+            logger.debug('tools', 'Files in tools directory:', files);
             
             for (const file of files) {
                 if (file === 'index.js') continue; // Skip this file
@@ -59,34 +61,98 @@ class ToolManager {
     }
 
     isValidTool(tool) {
-        // Basic tool properties
-        if (!tool || typeof tool !== 'object') return false;
-        if (!tool.name || typeof tool.name !== 'string') return false;
-        if (!tool.description || typeof tool.description !== 'string') return false;
-        if (!tool.execute || typeof tool.execute !== 'function') return false;
+        console.log('Validating tool:', tool);
 
-        // Actions must be defined
-        if (!tool.getCapabilities || typeof tool.getCapabilities !== 'function') return false;
-        
+        if (!tool || typeof tool !== 'object') {
+            console.error('Validation failed: Tool is not an object.');
+            return false;
+        }
+        console.log('Tool is a valid object.');
+
+        if (!tool.name || typeof tool.name !== 'string') {
+            console.error('Validation failed: Tool name is missing or not a string.');
+            return false;
+        }
+        console.log('Tool name is valid.');
+
+        if (!tool.description || typeof tool.description !== 'string') {
+            console.error('Validation failed: Tool description is missing or not a string.');
+            return false;
+        }
+        console.log('Tool description is valid.');
+
+        if (!tool.execute || typeof tool.execute !== 'function') {
+            console.error('Validation failed: Tool execute function is missing or not a function.');
+            return false;
+        }
+        console.log('Tool execute function is valid.');
+
+        if (!tool.getCapabilities || typeof tool.getCapabilities !== 'function') {
+            console.error('Validation failed: Tool getCapabilities function is missing or not a function.');
+            return false;
+        }
+        console.log('Tool getCapabilities function is valid.');
+
         const capabilities = tool.getCapabilities();
-        if (!capabilities || !Array.isArray(capabilities.actions)) return false;
+        if (!capabilities || !Array.isArray(capabilities.actions)) {
+            console.error('Validation failed: Capabilities are missing or actions are not an array.');
+            return false;
+        }
+        console.log('Capabilities are valid.');
 
-        // Validate each action
         for (const action of capabilities.actions) {
-            if (!action.name || typeof action.name !== 'string') return false;
-            if (!action.description || typeof action.description !== 'string') return false;
-            if (!Array.isArray(action.parameters)) return false;
-            
-            // Validate parameters
+            if (!action.name || typeof action.name !== 'string') {
+                console.error('Validation failed: Action name is missing or not a string.');
+                return false;
+            }
+            console.log('Action name is valid.');
+
+            if (!action.description || typeof action.description !== 'string') {
+                console.error('Validation failed: Action description is missing or not a string.');
+                return false;
+            }
+            console.log('Action description is valid.');
+
+            if (!Array.isArray(action.parameters)) {
+                console.error('Validation failed: Action parameters are not an array.');
+                return false;
+            }
+            console.log('Action parameters are valid.');
+
             for (const param of action.parameters) {
-                if (!param.name || typeof param.name !== 'string') return false;
-                if (!param.description || typeof param.description !== 'string') return false;
-                if (!param.type || typeof param.type !== 'string') return false;
-                if (!['string', 'number', 'boolean', 'object', 'array'].includes(param.type)) return false;
-                if (param.required === undefined) return false;
+                if (!param.name || typeof param.name !== 'string') {
+                    console.error('Validation failed: Parameter name is missing or not a string.');
+                    return false;
+                }
+                console.log('Parameter name is valid.');
+
+                if (!param.description || typeof param.description !== 'string') {
+                    console.error('Validation failed: Parameter description is missing or not a string.');
+                    return false;
+                }
+                console.log('Parameter description is valid.');
+
+                if (!param.type || typeof param.type !== 'string') {
+                    console.error('Validation failed: Parameter type is missing or not a string.');
+                    return false;
+                }
+                console.log('Parameter type is valid.');
+
+                if (!['string', 'number', 'boolean', 'object', 'array'].includes(param.type)) {
+                    console.error('Validation failed: Parameter type is not valid.');
+                    return false;
+                }
+                console.log('Parameter type is valid.');
+
+                if (param.required === undefined) {
+                    console.error('Validation failed: Parameter required is missing.');
+                    return false;
+                }
+                console.log('Parameter required is valid.');
             }
         }
 
+        console.log('All validations passed.');
         return true;
     }
 

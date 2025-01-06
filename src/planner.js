@@ -29,13 +29,14 @@ ${tools.map(t => `- ${t.name}: ${t.description}`).join('\n')}
 Analyze if the user's request requires any of these tools to complete.
 Return ONLY a JSON object (do not include any other text outside of the JSON object) with:
 - requiresTools: boolean indicating if tools are needed
+- areRequiredToolsAvailable: boolean indicating if tools are available
 - explanation: brief explanation of why tools are or aren't needed`;
 
         const taskAnalysisPrompts = [
             { role: 'system', content: taskAnalysisPrompt },
             { role: 'user', content: `Request: "${enrichedMessage.original_message}"\nDoes this request require tools?
             For additional context, here is recent history of conversations and actions (oldest first):
-            ${enrichedMessage.short_term_memory}
+            ${enrichedMessage.short_term_memory || 'No history found.'}
             ` }
         ];
 
@@ -86,6 +87,16 @@ Return ONLY a JSON object (do not include any other text outside of the JSON obj
 
         logger.debug('analysis', 'Task analysis complete', { analysis });
         await memory.storeShortTerm('Task analysis complete', { analysis });
+
+        //if tools are required, but aren't available, return and explain including what tools may be required that aren't available
+        if (analysis.requiresTools && !analysis.areRequiredToolsAvailable) {
+            return {
+                status: 'success',
+                requiresTools: true,
+                areRequiredToolsAvailable: false,
+                explanation: analysis.explanation
+            };
+        }
         // If tools aren't required, return early
         if (!analysis.requiresTools) {
             logger.debug('no-tools', 'Task does not require tools', { analysis });
@@ -114,7 +125,7 @@ Create a plan containing ALL steps to handle the user's request. The plan should
 3. Return as a JSON array of ALL planned steps (only return JSON, do not include any other text outside of the JSON array), where each step has:
    - tool: name of the tool to use
    - action: name of the action to take
-   - parameters: object with required parameters
+   - parameters: object with required parameters (even if only a single parameter, it should still be a sub-key of parameters object)
    - description: human readable description of the step
 
    Your response MUST:

@@ -21,7 +21,7 @@ const wsConnections = new Map();
 logger.setWSConnections(wsConnections);
 
 // Initialize ego instance
-const ego = new Ego("r2o1", ["conversation", "file-system"]);
+const ego = new Ego(["conversation", "file-system"]);
 
 async function startServer() {
   await ego.initialize();
