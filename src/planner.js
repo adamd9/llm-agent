@@ -2,18 +2,22 @@ const { getOpenAIClient } = require('./openaiClient.js');
 require('dotenv').config();
 const toolManager = require('./tools');
 const logger = require('./logger');
-
+const memory = require('./memory');
 async function planner(enrichedMessage, client = null) {
     try {
         logger.debug('start', 'Planning for message:', enrichedMessage);
         logger.debug('start', 'Starting planning process', {
-            message: enrichedMessage.original_message
+            message: enrichedMessage.original_message,
+            short_term_memory: enrichedMessage.short_term_memory
         });
 
         // Load available tools
         const tools = await toolManager.loadTools();
         logger.debug('tools', 'Loaded tools:', tools.map(t => t.name));
         logger.debug('tools', 'Available tools loaded', {
+            tools: tools.map(t => ({ name: t.name, description: t.description }))
+        });
+        await memory.storeShortTerm('Tools loaded', {
             tools: tools.map(t => ({ name: t.name, description: t.description }))
         });
 
@@ -29,7 +33,10 @@ Return ONLY a JSON object (do not include any other text outside of the JSON obj
 
         const taskAnalysisPrompts = [
             { role: 'system', content: taskAnalysisPrompt },
-            { role: 'user', content: `Request: "${enrichedMessage.original_message}"\nDoes this request require tools?` }
+            { role: 'user', content: `Request: "${enrichedMessage.original_message}"\nDoes this request require tools?
+            For additional context, here is recent history of conversations and actions (oldest first):
+            ${enrichedMessage.short_term_memory}
+            ` }
         ];
 
         logger.debug('prompt', 'Generated task analysis prompts', taskAnalysisPrompts);
@@ -78,7 +85,7 @@ Return ONLY a JSON object (do not include any other text outside of the JSON obj
         });
 
         logger.debug('analysis', 'Task analysis complete', { analysis });
-
+        await memory.storeShortTerm('Task analysis complete', { analysis });
         // If tools aren't required, return early
         if (!analysis.requiresTools) {
             logger.debug('no-tools', 'Task does not require tools', { analysis });

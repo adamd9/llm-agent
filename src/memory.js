@@ -9,6 +9,10 @@ const shortTermPath = path.join(baseMemoryPath, "short");
 const longTermPath = path.join(baseMemoryPath, "long");
 const maxLines = 200; // Adjust this as necessary
 
+// Define constants for file names
+const CURRENT_FILE = 'current.txt';
+const LONG_TERM_FILE = 'for_long_term.txt';
+
 // Ensure all memory directories exist
 if (!fs.existsSync(baseMemoryPath)) fs.mkdirSync(baseMemoryPath);
 if (!fs.existsSync(shortTermPath)) fs.mkdirSync(shortTermPath);
@@ -21,7 +25,7 @@ class Memory {
 
   // Store short term memory
   async storeShortTerm(context, data) {
-    const filePath = path.join(shortTermPath, `current.txt`);
+    const filePath = path.join(shortTermPath, CURRENT_FILE);
     const timestamp = Math.floor(Date.now() / 1000);
     let fileContent = '';
     
@@ -53,7 +57,7 @@ class Memory {
       const linesToRetain = lines.slice(linesToMove);
   
       // Move the oldest lines to the long term storage
-      const longTermFilePath = path.join(shortTermPath, `for_long_term.txt`);
+      const longTermFilePath = path.join(shortTermPath, LONG_TERM_FILE);
       const linesToMoveContent = lines.slice(0, linesToMove).join('\n') + '\n';
       fs.appendFileSync(longTermFilePath, linesToMoveContent);
   
@@ -70,9 +74,12 @@ class Memory {
 
   // Retrieve short term memory
   retrieveShortTerm() {
-    const filePath = path.join(shortTermPath, `current.txt`);
+    logger.debug('Memory', 'Retrieving short-term memory');
+    const filePath = path.join(shortTermPath, CURRENT_FILE);
     if (fs.existsSync(filePath)) {
-      return fs.readFileSync(filePath, "utf-8");
+      const memContent = fs.readFileSync(filePath, 'utf-8');
+      logger.debug('Memory', 'Short-term memory found', { memContent });
+      return memContent;
     } else {
       return null;
     }
@@ -185,6 +192,23 @@ class Memory {
         },
       });
       throw error;
+    }
+  }
+
+  // Function to reset memory by moving contents from CURRENT_FILE to LONG_TERM_FILE
+  async resetMemory() {
+    const fs = require('fs').promises;
+
+    try {
+      // Read contents of CURRENT_FILE
+      const currentData = await fs.readFile(path.join(shortTermPath, CURRENT_FILE), 'utf8');
+      // Write contents to LONG_TERM_FILE
+      await fs.writeFile(path.join(shortTermPath, LONG_TERM_FILE), currentData);
+      // Clear CURRENT_FILE
+      await fs.writeFile(path.join(shortTermPath, CURRENT_FILE), '');
+      logger.debug('Memory', 'Memory reset successfully.');
+    } catch (error) {
+      logger.error('Memory', 'Error resetting memory:', { error: error.message });
     }
   }
 }

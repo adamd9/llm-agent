@@ -73,7 +73,6 @@ class Ego {
             await this.initialize();
             logger.debug('process', 'Processing message', {
                 message,
-                sessionHistory,
                 sessionHistoryLength: sessionHistory.length
             });
 
@@ -83,11 +82,13 @@ class Ego {
 
             await memory.storeShortTerm('User message', message);
 
+            const shortTermMemory = await memory.retrieveShortTerm();
             const enrichedMessage = {
                 original_message: message,
                 context: {
                     identity: this.identity,
-                    capabilities: this.capabilities
+                    capabilities: this.capabilities,
+                    short_term_memory: shortTermMemory
                 }
             };
 
@@ -308,7 +309,7 @@ async handleBubble(input) {
         throw new Error('Input must be a string or an object');
     }
 
-    logger.debug('handleBubble', 'Processing bubble', { message });
+    logger.debug('handleBubble', 'Processing bubble', { message }, false);
 
     // Count the number of words in the message
     const wordCount = message.split(/\s+/).filter(word => word.length > 0).length;
@@ -330,7 +331,7 @@ async handleBubble(input) {
         { role: 'user', content: userPrompt }
     ];
 
-    logger.debug('handleBubble', 'Bubble messages being sent to OpenAI', { messages });
+    logger.debug('handleBubble', 'Bubble messages being sent to OpenAI', { messages }, false);
     const openai = getOpenAIClient();
     const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -339,8 +340,10 @@ async handleBubble(input) {
         max_tokens: 1000
     });
 
-    logger.debug('handleBubble', 'Bubble message OpenAI response', { response });
-    await sharedEventEmitter.emit('assistantResponse', response.choices[0].message.content);
+    logger.debug('handleBubble', 'Bubble message OpenAI response', { response }, false);
+    const assistantMessage = response.choices[0].message.content;
+    await memory.storeShortTerm('Assistant response', assistantMessage);
+    await sharedEventEmitter.emit('assistantResponse', assistantMessage);
 }
 
     buildSystemPrompt() {

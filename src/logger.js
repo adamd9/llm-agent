@@ -25,7 +25,7 @@ class Logger {
         const dataString = typeof data === 'object' ? JSON.stringify(data, null, 2) : data;
         console.log(`[${context}] ${message}`, dataString);
 
-        if (sendToUser) {
+        if (sendToUser !==false) {
             await sharedEventEmitter.emit('debugResponse', debugInfo);
         }
     }

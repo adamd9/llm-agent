@@ -42,8 +42,7 @@ async function startServer() {
 
     while (messageQueue.length > 0) {
       const { type, data } = messageQueue.shift();
-      ws.send(JSON.stringify({ type, data }));
-      await memory.storeShortTerm('Assistant response', data);
+      ws.send(JSON.stringify({ type, data }));      
     }
     isSending = false;
   }
@@ -52,7 +51,7 @@ async function startServer() {
   wss.on("connection", (ws) => {
     let sessionId = uuidv4();
     wsConnections.set(sessionId, ws);
-
+    memory.resetMemory();
     logger.debug("websocket", "New WebSocket connection", { sessionId });
 
     // Send session ID to client
@@ -96,6 +95,7 @@ async function startServer() {
     });
 
     sharedEventEmitter.on("assistantResponse", (data) => {
+      // logger.debug('assistantResponseEmitted','Emitting assistant response', data, false);
       messageQueue.push({ type: "response", data: { response: data } });
       processQueue(ws);
 

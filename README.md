@@ -511,6 +511,12 @@ The system provides comprehensive error handling at multiple levels:
 - Session history is maintained for context
 - History can be retrieved via API
 
+## Memory Management
+
+#### Reset Memory Functionality
+
+The `resetMemory` function allows the user to reset the current memory by transferring all contents from `current.txt` to `for_long_term.txt`. After the transfer, `current.txt` will be cleared to start fresh. This function is essential for managing long-term memory and ensuring that the current memory reflects only the most relevant information.
+
 ## Shared Event System
 
 A shared event system has been implemented using Node.js's built-in `events` module. This allows various modules to emit and listen for events.
