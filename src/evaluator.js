@@ -1,6 +1,6 @@
-const { getOpenAIClient } = require('./openaiClient');
-const logger = require('./logger');
-const sharedEventEmitter = require('./eventEmitter');
+const { getOpenAIClient } = require('./utils/openaiClient');
+const logger = require('./utils/logger');
+const sharedEventEmitter = require('./utils/eventEmitter');
 const { response } = require('express');
 
 /**
@@ -58,9 +58,13 @@ Execution Result:
 ${JSON.stringify(executionResult.response)}
 
 Please evaluate:
-1. How well does the execution result match the original request's intent? (Score 0-100)
+1. How well does the execution result fulfill the users request? (Score 0-100)
 2. What specific aspects matched or didn't match the request?
-3. What recommendations would improve the result?
+3. What recommendations would improve the result? 
+
+Assume that the agent executing the task SHOULD be able to fulfill most requests but may lack the ability to do so currently. 
+If the issue is that the agent doesn't have the capability to do something, then recommend it to the agent to learn or acquire the capability.
+If the issue is that the user didn't provide enough information or context, then recommend the user to provide more information or context.
 
 Format your response as JSON:
 {

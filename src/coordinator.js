@@ -1,6 +1,6 @@
 const toolManager = require('./tools');
-const logger = require('./logger');
-const sharedEventEmitter = require('./eventEmitter');
+const logger = require('./utils/logger');
+const sharedEventEmitter = require('./utils/eventEmitter');
 
 async function coordinator(enrichedMessage) {
     try {

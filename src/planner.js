@@ -1,8 +1,10 @@
-const { getOpenAIClient } = require('./openaiClient.js');
+const { getOpenAIClient } = require('./utils/openaiClient.js');
 require('dotenv').config();
 const toolManager = require('./tools');
-const logger = require('./logger');
+const logger = require('./utils/logger.js');
 const memory = require('./memory');
+
+const openai = getOpenAIClient();
 async function planner(enrichedMessage, client = null) {
     try {
         logger.debug('start', 'Planning for message:', enrichedMessage);
@@ -21,93 +23,7 @@ async function planner(enrichedMessage, client = null) {
             tools: tools.map(t => ({ name: t.name, description: t.description }))
         });
 
-        // First, determine if this message requires tools
-        const taskAnalysisPrompt = `You are a task analyzer that determines if a user request requires tools to complete.
-Available tools:
-${tools.map(t => `- ${t.name}: ${t.description}`).join('\n')}
-
-Analyze if the user's request requires any of these tools to complete.
-Return ONLY a JSON object (do not include any other text outside of the JSON object) with:
-- requiresTools: boolean indicating if tools are needed
-- areRequiredToolsAvailable: boolean indicating if tools are available
-- explanation: brief explanation of why tools are or aren't needed`;
-
-        const taskAnalysisPrompts = [
-            { role: 'system', content: taskAnalysisPrompt },
-            { role: 'user', content: `Request: "${enrichedMessage.original_message}"\nDoes this request require tools?
-            For additional context, here is recent history of conversations and actions (oldest first):
-            ${enrichedMessage.short_term_memory || 'No history found.'}
-            ` }
-        ];
-
-        logger.debug('prompt', 'Generated task analysis prompts', taskAnalysisPrompts);
-
-        const openai = client || getOpenAIClient();
-        const analysisResponse = await openai.chat.completions.create({
-            model: 'gpt-4o',
-            "response_format": {
-                "type": "json_object"
-            },
-            messages: taskAnalysisPrompts,
-            temperature: 0.1,
-            max_tokens: 200,
-        });
-
-        logger.debug('response', 'Received OpenAI response', {
-            response: analysisResponse
-        });
-
-        let analysis;
-        try {
-            analysis = JSON.parse(analysisResponse.choices[0].message.content);
-            logger.debug('parsed', 'Successfully parsed content', {
-                analysis
-            });
-        } catch (parseError) {
-            logger.debug('error', 'Failed to parse task analysis JSON', {
-                content: analysisResponse.choices[0].message.content,
-                error: parseError.message
-            });
-            throw new Error('Invalid task analysis format');
-        }
-
-        // Validate analysis object structure
-        if (!analysis || typeof analysis.requiresTools !== 'boolean' || typeof analysis.explanation !== 'string') {
-            logger.debug('error', 'Invalid task analysis structure', {
-                analysis,
-                requiresToolsType: typeof analysis?.requiresTools,
-                explanationType: typeof analysis?.explanation
-            });
-            throw new Error('Invalid task analysis format');
-        }
-
-        logger.debug('validated', 'Task analysis validation passed', {
-            analysis
-        });
-
-        logger.debug('analysis', 'Task analysis complete', { analysis });
-        await memory.storeShortTerm('Task analysis complete', { analysis });
-
-        //if tools are required, but aren't available, return and explain including what tools may be required that aren't available
-        if (analysis.requiresTools && !analysis.areRequiredToolsAvailable) {
-            return {
-                status: 'success',
-                requiresTools: true,
-                areRequiredToolsAvailable: false,
-                explanation: analysis.explanation
-            };
-        }
-        // If tools aren't required, return early
-        if (!analysis.requiresTools) {
-            logger.debug('no-tools', 'Task does not require tools', { analysis });
-            return {
-                status: 'success',
-                requiresTools: false,
-                explanation: analysis.explanation
-            };
-        }
-
-        // If tools are required, create a plan
+        // Create a plan
         const planningPrompt = `You are a task planner that creates plans using available tools.
 Available tools and their actions:
 ${tools.map(tool => {
@@ -158,7 +74,18 @@ Create a plan containing ALL steps to handle the user's request. The plan should
                           "properties": {
                             "tool": { "type": "string" },
                             "action": { "type": "string" }, 
-                            "parameters": { "type": "string" },
+                            "parameters": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": { "type": "string" },
+                                  "value": { "type": "string" }
+                                },
+                                "required": ["name", "value"],
+                                "additionalProperties": false
+                              }
+                            },
                             "description": { "type": "string" },
                           },
                           "required": ["tool", "action", "parameters", "description"],
@@ -219,7 +146,6 @@ Create a plan containing ALL steps to handle the user's request. The plan should
         return {
             status: 'success',
             requiresTools: true,
-            explanation: analysis.explanation,
             plan: JSON.stringify(plan)
         };
 

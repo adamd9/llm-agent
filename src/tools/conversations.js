@@ -1,4 +1,4 @@
-const logger = require('../logger');
+const logger = require('../utils/logger.js');
 const memory = require('../memory');
 const { getOpenAIClient } = require("../openaiClient.js");
 const personalityManager = require('../personalities');

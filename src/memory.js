@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
-const { getOpenAIClient } = require("./openaiClient.js");
-const logger = require("./logger");
+const { getOpenAIClient } = require("./utils/openaiClient.js");
+const logger = require("./utils/logger.js");
 
 // Define the path for storing memory files
 const baseMemoryPath = path.resolve(__dirname, "../data/memory");
