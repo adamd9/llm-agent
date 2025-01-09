@@ -1,6 +1,6 @@
 const logger = require('../utils/logger.js');
 const memory = require('../memory');
-const { getOpenAIClient } = require("../openaiClient.js");
+const { getOpenAIClient } = require("../utils/openaiClient.js");
 const personalityManager = require('../personalities');
 
 // New ConversationTool class for handling conversations generically
@@ -31,15 +31,19 @@ class ConversationTool {
         };
     }
 
-    async sendMessage(input) {
+    async sendMessage(parameters) {
+        const messageParam = parameters.find(param => param.name === 'message');
+        if (!messageParam) {
+            throw new Error('Missing required parameter: message');
+        }
 
-        logger.debug('Sending message:', input);
+        logger.debug('ConversationsTool', 'Sending question:', messageParam.value);
         let message;
         // Logic to handle sending a message
-        if (typeof input === 'string') {
-            message = input;
-        } else if (typeof input === 'object') {
-            message = JSON.stringify(input);
+        if (typeof messageParam.value === 'string') {
+            message = messageParam.value;
+        } else if (typeof messageParam.value === 'object') {
+            message = JSON.stringify(messageParam.value);
         } else {
             throw new Error('Input must be a string or an object');
         }
@@ -49,11 +53,9 @@ class ConversationTool {
 
         let userPrompt = `
         ${message}
-        
         Use the following memory:
         Short term memory (from this conversation):
         ${JSON.stringify(shortTermMemory)}
-        
         Long term relevant memory:
         ${JSON.stringify(longTermRelevantMemory)}
         `;
@@ -65,7 +67,7 @@ class ConversationTool {
             { role: 'user', content: userPrompt }
         ];
 
-        logger.debug('converationTool', 'converationTool messages being sent to OpenAI', { messages }, false);
+        logger.debug('conversationTool', 'conversationTool messages being sent to OpenAI', { messages }, false);
         const openai = getOpenAIClient();
         const response = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
@@ -74,13 +76,13 @@ class ConversationTool {
             max_tokens: 1000
         });
 
-        logger.debug('converationTool', 'converationTool message OpenAI response', { response }, false);
+        logger.debug('conversationTool', 'conversationTool message OpenAI response', { response }, false);
         const receivedMessage = response.choices[0].message.content;
-        return { status: 'success', message: `Message received: ${receivedMessage}` };
+        return { status: 'success', message: `Response: ${receivedMessage}` };
     }
 
     async execute(action, parameters) {
-        logger.debug('ConversationTool executing:', JSON.stringify({ action, parameters }));
+        logger.debug('conversationTool executing:', JSON.stringify({ action, parameters }));
         try {
             // Parse parameters if they're passed as a string
             let parsedParams = parameters;
@@ -88,7 +90,7 @@ class ConversationTool {
                 try {
                     parsedParams = JSON.parse(parameters);
                 } catch (parseError) {
-                    logger.debug('Parameter parsing error:', {
+                    logger.debug('conversationTool', 'Parameter parsing error:', {
                         error: parseError.message,
                         parameters
                     });
@@ -99,11 +101,12 @@ class ConversationTool {
                     };
                 }
             }
+
             switch (action) {
                 case 'sendMessage':
-                    return await this.sendMessage(parsedParams.message);
+                    return await this.sendMessage(parsedParams);
                 default:
-                    throw new Error(`Action '${action}' is not recognized.`);
+                    throw new Error(`Unknown action: ${action}`);
             }
         } catch (error) {
             console.error('ConversationTool error:', {
@@ -123,17 +126,15 @@ class ConversationTool {
     }
 
     async buildSystemPrompt() {
-
-
         // Load personalities
         await personalityManager.loadPersonalities();
         const defaultPersonality = personalityManager.getDefaultPersonality();
 
         this.personality = defaultPersonality;
-        logger.debug('ConversationTool', 'name is', { identity: this.identity });
+        logger.debug('conversationTool', 'name is', { identity: this.identity });
         if (!this.identity) {
             this.identity = this.personality.name;
-            logger.debug('ConversationTool', 'Identity not set, using personality name', {
+            logger.debug('conversationTool', 'Identity not set, using personality name', {
                 identity: this.identity
             });
         }

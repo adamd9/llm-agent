@@ -19,9 +19,6 @@ async function planner(enrichedMessage, client = null) {
         logger.debug('tools', 'Available tools loaded', {
             tools: tools.map(t => ({ name: t.name, description: t.description }))
         });
-        await memory.storeShortTerm('Tools loaded', {
-            tools: tools.map(t => ({ name: t.name, description: t.description }))
-        });
 
         // Create a plan
         const planningPrompt = `You are a task planner that creates plans using available tools.

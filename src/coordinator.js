@@ -1,7 +1,7 @@
 const toolManager = require('./tools');
 const logger = require('./utils/logger');
 const sharedEventEmitter = require('./utils/eventEmitter');
-
+const memory = require('./memory');
 async function coordinator(enrichedMessage) {
     try {
         logger.debug('Starting coordination', enrichedMessage.original_message);
@@ -56,10 +56,13 @@ async function coordinator(enrichedMessage) {
     }
 }
 
-async function executePlan(plan) {
-    let results = [];
+async function executePlan(plan, isReplan = false, existingResults = [], startStep = 0) {
+    let results = [...existingResults];
     let hasErrors = false;
     let step;
+
+    memory.storeShortTerm('LatestPan', JSON.stringify(plan), 'coordinator', true);
+    memory.storeShortTerm('LatestPan', JSON.stringify(plan), 'ego', false);
 
     try {
         const tools = await toolManager.loadTools();
@@ -89,8 +92,9 @@ async function executePlan(plan) {
             }
 
             try {
-                const result = await tool.execute(step.action, step.parameters);
+                const result = await tool.execute(step.action, step.parameters, plan);
                 logger.debug('Tool execution result:', result);
+                memory.storeShortTerm('toolExecutionResult for' + step.action, JSON.stringify(result), 'ego', false);
                 await sharedEventEmitter.emit('bubble', { message: `Completed: ${step.action}` });
                 if (result.status === 'error') {
                     logger.debug('Tool execution error:', result);
@@ -105,6 +109,17 @@ async function executePlan(plan) {
                             toolResponse: result
                         }
                     };
+                }
+
+                if (result.status === 'replan') {
+                    logger.debug('Tool execution replan:', result);
+                    // return {
+                    //     status: 'replan',
+                    //     message: result.message,
+                    //     updatedPlan: result.updatedPlan,
+                    //     nextStepIndex: result.nextStep
+                    // };
+                    await executePlan(result.updatedPlan, true, results, result.nextStepIndex);
                 }
 
                 // Handle the mock tool response format from tests

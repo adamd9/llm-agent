@@ -71,27 +71,38 @@ class FileSystemTool {
 
             switch (action) {
                 case 'read':
-                    if (!parsedParams.path) {
+                    const readPathParam = parsedParams.find(param => param.name === 'path');
+                    if (!readPathParam) {
                         throw new Error('Missing required parameter: path');
                     }
-                    return await this.readFile(parsedParams.path);
+                    return await this.readFile(readPathParam.value);
+
                 case 'write':
-                    if (!parsedParams.path || !parsedParams.content) {
+                    const writePathParam = parsedParams.find(param => param.name === 'path');
+                    const writeContentParam = parsedParams.find(param => param.name === 'content');
+                    if (!writePathParam || !writeContentParam) {
                         throw new Error('Missing required parameters for write: path and content');
                     }
-                    return await this.writeFile(parsedParams.path, parsedParams.content);
+                    return await this.writeFile(writePathParam.value, writeContentParam.value);
+
                 case 'delete':
-                    if (!parsedParams.path) {
+                    const deletePathParam = parsedParams.find(param => param.name === 'path');
+                    if (!deletePathParam) {
                         throw new Error('Missing required parameter: path');
                     }
-                    return await this.deleteFile(parsedParams.path);
+                    return await this.deleteFile(deletePathParam.value);
+
                 case 'list':
-                    return await this.listFiles(parsedParams.path || '.');
+                    const listPathParam = parsedParams.find(param => param.name === 'path');
+                    return await this.listFiles(listPathParam ? listPathParam.value : '.');
+
                 case 'exists':
-                    if (!parsedParams.path) {
+                    const existsPathParam = parsedParams.find(param => param.name === 'path');
+                    if (!existsPathParam) {
                         throw new Error('Missing required parameter: path');
                     }
-                    return await this.fileExists(parsedParams.path);
+                    return await this.fileExists(existsPathParam.value);
+
                 default:
                     throw new Error(`Unknown action: ${action}`);
             }

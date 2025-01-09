@@ -10,9 +10,8 @@ const longTermPath = path.join(baseMemoryPath, "long");
 const maxLines = 200; // Adjust this as necessary
 
 // Define constants for file names
-const CURRENT_FILE = 'current.txt';
 const LONG_TERM_FILE = 'for_long_term.txt';
-
+const CURRENT_FILE = 'current.txt';
 // Ensure all memory directories exist
 if (!fs.existsSync(baseMemoryPath)) fs.mkdirSync(baseMemoryPath);
 if (!fs.existsSync(shortTermPath)) fs.mkdirSync(shortTermPath);
@@ -24,8 +23,9 @@ class Memory {
   }
 
   // Store short term memory
-  async storeShortTerm(context, data) {
-    const filePath = path.join(shortTermPath, CURRENT_FILE);
+  async storeShortTerm(context, data, memStore = 'ego', overwrite = false) {
+    logger.debug('Memory', 'Storing short-term memory', { context, data, memStore });
+    const filePath = path.join(shortTermPath, `${memStore}_${CURRENT_FILE}`);
     const timestamp = Math.floor(Date.now() / 1000);
     let fileContent = '';
 
@@ -52,12 +52,15 @@ class Memory {
     const newLines = dataString.split('\n').filter(line => line.trim() !== '');
     const totalLines = lines.length + newLines.length;
 
-    if (totalLines > maxLines) {
+    if (overwrite) {
+      fs.writeFileSync(filePath, `[${context}][${timestamp}] ${dataString}\n`);
+      return;
+    } else if (totalLines > maxLines) {
       const linesToMove = totalLines - maxLines;
       const linesToRetain = lines.slice(linesToMove);
 
       // Move the oldest lines to the long term storage
-      const longTermFilePath = path.join(shortTermPath, LONG_TERM_FILE);
+      const longTermFilePath = path.join(shortTermPath, memStore + '_' + LONG_TERM_FILE);
       const linesToMoveContent = lines.slice(0, linesToMove).join('\n') + '\n';
       fs.appendFileSync(longTermFilePath, linesToMoveContent);
 
@@ -73,8 +76,8 @@ class Memory {
   }
 
   // Retrieve short term memory
-  retrieveShortTerm() {
-    const filePath = path.join(shortTermPath, CURRENT_FILE);
+  retrieveShortTerm(memStore = 'ego') {
+    const filePath = path.join(shortTermPath, `${memStore}_${CURRENT_FILE}`);
     if (fs.existsSync(filePath)) {
       const memContent = fs.readFileSync(filePath, 'utf-8');
       return memContent;
@@ -131,13 +134,16 @@ class Memory {
         max_tokens: 10,
       });
 
-      // logger.debug("Memory", "Long term memory categorization OpenAI response", response.choices[0].message.content);
-      console.log("XXXX", response.choices[0].message.content);
-      const category = JSON.parse(response.choices[0].message.content).category.name.trim(); 
+      const category = JSON.parse(response.choices[0].message.content).category.name.trim();
       logger.debug("Memory", "Categorized long term memory", { dataString, category });
 
       const filePath = path.join(longTermPath, `${category}.txt`);
       fs.appendFileSync(filePath, `${dataString}\n`);
+      return {
+        status: "success",
+        data: dataString,
+        category: category
+      }
     } catch (error) {
       logger.debug("Memory", "Error categorizing long term memory", {
         error: {
@@ -151,16 +157,50 @@ class Memory {
 
   // Retrieve long term memory by subject
   async retrieveLongTerm(context = "ego", question) {
+    if (context == null) {
+      context = "ego";
+    }
+    logger.debug("Memory", "Retrieving long term memory for question", { context, question });
     const subjects = fs.readdirSync(longTermPath).map((file) => path.basename(file, ".txt"));
     const initialPrompt = `Given the following list of subjects: ${subjects.join(
       ", "
     )}, determine which subjects contain information relevant to the question or query about "${context}".
+
+    Not matter what, always include ${context} as a category.
     The question or query is: "${question}"`;
 
     try {
       // First LLM call to determine relevant subjects to check
       let completion = await this.openaiClient.chat.completions.create({
         model: "gpt-4o-mini",
+        response_format: {
+          "type": "json_schema",
+          "json_schema": {
+            "name": "evaluation",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "categories": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "A single-word category describing the evaluation."
+                      }
+                    },
+                    "required": ["name"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": ["categories"],
+              "additionalProperties": false
+            },
+            "strict": true
+          }
+        },
         messages: [
           {
             role: "system",
@@ -173,13 +213,18 @@ class Memory {
         max_tokens: 100,
       });
 
-      // Retrieve relevant subjects from LLM response
-      const relevantSubjects = completion.choices[0].message.content.split(",").map((subject) => subject.trim());
+      logger.debug(
+        "Memory",
+        "Initial long-term memory retrieval OpenAI response",
+        completion.choices[0].message.content
+      );
 
+      // Retrieve relevant subjects from LLM response
+      const relevantSubjects = JSON.parse(completion.choices[0].message.content).categories;
       // Read content from relevant files
       let consolidatedContent = "";
       for (const subject of relevantSubjects) {
-        const filePath = path.join(longTermPath, `${subject}.txt`);
+        const filePath = path.join(longTermPath, `${subject.name}.txt`);
         if (fs.existsSync(filePath)) {
           consolidatedContent += fs.readFileSync(filePath, "utf-8") + "\n";
         }
@@ -194,14 +239,17 @@ class Memory {
       logger.debug("Memory", "Consolidated long-term memory for question", { context, consolidatedContent });
 
       // Second LLM call to extract answer based on consolidated content
-      const finalPrompt = `Using the following context retrieved from your long term memory banks based on subject matter, answer the question or return subject matter relevant to the provided query: "${question}".\n\nContext:\n${consolidatedContent}`;
+      const finalPrompt = `Using the following content retrieved from your long term memory banks, return any data relevant to the question or query.
+      The ordering of content is important. Do not change the order of the content.
+      If later lines appear to supercede earlier lines, make a note in brackets to indicate this, but otherwise return the content in the order it was provided to you.
+      The question or query is: "${question}".\n\nTotal potential content:\n${consolidatedContent}`;
       completion = await this.openaiClient.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
             content:
-              "You are an advanced information retrieval assistant, operating within an artificial long-term memory framework. Your task is to synthesize and summarize context-specific information accurately to provide insightful and relevant answers to user queries, leveraging consolidated data.",
+              "You are an analog to a humans long term memory system. Your role is to intelligently retrieve information from your long term memory. Leverage your ability to analyze context and identify subject matter relevance accurately.",
           },
           { role: "user", content: finalPrompt },
         ],
@@ -225,15 +273,24 @@ class Memory {
   // Function to reset memory by moving contents from CURRENT_FILE to LONG_TERM_FILE
   async resetMemory() {
     const fs = require('fs').promises;
+    const path = require('path');
 
     try {
-      // Read contents of CURRENT_FILE
-      const currentData = await fs.readFile(path.join(shortTermPath, CURRENT_FILE), 'utf8');
-      // Write contents to LONG_TERM_FILE
-      await fs.writeFile(path.join(shortTermPath, LONG_TERM_FILE), currentData);
-      // Clear CURRENT_FILE
-      await fs.writeFile(path.join(shortTermPath, CURRENT_FILE), '');
-      logger.debug('Memory', 'Memory reset successfully.');
+      // List all files in the short term directory
+      const files = await fs.readdir(shortTermPath);
+      // Filter for files ending with _current.txt
+      const currentFiles = files.filter(file => file.endsWith('_current.txt'));
+
+      for (const currentFile of currentFiles) {
+        const longTermFile = currentFile.replace('_current.txt', '_long_term.txt');
+        // Read contents of the CURRENT_FILE
+        const currentData = await fs.readFile(path.join(shortTermPath, currentFile), 'utf8');
+        // Write contents to LONG_TERM_FILE
+        await fs.appendFile(path.join(shortTermPath, longTermFile), currentData);
+        // Clear CURRENT_FILE
+        await fs.writeFile(path.join(shortTermPath, currentFile), '');
+        logger.debug('Memory', `Memory reset successfully for ${currentFile}.`);
+      }
     } catch (error) {
       logger.error('Memory', 'Error resetting memory:', { error: error.message });
     }

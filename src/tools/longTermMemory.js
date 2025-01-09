@@ -50,13 +50,19 @@ class LongTermMemoryTool {
     async initialize() {
     }
 
-    async storeLongTerm(data) {
+    async storeLongTerm(parameters) {
+        const dataParam = parameters.find(param => param.name === 'data');
+        if (!dataParam) {
+            throw new Error('Missing required parameter: data');
+        }
         try {
-            const result = await memory.storeLongTerm(data); // Call the storeLongTerm method from Memory
-            return {
+            const result = await memory.storeLongTerm(dataParam.value); // Call the storeLongTerm method from Memory
+            const actionResponse = {
                 status: 'success',
                 result
             };
+            logger.debug('LongTermMemory stored data:', actionResponse);
+            return actionResponse;
         } catch (error) {
             return {
                 status: 'error',
@@ -65,9 +71,14 @@ class LongTermMemoryTool {
         }
     }
 
-    async retrieveLongTerm(context, question) {
+    async retrieveLongTerm(parameters) {
+        const questionParam = parameters.find(param => param.name === 'question');
+        const contextParam = parameters.find(param => param.name === 'context');
+        if (!questionParam) {
+            throw new Error('Missing required parameter: question');
+        }
         try {
-            const result = await memory.retrieveLongTerm(context, question); // Call the retrieveLongTerm method from Memory
+            const result = await memory.retrieveLongTerm(contextParam ? contextParam.value : null, questionParam.value); // Call the retrieveLongTerm method from Memory
             return {
                 status: 'success',
                 result
@@ -100,16 +111,15 @@ class LongTermMemoryTool {
                     };
                 }
             }
-        switch (action) {
-            case 'storeLongTerm':
-                return await this.storeLongTerm(parsedParams.data);
-            case 'retrieveLongTerm':
-                return await this.retrieveLongTerm(parsedParams.context, parsedParams.question);
-            case 'initialize':
-                return await this.initialize();
-            default:
-                throw new Error(`Action '${action}' is not recognized.`);
-        }
+
+            switch (action) {
+                case 'storeLongTerm':
+                    return await this.storeLongTerm(parsedParams);
+                case 'retrieveLongTerm':
+                    return await this.retrieveLongTerm(parsedParams);
+                default:
+                    throw new Error(`Unknown action: ${action}`);
+            }
         } catch (error) {
             console.error('LongTermMemory tool error:', {
                 error: error.message,

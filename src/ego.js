@@ -9,7 +9,7 @@ const sharedEventEmitter = require('./utils/eventEmitter.js');
 const memory = require('./memory');
 
 // Configuration
-const MAX_RETRIES = 2;
+const MAX_RETRIES = 4;
 const EVALUATION_THRESHOLD = 80; // Score threshold for success
 
 class Ego {
@@ -82,13 +82,13 @@ class Ego {
             if (!message || typeof message !== 'string' || message.trim() === '') {
                 throw new Error('Invalid message format: message must be a non-empty string');
             }
-
-            await memory.storeShortTerm('User message', message);
+            const externalUserMessageToInternal = `the user said to me: ${message}`;
+            await memory.storeShortTerm('User message', externalUserMessageToInternal);
 
             const shortTermMemory = await memory.retrieveShortTerm();
             const longTermRelevantMemory = await memory.retrieveLongTerm('ego', 'retrieve anything relevant to carrying out a users request');
             const enrichedMessage = {
-                original_message: message,
+                original_message: externalUserMessageToInternal,
                 context: {
                     identity: this.identity,
                     capabilities: this.capabilities,
@@ -99,7 +99,7 @@ class Ego {
 
             const result = await this.executeWithEvaluation(enrichedMessage, sessionHistory);
 
-            this.handleBubble(result);
+            this.handleBubble(result, 'As long as the evaluation score was greater than 80, just respond using the contents of the response object. If less than 80, include a summary of the analysis and suggestions for how to improve.');
             return;
         } catch (error) {
             logger.debug('process', 'Error processing message', {
@@ -129,12 +129,14 @@ class Ego {
         });
 
         if (attempt === 1) {
-            await sharedEventEmitter.emit('bubble', 'Starting to work on your request...');
+            await sharedEventEmitter.emit('bubble', 'Starting to work on user request...');
         }
 
         // Get plan from planner
         const planResult = await planner(enrichedMessage);
         logger.debug('executeWithEvaluation', 'Planner result', { planResult });
+        await memory.storeLongTerm('Planner result', { planResult });
+
 
         if (planResult.status === 'error') {
             logger.debug('executeWithEvaluation', 'Planning failed', { error: planResult.error });
@@ -151,7 +153,8 @@ class Ego {
         // Execute the plan
         enrichedMessage.plan = planResult.plan;
         const executionResult = await coordinator(enrichedMessage);
-        this.handleBubble(executionResult);
+        //this appears to bubble up interim results
+        // this.handleBubble(executionResult);
         await memory.storeShortTerm('Plan execution result', executionResult);
         await sharedEventEmitter.emit('bubble', 'Execution complete. Evaluating results...');
 
@@ -167,6 +170,8 @@ class Ego {
             hasRecommendations: evaluation.recommendations?.length > 0,
             evaluation
         });
+
+        await memory.storeShortTerm('Evaluator result', evaluation);
 
         // Check if we need to retry
         if (evaluation.score < EVALUATION_THRESHOLD && attempt < MAX_RETRIES) {
@@ -211,10 +216,11 @@ class Ego {
                 executionResult.response;
         }
 
+        logger.debug('executeWithEvaluation', 'Execution complete, returning final response', { response });
         return response;
     }
 
-async handleBubble(input) {
+async handleBubble(input, extraInstruction) {
     let message;
 
     if (typeof input === 'string') {
@@ -230,15 +236,15 @@ async handleBubble(input) {
     // Count the number of words in the message
     const wordCount = message.split(/\s+/).filter(word => word.length > 0).length;
 
-    let userPrompt = `Translate the supplied data/text into a plain text summary, in the contxt that this response has come from your inner workings as an AI assistent system. 
+    let userPrompt = `From the supplied data/text, generate a plain text summary, in the context that this response has come from your inner workings as an AI assistent system. 
     This means that whatever the response is, you should represent it as coming from 'you' and not from some other entity or system.
     Never refer to yourself (the AI agent) in the third person.
     Don't represent things coming from 'the system' - these are inner workins of your system and should be kept internal.
     Instead of saying 'from the system' say 'from me' and so fourth
     Don't reflect having received a message or 'received data' - these are inner workings of your system and should be kept internal.
-    Never refer to 'the user', refer to 'you', 'your' etc instead.
-    Never refer to the fact that you are providing a summarised or translated version of the message. Always present the response as coming from you as the AI agent.    
-    You don't need to explain what you are doing, just provide the 'translated version'. Keep it simple, to the point, and avoid unnecessary details. 
+    Never refer to 'the user', refer to 'you', 'your' etc instead, unless you know the user's name.
+    Never refer to providing a summarised or translated version of the original message. Always present the response as coming from you as the AI agent.    
+    Keep it simple, to the point, and avoid unnecessary details. 
     When interpreting JSON, if you see a "status" key of "success", you don't need to mention it - this is just confirming success of the comms layer and not relevant to the content or end user.
     Don't use any indicators like plaintext etc, as it is assumed it will be plaintext.
     Make sure the response is in keeping with the current personality.
@@ -247,6 +253,12 @@ async handleBubble(input) {
     // If the word count is less than 10, add an additional instruction
     if (wordCount < 10) {
         userPrompt += "\nAdditionally, ensure the response is less than 10 words.";
+    }
+
+    if (extraInstruction) {
+        userPrompt += `\nAdditionally, follow this instruction:
+        ${extraInstruction}
+        `;
     }
 
     const systemPrompt = this.buildSystemPrompt();
@@ -273,8 +285,8 @@ async handleBubble(input) {
 
     buildSystemPrompt() {
         return `You are ${this.identity}, an AI assistant with the following capabilities:
-        - Conversation: I can engage in natural language dialogue. I always refer to the user in the second person..
-        - Task Execution: I can help with file operations and other tasks
+        - Conversation: You can engage in natural language dialogue. I always refer to the user in the second person..
+        - Task Execution: You can help with file operations and other tasks
         
         Current Identity: ${this.identity}
         Current Personality: ${this.personality.prompt}

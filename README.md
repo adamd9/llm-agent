@@ -522,6 +522,9 @@ The system provides comprehensive error handling at multiple levels:
 
 The `resetMemory` function allows the user to reset the current memory by transferring all contents from `current.txt` to `for_long_term.txt`. After the transfer, `current.txt` will be cleared to start fresh. This function is essential for managing long-term memory and ensuring that the current memory reflects only the most relevant information.
 
+### Changes in Functionality
+- The `retrieveLongTerm` method now defaults the `context` parameter to 'ego' if it is null, ensuring consistent behavior when retrieving long-term memory.
+
 ## Updates
 
 - Removed extraneous properties from the `response_format` in `memory.js`, retaining only the `category` property for a more streamlined response schema.
