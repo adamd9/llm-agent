@@ -107,6 +107,11 @@ async function startServer() {
       sessions.set(sessionId, sessionHistory);
     });
 
+    sharedEventEmitter.on("assistantWorking", (data) => {
+      messageQueue.push({ type: "working", data: { status: data } });
+      processQueue(ws);
+    });
+
     sharedEventEmitter.on("debugResponse", (data) => {
       messageQueue.push({ type: "debug", data });
       processQueue(ws);

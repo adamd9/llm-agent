@@ -129,7 +129,7 @@ class Ego {
         });
 
         if (attempt === 1) {
-            await sharedEventEmitter.emit('bubble', 'Starting to work on user request...');
+            await sharedEventEmitter.emit('assistantWorking', 'Starting to work on your request...');
         }
 
         // Get plan from planner
@@ -148,7 +148,7 @@ class Ego {
             };
         }
 
-        await sharedEventEmitter.emit('bubble', 'Starting execution of the plan...');
+        await sharedEventEmitter.emit('assistantWorking', 'Starting execution of the plan...');
 
         // Execute the plan
         enrichedMessage.plan = planResult.plan;
@@ -156,7 +156,7 @@ class Ego {
         //this appears to bubble up interim results
         // this.handleBubble(executionResult);
         await memory.storeShortTerm('Plan execution result', executionResult);
-        await sharedEventEmitter.emit('bubble', 'Execution complete. Evaluating results...');
+        await sharedEventEmitter.emit('assistantWorking', 'Execution complete. Evaluating results...');
 
         // Evaluate the results
         const evaluation = await evaluator({
@@ -175,7 +175,7 @@ class Ego {
 
         // Check if we need to retry
         if (evaluation.score < EVALUATION_THRESHOLD && attempt < MAX_RETRIES) {
-            await sharedEventEmitter.emit('bubble', `Attempt ${attempt} scored ${evaluation.score}%. Making adjustments and trying again...`);
+            await sharedEventEmitter.emit('assistantWorking', `Attempt ${attempt} scored ${evaluation.score}%. Making adjustments...`);
 
             // Prepare retry message
             const retryResponse = {
@@ -217,7 +217,44 @@ class Ego {
         }
 
         logger.debug('executeWithEvaluation', 'Execution complete, returning final response', { response });
-        return response;
+
+        // Emit evaluation results as a working status
+        if (evaluation.score < 100) {
+            let evalMessage = `Score: ${evaluation.score}%\n`;
+            if (evaluation.recommendations && evaluation.recommendations.length > 0) {
+                evalMessage += `\nSuggested improvements:\n${evaluation.recommendations.map(r => `• ${r}`).join('\n')}`;
+            }
+            await sharedEventEmitter.emit('assistantWorking', {
+                message: evalMessage,
+                persistent: true
+            });
+        }
+
+        // Extract and return just the final task response
+        let finalResponse;
+        if (Array.isArray(executionResult.response)) {
+            // Handle array of results
+            finalResponse = executionResult.response.map(r => {
+                if (r.result && r.result.data && r.result.data.message) {
+                    return r.result.data.message;
+                }
+                return r.result || r;
+            }).join('\n');
+        } else if (typeof executionResult.response === 'string') {
+            // Handle string response
+            finalResponse = executionResult.response;
+        } else if (executionResult.response && executionResult.response.result && executionResult.response.result.data) {
+            // Handle single result object
+            finalResponse = executionResult.response.result.data.message || executionResult.response.result.data;
+        } else {
+            // Fallback
+            finalResponse = JSON.stringify(executionResult.response);
+        }
+
+        return {
+            type: 'task',
+            response: finalResponse
+        };
     }
 
 async handleBubble(input, extraInstruction) {

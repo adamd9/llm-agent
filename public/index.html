@@ -18,31 +18,75 @@
             flex-grow: 1;
             border: 1px solid #ccc;
             padding: 20px;
-            margin-bottom: 20px;
+            margin: 20px 10px 10px 20px;
             overflow-y: auto;
             background: #f9f9f9;
-            margin: 20px 20px 10px 20px;
+            width: calc(70% - 50px);
         }
 
-        #debug-container {
-            width: 50%;
-            border: 1px solid #ccc;
-            padding: 20px;
-            margin-bottom: 20px;
-            overflow-y: auto;
-            background: #f9f9f9;
-            margin: 20px 20px 10px 20px;
+        #output-container {
+            width: calc(30% - 30px);
+            margin: 20px 20px 10px 0;
             background-color: #1e1e1e;
             color: #a8e6cf;
+            border-radius: 5px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #output-container h3 {
+            color: #fff;
+            margin: 0;
+            padding: 15px;
+            text-align: center;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #output-container h3 button {
+            background: none;
+            border: none;
+            color: #666;
+            font-size: 1.2em;
+            cursor: pointer;
+            padding: 0 5px;
             display: none;
         }
 
-        #debug-output {
+        #output-container h3 button:hover {
+            color: #fff;
+        }
+
+        #output-container.has-persistent h3 button {
+            display: block;
+        }
+
+        #status-output {
             margin: 0;
-            padding: 0;
-            font-family: monospace;
-            font-size: 0.9em;
+            padding: 20px;
             white-space: pre-wrap;
+            text-align: center;
+            font-size: 1.1em;
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 60px;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        #status-output.visible {
+            opacity: 1;
+        }
+
+        #status-output.persistent {
+            text-align: left;
+            align-items: flex-start;
+            justify-content: flex-start;
         }
 
         .message {
@@ -131,9 +175,12 @@
 <body>
     <div style="display: flex; height: calc(100% - 60px);">
         <div id="chat-container"></div>
-        <div id="debug-container">
-            <h3>Debug Stream</h3>
-            <pre id="debug-output"></pre>
+        <div id="output-container">
+            <h3>
+                Status Updates
+                <button onclick="clearStatus()" title="Clear status">×</button>
+            </h3>
+            <div id="status-output"></div>
         </div>
     </div>
     <div id="input-container">
@@ -146,6 +193,85 @@
         let ws;
         let sessionId = null;
         let showDebug = false;
+        let statusTimeout = null;
+        let currentMessagePersistent = false;
+
+        function showStatus(message, duration = 5000) {
+            const output = document.getElementById('status-output');
+            const container = document.getElementById('output-container');
+            let messageText, isPersistent;
+            
+            // Handle both string and object messages
+            if (typeof message === 'string') {
+                messageText = message;
+                isPersistent = false;
+            } else {
+                messageText = message.message;
+                isPersistent = message.persistent;
+            }
+            
+            // Clear any existing timeout for non-persistent messages
+            if (!currentMessagePersistent && statusTimeout) {
+                clearTimeout(statusTimeout);
+            }
+            
+            // Don't override a persistent message with a non-persistent one
+            if (currentMessagePersistent && !isPersistent) {
+                return;
+            }
+            
+            // Update message
+            output.textContent = messageText;
+            output.classList.add('visible');
+            
+            if (isPersistent) {
+                output.classList.add('persistent');
+                container.classList.add('has-persistent');
+                currentMessagePersistent = true;
+            } else {
+                output.classList.remove('persistent');
+                container.classList.remove('has-persistent');
+                currentMessagePersistent = false;
+                
+                // Set timeout to hide non-persistent messages
+                statusTimeout = setTimeout(() => {
+                    output.classList.remove('visible');
+                }, duration);
+            }
+        }
+
+        function clearStatus() {
+            const output = document.getElementById('status-output');
+            const container = document.getElementById('output-container');
+            output.classList.remove('visible', 'persistent');
+            container.classList.remove('has-persistent');
+            output.textContent = '';
+            currentMessagePersistent = false;
+        }
+
+        function humanizeStatusMessage(message) {
+            // Convert technical messages to more user-friendly ones
+            const messageMap = {
+                'Starting to work on your request...': '💭 Thinking...',
+                'Starting execution of the plan...': '🔧 Working on it...',
+                'Execution complete. Evaluating results...': '✨ Finalizing...'
+            };
+
+            // Check if we have a predefined friendly message
+            if (messageMap[message]) {
+                return messageMap[message];
+            }
+
+            // Handle evaluation score messages
+            if (message.includes('scored') && message.includes('Making adjustments')) {
+                return '🔄 Improving the response...';
+            }
+
+            // Default case: clean up the message
+            return message
+                .replace(/\.$/, '')  // Remove trailing period
+                .replace(/\.\.\.$/, ''); // Remove trailing ellipsis
+        }
 
         function connect() {
             ws = new WebSocket(`ws://${window.location.host}`);
@@ -165,6 +291,10 @@
 
                     case 'response':
                         addMessage('agent', data.data.response || data.data.error);
+                        break;
+
+                    case 'working':
+                        showStatus(data.data.status);
                         break;
 
                     case 'debug':

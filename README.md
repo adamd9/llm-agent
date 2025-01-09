@@ -103,7 +103,6 @@ The agent uses WebSocket for real-time, bidirectional communication:
        "sessionId": "unique-session-id"
      }
      ```
-   
    - **Response Message**:
      ```json
      {
@@ -116,7 +115,15 @@ The agent uses WebSocket for real-time, bidirectional communication:
        }
      }
      ```
-   
+   - **Working Status Message**:
+     ```json
+     {
+       "type": "working",
+       "data": {
+         "status": "current status message"
+       }
+     }
+     ```
    - **Debug Message**:
      ```json
      {
@@ -129,7 +136,6 @@ The agent uses WebSocket for real-time, bidirectional communication:
        }
      }
      ```
-   
    - **Error Message**:
      ```json
      {
@@ -717,3 +723,14 @@ This dual logging system ensures:
 
 - Implemented a message queue to manage sending messages from `assistantResponse` and `debugResponse` events in order.
 - Created a `processQueue` function to ensure messages are sent sequentially, preventing race conditions in event handling.
+
+## UI Components
+
+The interface includes several key components:
+
+1. **Chat Container**: Main area for displaying conversation history
+2. **Output Container**: Displays temporary status updates and working messages
+   - Shows agent's current status and processing updates
+   - Messages auto-hide after 5 seconds
+   - Will be used for displaying code output and results in future iterations
+3. **Input Container**: Area for user input and controls

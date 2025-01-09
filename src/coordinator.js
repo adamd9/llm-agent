@@ -72,7 +72,10 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
 
         for (step of plan) {
             logger.debug('Executing step:', step);
-            await sharedEventEmitter.emit('bubble', { message: `Executing: ${step.action}...` });
+            await sharedEventEmitter.emit('assistantWorking', {
+                message: `${step.action}`,
+                persistent: false
+            });
             const tool = toolMap.get(step.tool);
             logger.debug('Found tool:', tool);
 
@@ -95,7 +98,10 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
                 const result = await tool.execute(step.action, step.parameters, plan);
                 logger.debug('Tool execution result:', result);
                 memory.storeShortTerm('toolExecutionResult for' + step.action, JSON.stringify(result), 'ego', false);
-                await sharedEventEmitter.emit('bubble', { message: `Completed: ${step.action}` });
+                await sharedEventEmitter.emit('assistantWorking', {
+                    message: `Completed ${step.action}`,
+                    persistent: false
+                });
                 if (result.status === 'error') {
                     logger.debug('Tool execution error:', result);
                     return {
