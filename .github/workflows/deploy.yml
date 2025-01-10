@@ -1,0 +1,23 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  trigger-deployment:
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+      - name: Trigger Docker Redeploy
+        env:
+          DOMAIN: "assistant.greatmachineinthesky.com"
+          TOKEN: ${{ secrets.GITLAB_TRIGGER_TOKEN }}
+        run: |
+          curl --fail --request POST \
+          -F "variables[DOMAIN]=$DOMAIN" \
+          -F "token=$TOKEN" \
+          -F "ref=main" \
+          "https://gitlab.com/api/v4/projects/32860755/trigger/pipeline"
