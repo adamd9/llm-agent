@@ -3,6 +3,7 @@
 
 <head>
     <title>AI Agent Chat Interface</title>
+    <link rel="icon" href="data:,">
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -169,6 +170,23 @@
             background: #666;
             margin-left: 10px;
         }
+
+        .debug-container {
+            display: none;
+            background-color: #333;
+            color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px;
+            overflow-y: auto;
+            max-height: 200px;
+        }
+
+        .debug-output {
+            font-family: monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+        }
     </style>
 </head>
 
@@ -187,6 +205,9 @@
         <input type="text" id="message-input" placeholder="Type your message...">
         <button onclick="sendMessage()">Send</button>
         <button id="debug-toggle" onclick="toggleDebug()">Toggle Debug</button>
+    </div>
+    <div id="debug-container" class="debug-container" style="display: none;">
+        <pre id="debug-output" class="debug-output"></pre>
     </div>
 
     <script>
@@ -274,7 +295,8 @@
         }
 
         function connect() {
-            ws = new WebSocket(`ws://${window.location.host}`);
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}`);
 
             ws.onopen = () => {
                 console.log('Connected to server');
@@ -307,27 +329,28 @@
         <span class="title">[${data.data.context}] ${data.data.message}</span>
     `;
 
-                        if (Object.keys(data.data.data).length > 0) {
+                        if (data.data.data && Object.keys(data.data.data).length > 0) {
                             htmlContent += `
             <pre>${JSON.stringify(data.data.data, null, 2)}</pre>
         `;
                         }
 
                         debugMessage.innerHTML = htmlContent;
-
                         addMessage('debug', htmlContent, 'html');
 
                         const debugOutput = document.getElementById('debug-output');
                         const debugContainer = document.getElementById('debug-container');
 
-                        debugOutput.textContent += `[${data.data.context}] ${data.data.message}\n`;
-                        if (Object.keys(data.data.data).length > 0) {
-                            debugOutput.textContent += JSON.stringify(data.data.data, null, 2) + '\n';
-                        }
+                        if (debugOutput && debugContainer) {
+                            debugOutput.textContent += `[${data.data.context}] ${data.data.message}\n`;
+                            if (data.data.data && Object.keys(data.data.data).length > 0) {
+                                debugOutput.textContent += JSON.stringify(data.data.data, null, 2) + '\n';
+                            }
 
-                        // Scroll both the debug output and container to the bottom
-                        debugOutput.scrollTop = debugOutput.scrollHeight;
-                        debugContainer.scrollTop = debugContainer.scrollHeight;
+                            // Scroll both the debug output and container to the bottom
+                            debugOutput.scrollTop = debugOutput.scrollHeight;
+                            debugContainer.scrollTop = debugContainer.scrollHeight;
+                        }
                         break;
 
                     case 'error':
@@ -408,6 +431,7 @@
             document.querySelectorAll('.debug-message').forEach(el => {
                 el.style.display = showDebug ? 'block' : 'none';
             });
+            document.getElementById('debug-container').style.display = showDebug ? 'block' : 'none';
         }
 
         // Connect on page load

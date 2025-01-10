@@ -5,7 +5,6 @@ const WebSocket = require("ws");
 const http = require("http");
 const logger = require("./utils/logger");
 const sharedEventEmitter = require("./utils/eventEmitter");
-const { stringify } = require('flatted');
 const memory = require('./memory');
 const app = express();
 app.use(express.json());
