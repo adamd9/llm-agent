@@ -79,8 +79,9 @@
             font-size: 1.1em;
             flex-grow: 1;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             min-height: 60px;
             opacity: 0;
             transition: opacity 0.3s ease-in-out;
@@ -91,10 +92,34 @@
             opacity: 1;
         }
 
-        #status-output.persistent {
+        .status-text {
+            width: 100%;
+            text-align: center;
+        }
+
+        .status-text.persistent {
             text-align: left;
-            align-items: flex-start;
-            justify-content: flex-start;
+        }
+
+        .spinner {
+            display: none;
+            width: 30px;
+            height: 30px;
+            border: 3px solid #a8e6cf;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        .spinner.visible {
+            display: block;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         #input-container {
@@ -286,7 +311,10 @@
                 Status Updates
                 <button onclick="clearStatus()" title="Clear status">×</button>
             </h3>
-            <div id="status-output"></div>
+            <div id="status-output">
+                <div class="spinner"></div>
+                <div class="status-text"></div>
+            </div>
         </div>
     </div>
     <div id="input-container">
@@ -298,17 +326,23 @@
 
     <script>
         let ws;
-        let sessionId = null;
+        let sessionId;
         let showDebug = false;
         let statusTimeout = null;
         let currentMessagePersistent = false;
+        let isProcessing = false;
 
         function showStatus(message, duration = 5000) {
             const output = document.getElementById('status-output');
-            const container = document.getElementById('output-container');
-            let messageText, isPersistent;
+            const statusText = output.querySelector('.status-text');
             
-            // Handle both string and object messages
+            // Clear any existing timeout
+            if (statusTimeout) {
+                clearTimeout(statusTimeout);
+            }
+
+            // Process message
+            let messageText, isPersistent;
             if (typeof message === 'string') {
                 messageText = message;
                 isPersistent = false;
@@ -316,68 +350,67 @@
                 messageText = message.message;
                 isPersistent = message.persistent;
             }
-            
-            // Clear any existing timeout for non-persistent messages
-            if (!currentMessagePersistent && statusTimeout) {
-                clearTimeout(statusTimeout);
-            }
-            
-            // Don't override a persistent message with a non-persistent one
-            if (currentMessagePersistent && !isPersistent) {
-                return;
-            }
-            
+
             // Update message
-            output.textContent = messageText;
+            statusText.textContent = humanizeStatusMessage(messageText);
             output.classList.add('visible');
             
+            // Update text alignment based on persistence
             if (isPersistent) {
-                output.classList.add('persistent');
-                container.classList.add('has-persistent');
-                currentMessagePersistent = true;
+                statusText.classList.add('persistent');
             } else {
-                output.classList.remove('persistent');
-                container.classList.remove('has-persistent');
-                currentMessagePersistent = false;
-                
-                // Set timeout to hide non-persistent messages
+                statusText.classList.remove('persistent');
+            }
+            
+            if (!isPersistent && !currentMessagePersistent) {
                 statusTimeout = setTimeout(() => {
-                    output.classList.remove('visible');
+                    statusText.textContent = '';
                 }, duration);
             }
+
+            // Update persistent state
+            currentMessagePersistent = isPersistent;
         }
 
         function clearStatus() {
             const output = document.getElementById('status-output');
-            const container = document.getElementById('output-container');
-            output.classList.remove('visible', 'persistent');
-            container.classList.remove('has-persistent');
-            output.textContent = '';
-            currentMessagePersistent = false;
+            const statusText = output.querySelector('.status-text');
+            if (statusTimeout) {
+                clearTimeout(statusTimeout);
+            }
+            
+            // Only clear the status text if it wasn't persistent
+            if (!currentMessagePersistent) {
+                statusText.textContent = '';
+                statusText.classList.remove('persistent');
+            }
+
+            // Remove spinner but keep output visible if we have a persistent message
+            document.querySelector('.spinner').classList.remove('visible');
+            if (!currentMessagePersistent) {
+                output.classList.remove('visible');
+            }
+            isProcessing = false;
         }
 
         function humanizeStatusMessage(message) {
-            // Convert technical messages to more user-friendly ones
             const messageMap = {
                 'Starting to work on your request...': '💭 Thinking...',
                 'Starting execution of the plan...': '🔧 Working on it...',
-                'Execution complete. Evaluating results...': '✨ Finalizing...'
+                'Executing the plan...': '🚀 Almost there...'
             };
 
-            // Check if we have a predefined friendly message
             if (messageMap[message]) {
                 return messageMap[message];
             }
 
-            // Handle evaluation score messages
             if (message.includes('scored') && message.includes('Making adjustments')) {
                 return '🔄 Improving the response...';
             }
 
-            // Default case: clean up the message
             return message
-                .replace(/\.$/, '')  // Remove trailing period
-                .replace(/\.\.\.$/, ''); // Remove trailing ellipsis
+                .replace(/\.$/, '')
+                .replace(/\.\.\.$/, '');
         }
 
         function connect() {
@@ -398,6 +431,9 @@
                         break;
 
                     case 'response':
+                        // Just remove the spinner, preserve any persistent message
+                        document.querySelector('.spinner').classList.remove('visible');
+                        isProcessing = false;
                         addMessage('agent', data.data.response || data.data.error);
                         break;
 
@@ -501,14 +537,18 @@
             const input = document.getElementById('message-input');
             const message = input.value.trim();
 
-            if (message && ws.readyState === WebSocket.OPEN) {
-                addMessage('user', message);
+            if (message && ws && ws.readyState === WebSocket.OPEN) {
+                // Show spinner when starting a new message
+                isProcessing = true;
+                document.querySelector('.spinner').classList.add('visible');
+                document.getElementById('status-output').classList.add('visible');
+                
                 ws.send(JSON.stringify({
                     message: message,
                     sessionId: sessionId
                 }));
-
                 input.value = '';
+                addMessage('user', message);
             }
         }
 
