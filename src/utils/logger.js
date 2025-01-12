@@ -8,6 +8,28 @@ class Logger {
         this.wsConnections = connections;
     }
 
+    async error(context, message, data = {}, sendToUser = true) {
+        // Handle if message is an object
+        if (typeof message === 'object') {
+            data = message;
+            message = '';
+        }
+
+        const errorInfo = {
+            context,
+            message,
+            data,
+            timestamp: new Date().toISOString()
+        };
+
+        const dataString = typeof data === 'object' ? JSON.stringify(data, null, 2) : data;
+        console.error(`[${context}] ${message}`, dataString);
+
+        if (sendToUser !==false) {
+            await sharedEventEmitter.emit('debugResponse', errorInfo);
+        }       
+    }
+
     async debug(context, message, data = {}, sendToUser = true) {
         // Handle if message is an object
         if (typeof message === 'object') {

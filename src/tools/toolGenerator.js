@@ -18,44 +18,28 @@ class ToolGenerator {
      */
     getCapabilities() {
         return {
+            name: this.name,
+            description: this.description,
             actions: [
                 {
                     name: 'generateTool',
-                    description: 'Generate a new tool based on natural language description',
+                    description: 'Generate a new tool based on a description',
                     parameters: [
                         {
                             name: 'description',
-                            description: 'Natural language description of the desired tool functionality',
+                            description: 'Description of the tool to generate',
                             type: 'string',
                             required: true
                         },
                         {
                             name: 'contextPrompt',
-                            description: 'Additional context for example generation',
+                            description: 'Additional context for tool generation',
                             type: 'string',
                             required: false
                         },
                         {
-                            name: 'constraints',
-                            description: 'Constraints for example generation',
-                            type: 'object',
-                            required: false
-                        },
-                        {
-                            name: 'context',
-                            description: 'Context information about related tools and dependencies',
-                            type: 'object',
-                            required: false
-                        },
-                        {
-                            name: 'capabilities',
-                            description: 'Explicit capabilities definition',
-                            type: 'object',
-                            required: false
-                        },
-                        {
                             name: 'save',
-                            description: 'Whether to save the tool to data/tools folder',
+                            description: 'Whether to save the tool to disk',
                             type: 'boolean',
                             required: false
                         }
@@ -63,7 +47,7 @@ class ToolGenerator {
                 },
                 {
                     name: 'updateTool',
-                    description: 'Update an existing tool with new capabilities or examples',
+                    description: 'Update an existing tool',
                     parameters: [
                         {
                             name: 'toolName',
@@ -79,39 +63,9 @@ class ToolGenerator {
                         },
                         {
                             name: 'contextPrompt',
-                            description: 'Additional context for example generation',
+                            description: 'Additional context for tool update',
                             type: 'string',
                             required: false
-                        }
-                    ]
-                },
-                {
-                    name: 'testTool',
-                    description: 'Test a tool with provided examples',
-                    parameters: [
-                        {
-                            name: 'toolName',
-                            description: 'Name of the tool to test',
-                            type: 'string',
-                            required: true
-                        },
-                        {
-                            name: 'examples',
-                            description: 'Test examples to run',
-                            type: 'array',
-                            required: false
-                        }
-                    ]
-                },
-                {
-                    name: 'validateTool',
-                    description: 'Validate a tool against its capabilities and examples',
-                    parameters: [
-                        {
-                            name: 'toolName',
-                            description: 'Name of the tool to validate',
-                            type: 'string',
-                            required: true
                         }
                     ]
                 }
@@ -279,218 +233,127 @@ class ToolGenerator {
      * @private
      */
     async _generateToolCode(toolName, description, examples, capabilities) {
-        // Generate implementation using LLM
-        const prompt = `You are a JavaScript developer tasked with creating a new tool implementation.
+        try {
+            // Generate the action methods
+            const actionMethods = capabilities.actions.map(action => {
+                const paramValidation = action.parameters.map(param => 
+                    `const ${param.name}Param = parameters.find(param => param.name === '${param.name}');
+                    ${param.required ? 
+                        `if (!${param.name}Param) {
+                            throw new Error('Missing required parameter: ${param.name}');
+                        }` : ''}`
+                ).join('\n        ');
 
-Tool Requirements:
-1. Tool Name: ${toolName} (must be exactly this)
-2. Description: ${description}
-3. Capabilities: ${JSON.stringify(capabilities, null, 2)}
+                const paramExtraction = action.parameters.map(param => 
+                    `const ${param.name} = ${param.name}Param${param.required ? '' : '?'}.value;`
+                ).join('\n            ');
 
-The implementation must:
-1. Be a complete JavaScript class with the exact name provided
-2. Have a constructor that sets this.name and this.description
-3. Include getCapabilities() method that returns the exact capabilities object
-4. Include an async execute(params) method that handles array-based parameters:
-   - Parameters will be passed as an array of {name, value} objects
-   - You MUST convert array parameters to object format in execute():
-     \`\`\`javascript
-     const paramObj = {};
-     params.forEach(param => {
-         if (param.name && 'value' in param) {
-             paramObj[param.name] = param.value;
-         }
-     });
-     \`\`\`
-5. Export a singleton instance using module.exports
-6. Return results in {success: true/false, data?: any, error?: string} format
-7. For EACH parameter:
-   - Include type validation (typeof check)
-   - Include required validation if parameter.required is true
-   - Include the required field in parameter definitions (must be boolean true/false)
-   - Include a description field for each parameter
-
-Example test cases:
-${JSON.stringify(examples, null, 2)}
-
-Generate only the complete JavaScript class implementation with no explanation or comments.`;
+                return `
+    async ${action.name}(parameters) {
+        ${paramValidation}
 
         try {
-            // Get LLM client
-            const llmClient = getClient('openai');
+            ${paramExtraction}
             
-            // Generate implementation
-            const response = await llmClient.chat([
-                { 
-                    role: 'system', 
-                    content: 'You are an expert JavaScript developer who writes clean, efficient, and well-documented code.' 
-                },
-                { role: 'user', content: prompt }
-            ], {
-                model: 'gpt-4o',
-                temperature: 0.2,
-                max_tokens: 2000
-            });
+            // TODO: Implement ${action.name} logic here
+            return {
+                status: 'success',
+                result: {
+                    // Add your result fields here
+                }
+            };
+        } catch (error) {
+            logger.debug('tools', '${toolName} error:', error);
+            return {
+                status: 'error',
+                error: 'Failed to execute ${action.name}',
+                details: error.message
+            };
+        }
+    }`;
+            }).join('\n\n');
 
-            // Extract code from response
-            let code = response.content;
-            
-            // Clean up the code if it's wrapped in markdown code blocks
-            code = code.replace(/```javascript\n?|\n?```/g, '').trim();
+            // Create switch cases for execute method
+            const switchCases = capabilities.actions.map(action => 
+                `                case '${action.name}':
+                    return await this.${action.name}(parsedParams);`
+            ).join('\n');
 
-            console.log('Generated code:', code);
+            // Create the template
+            const template = `
+const logger = require('../../src/utils/logger');
 
-            // Validate the generated code
-            const validationResult = await this._validateGeneratedCode(code, toolName, description, capabilities);
-            if (!validationResult.valid) {
-                console.error('Code validation failed:', validationResult.reasons);
-                throw new Error(`Generated code does not meet requirements: ${validationResult.reasons.join(', ')}`);
+class ${toolName} {
+    constructor() {
+        this.name = '${toolName.charAt(0).toLowerCase() + toolName.slice(1)}';
+        this.description = '${description}';
+    }
+
+    getCapabilities() {
+        return ${JSON.stringify(capabilities, null, 8)};
+    }
+
+    ${actionMethods}
+
+    async execute(action, parameters) {
+        logger.debug('tools', '${toolName} executing:', { action, parameters });
+        try {
+            // Parse parameters if they're passed as a string
+            let parsedParams = parameters;
+            if (typeof parameters === 'string') {
+                try {
+                    parsedParams = JSON.parse(parameters);
+                } catch (parseError) {
+                    logger.debug('tools', 'Parameter parsing error:', {
+                        error: parseError.message,
+                        parameters
+                    });
+                    return {
+                        status: 'error',
+                        error: 'Invalid parameters format',
+                        details: parseError.message
+                    };
+                }
             }
 
-            return code;
+            // Validate that parsedParams is an array
+            if (!Array.isArray(parsedParams)) {
+                return {
+                    status: 'error',
+                    error: 'Parameters must be provided as an array'
+                };
+            }
+
+            switch (action) {
+${switchCases}
+                default:
+                    throw new Error(\`Unknown action: \${action}\`);
+            }
+        } catch (error) {
+            logger.debug('tools', '${toolName} error:', {
+                error: error.message,
+                stack: error.stack,
+                action,
+                parameters
+            });
+            return {
+                status: 'error',
+                error: error.message,
+                stack: error.stack,
+                action,
+                parameters
+            };
+        }
+    }
+}
+
+module.exports = new ${toolName}();
+`;
+
+            return template;
         } catch (error) {
             throw new Error(`Failed to generate tool implementation: ${error.message}`);
         }
-    }
-
-    /**
-     * Validate generated code
-     * @private
-     */
-    async _validateGeneratedCode(code, toolName, description, capabilities) {
-        const reasons = [];
-        try {
-            // Basic syntax check
-            new Function(code);
-
-            // Check for class definition
-            if (!code.includes(`class ${toolName}`)) {
-                reasons.push(`Missing class definition for ${toolName}`);
-            }
-
-            // Check for constructor
-            if (!code.includes('constructor()')) {
-                reasons.push('Missing constructor');
-            }
-
-            // Check for required properties
-            if (!code.includes('this.name') || !code.includes('this.description')) {
-                reasons.push('Missing required properties (name or description)');
-            }
-
-            // Check for getCapabilities method
-            if (!code.includes('getCapabilities()')) {
-                reasons.push('Missing getCapabilities method');
-            }
-
-            // Check for execute method
-            if (!code.includes('execute(')) {
-                reasons.push('Missing execute method');
-            }
-
-            // Check for module.exports
-            if (!code.includes('module.exports')) {
-                reasons.push('Missing module.exports');
-            }
-
-            // Add validation for array parameter handling
-            if (!code.includes('params.forEach') && !code.includes('Array.isArray(params)')) {
-                reasons.push('Missing array parameter handling in execute method');
-            }
-
-            // Deeper validation by evaluating the code
-            try {
-                const tempFilename = `temp_${toolName}_${Date.now()}.js`;
-                const tempPath = require('path').join(require('os').tmpdir(), tempFilename);
-                require('fs').writeFileSync(tempPath, code);
-
-                try {
-                    const tempModule = require(tempPath);
-                    
-                    // Validate name and description
-                    if (tempModule.name !== toolName) {
-                        reasons.push(`Tool name mismatch: expected ${toolName}, got ${tempModule.name}`);
-                    }
-                    if (tempModule.description !== description) {
-                        reasons.push('Tool description mismatch');
-                    }
-
-                    // Validate capabilities
-                    const actualCapabilities = tempModule.getCapabilities();
-                    
-                    // Validate each parameter has required fields
-                    const validateParameters = (params) => {
-                        return params.every(param => {
-                            if (!('required' in param)) {
-                                reasons.push(`Parameter ${param.name} is missing the required field`);
-                                return false;
-                            }
-                            // Ensure required is a boolean
-                            if (typeof param.required !== 'boolean') {
-                                const boolValue = param.required === true || param.required === 'true';
-                                reasons.push(`Parameter ${param.name} has required field as ${typeof param.required}, converting to boolean ${boolValue}`);
-                                param.required = boolValue;
-                            }
-                            if (!param.description) {
-                                reasons.push(`Parameter ${param.name} is missing description`);
-                                return false;
-                            }
-                            return true;
-                        });
-                    };
-
-                    actualCapabilities.actions.forEach(action => {
-                        validateParameters(action.parameters);
-                    });
-
-                    if (!this._compareCapabilities(capabilities, actualCapabilities)) {
-                        reasons.push('Capabilities mismatch between expected and actual');
-                    }
-
-                    // Validate execute method parameters
-                    const executeStr = tempModule.execute.toString();
-                    const expectedParams = capabilities.actions[0].parameters;
-                    for (const param of expectedParams) {
-                        if (!executeStr.includes(`params.${param.name}`)) {
-                            reasons.push(`Execute method doesn't handle parameter: ${param.name}`);
-                        }
-                        if (param.required && !executeStr.includes(`!params.${param.name}`)) {
-                            reasons.push(`Missing required parameter check for: ${param.name}`);
-                        }
-                    }
-
-                    // Test array parameter handling
-                    const testParams = capabilities.actions[0].parameters.map(p => ({
-                        name: p.name,
-                        value: p.type === 'string' ? 'test' : 0
-                    }));
-                    
-                    try {
-                        const testResult = tempModule.execute(testParams);
-                        // Handle both sync and async execute methods
-                        if (testResult instanceof Promise) {
-                            await testResult;
-                        }
-                    } catch (e) {
-                        if (e.message.includes('is not iterable') || e.message.includes('forEach')) {
-                            reasons.push('Execute method fails to handle array parameters');
-                        }
-                    }
-                } finally {
-                    // Clean up temp file
-                    require('fs').unlinkSync(tempPath);
-                }
-            } catch (evalError) {
-                reasons.push(`Code evaluation failed: ${evalError.message}`);
-            }
-        } catch (error) {
-            reasons.push(`Invalid JavaScript syntax: ${error.message}`);
-        }
-
-        return {
-            valid: reasons.length === 0,
-            reasons
-        };
     }
 
     /**
@@ -566,15 +429,14 @@ Generate only the complete updated JavaScript class implementation with no expla
      * @private
      */
     async _saveToolToFile(toolName, code) {
-        const toolsDir = path.join(process.cwd(), 'data', 'tools');
-        
         // Create tools directory if it doesn't exist
-        if (!fs.existsSync(toolsDir)) {
-            fs.mkdirSync(toolsDir, { recursive: true });
+        if (!fs.existsSync(this.dataToolsDir)) {
+            fs.mkdirSync(this.dataToolsDir, { recursive: true });
         }
 
+        // Always use .js extension since we're generating JavaScript tools
         const fileName = `${toolName.toLowerCase()}.js`;
-        const filePath = path.join(toolsDir, fileName);
+        const filePath = path.join(this.dataToolsDir, fileName);
         
         // Ensure code is a string
         const codeStr = typeof code === 'string' ? code : await code;
@@ -695,7 +557,7 @@ ${tools.map(t => `- ${t.name}: ${t.description}`).join('\n')}`;
             
             // Create updated capabilities
             const updatedCapabilities = {
-                actions: currentCapabilities.actions.map(action => {
+                actions: currentCapabilities.map(action => {
                     // Update action parameters if provided
                     if (updates.parameters) {
                         return {
@@ -757,26 +619,27 @@ ${tools.map(t => `- ${t.name}: ${t.description}`).join('\n')}`;
             throw new Error('Tool description is required and must be a string');
         }
 
-        // Extract the core purpose from the description
-        const purposeMatch = description.match(/(?:create|build|make|generate|implement|provide|get|fetch|retrieve|check|validate|process|handle|manage)\s+(?:a|an)?\s*([^.]+)/i);
-        const purpose = purposeMatch ? 
-            purposeMatch[1].trim() : description;
-
-        // Convert to camel case, keeping only key functional words
-        const words = purpose.toLowerCase()
+        // Extract key words from the description
+        const words = description.toLowerCase()
             .replace(/[^\w\s]/g, '')
             .split(/\s+/)
             .filter(word => 
-                !['a', 'an', 'the', 'to', 'from', 'that', 'which', 'with', 'for'].includes(word) && 
+                !['a', 'an', 'the', 'to', 'from', 'that', 'which', 'with', 'for', 'and', 'or', 'will', 'based'].includes(word) && 
                 word.length > 0
             )
             .map(word => word.charAt(0).toUpperCase() + word.slice(1));
         
         if (words.length === 0) {
-            throw new Error('Could not generate tool name from description. Description must contain valid words.');
+            // If no valid words found, use a generic name with a timestamp
+            const timestamp = Date.now();
+            return `CustomTool${timestamp}`;
         }
 
-        return words.join('') + 'Tool';
+        // Take the first 3 most relevant words to form the tool name
+        const toolName = words.slice(0, 3).join('') + 'Tool';
+        
+        // Ensure the first character is uppercase
+        return toolName.charAt(0).toUpperCase() + toolName.slice(1);
     }
 
     /**
@@ -784,57 +647,29 @@ ${tools.map(t => `- ${t.name}: ${t.description}`).join('\n')}`;
      * @private
      */
     _generateCapabilities(description, constraints) {
-        // Extract parameters from description using common patterns
-        const paramPatterns = [
-            // Input parameters
-            {regex: /takes(?:\s+a)?(?:\s+required)?\s+([^,\.]+)(?:\s+as(?:\s+(?:a|an|the))?\s+input)?/i, type: 'input'},
-            {regex: /accepts(?:\s+a)?\s+([^,\.]+)/i, type: 'input'},
-            {regex: /expects(?:\s+a)?\s+([^,\.]+)/i, type: 'input'},
-            {regex: /given(?:\s+a)?\s+([^,\.]+)/i, type: 'input'},
-            // Output parameters
-            {regex: /returns(?:\s+a)?\s+([^,\.]+)/i, type: 'output'},
-            {regex: /provides(?:\s+a)?\s+([^,\.]+)/i, type: 'output'},
-            {regex: /outputs(?:\s+a)?\s+([^,\.]+)/i, type: 'output'}
-        ];
+        // If constraints.inputTypes is provided, use it to generate parameters
+        const parameters = constraints?.inputTypes?.map(input => ({
+            name: input.name,
+            description: input.description,
+            type: input.type || this._inferParameterType(input.name),
+            required: input.required !== false // Default to true unless explicitly set to false
+        })) || [];
 
-        const params = [];
-        const outputs = [];
-
-        // Extract parameters from description
-        paramPatterns.forEach(pattern => {
-            const match = description.match(pattern.regex);
-            if (match) {
-                const param = match[1].trim();
-                if (pattern.type === 'input') {
-                    params.push({
-                        name: param.toLowerCase().replace(/\s+/g, '_'),
-                        description: `The ${param.toLowerCase()}`,
-                        type: this._inferParameterType(param),
-                        required: /required|must|should|needs?|mandatory/i.test(description)
-                    });
-                } else {
-                    outputs.push(param);
-                }
-            }
-        });
-
-        // Create action name from core purpose
-        const purposeMatch = description.match(/(?:create|build|make|generate|implement|provide|get|fetch|retrieve|check|validate|process|handle|manage)\s+(?:a|an)?\s*([^.]+)/i);
-        const actionName = purposeMatch ? 
-            purposeMatch[1].toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).join('_') :
-            description.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(w => w.length > 0).join('_');
+        // Generate action name based on description
+        const actionName = description.toLowerCase()
+            .replace(/\s+/g, '_')
+            .replace(/[^a-z0-9_]/g, '')
+            .replace(/_+/g, '_')
+            .replace(/^_|_$/g, '');
 
         return {
-            actions: [{
-                name: actionName,
-                description: description,
-                parameters: params.length > 0 ? params : [{
-                    name: 'input',
-                    description: 'Input for the tool',
-                    type: 'string',
-                    required: true
-                }]
-            }]
+            actions: [
+                {
+                    name: actionName,
+                    description: description,
+                    parameters: parameters
+                }
+            ]
         };
     }
 
@@ -856,65 +691,55 @@ ${tools.map(t => `- ${t.name}: ${t.description}`).join('\n')}`;
      */
     async execute(actionOrParams, parameters) {
         try {
-            console.log('Execute called with:', { actionOrParams, parameters });
-            
-            // Handle both single object and separate action/parameters format
             let params;
-            if (typeof actionOrParams === 'string') {
-                // Convert array of parameters to object
-                const paramObj = {};
+            if (typeof actionOrParams === 'string' && parameters) {
                 if (Array.isArray(parameters)) {
-                    console.log('Processing array parameters:', parameters);
-                    parameters.forEach(param => {
-                        if (param.name && 'value' in param) {
-                            paramObj[param.name] = param.value;
+                    params = parameters.reduce((acc, param) => {
+                        if (param && typeof param === 'object' && 'name' in param && 'value' in param) {
+                            acc[param.name] = param.value;
                         }
-                    });
-                } else if (parameters && typeof parameters === 'object') {
-                    console.log('Processing object parameters:', parameters);
-                    Object.assign(paramObj, parameters);
+                        return acc;
+                    }, {});
+                } else if (typeof parameters === 'object') {
+                    params = parameters;
                 }
-                params = {
-                    action: actionOrParams,
-                    ...paramObj
-                };
-            } else if (actionOrParams && typeof actionOrParams === 'object') {
+            } else if (typeof actionOrParams === 'object') {
                 params = actionOrParams;
             } else {
                 throw new Error('Parameters must be provided as an object or action string with parameters');
             }
 
-            console.log('Processed params:', params);
-
-            // Validate basic parameters
-            if (!params || typeof params !== 'object') {
-                throw new Error('Parameters must be provided as an object');
+            // Ensure we have a description
+            const description = params.description || (params.parameters && params.parameters.find(p => p.name === 'description')?.value);
+            if (!description) {
+                throw new Error('Description is required for generating a tool');
             }
 
             const action = params.action || 'generateTool';
 
             switch (action) {
-                // ... existing cases ...
-
                 case 'generateTool': {
                     const {
-                        description,
                         contextPrompt,
-                        constraints,
+                        constraints = {
+                            inputTypes: [],
+                            outputTypes: [],
+                            complexity: 'moderate',
+                            coverage: ['happy', 'error']
+                        },
                         context,
                         capabilities,
                         save = false
                     } = params;
 
-                    if (!description) {
-                        throw new Error('Description is required for generating a tool');
-                    }
-
-                    // Generate examples
+                    // Generate examples with default constraints
                     const examples = this.generateExamples(description, contextPrompt, constraints);
 
                     // Generate tool name from description
                     const toolName = this._generateToolName(description);
+                    if (!toolName || typeof toolName !== 'string' || toolName.length === 0) {
+                        throw new Error('Failed to generate valid tool name');
+                    }
 
                     // Generate capabilities if not explicitly provided
                     const finalCapabilities = capabilities || this._generateCapabilities(description, constraints);
@@ -935,8 +760,7 @@ ${tools.map(t => `- ${t.name}: ${t.description}`).join('\n')}`;
                         examples,
                         capabilities: finalCapabilities,
                         context,
-                        filePath,
-                        message: `Tool '${toolName}' generated successfully.`
+                        filePath
                     };
                 }
 
