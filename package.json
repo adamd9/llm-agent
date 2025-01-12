@@ -9,7 +9,6 @@
         "dev": "DEBUG=llm-agent:* node src/index.js"
     },
     "dependencies": {
-        "axios": "^0.21.1",
         "body-parser": "^1.20.2",
         "debug": "^4.3.4",
         "dotenv": "^16.0.3",

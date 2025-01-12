@@ -79,49 +79,49 @@ Format your response as JSON:
  */
 async function getEvaluation(prompt) {
     const openai = getOpenAIClient();
-    const response = await openai.chat.completions.create({
-        model: process.env.OPENAI_MODEL || "gpt-4",
+    const messages = [{
+        role: "system",
+        content: "You are an expert evaluator that assesses task execution results. You must respond with valid JSON. Always respond in valid JSON format."
+    }, {
+        role: "user",
+        content: prompt
+    }];
+    const response = await openai.chat(messages, {
+        model: 'gpt-4o-mini',
         response_format: {
             "type": "json_schema",
             "json_schema": {
-              "name": "evaluation",
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "score": {
-                    "type": "number",
-                    "description": "The evaluation score as a numeric value, typically percentage-based."
-                  },
-                  "recommendations": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
+                "name": "evaluation",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "score": {
+                            "type": "number",
+                            "description": "The evaluation score as a numeric value, typically percentage-based."
+                        },
+                        "recommendations": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "A list of recommendations for improving the execution."
+                        },
+                        "analysis": {
+                            "type": "string",
+                            "description": "Detailed analysis or textual feedback on the execution."
+                        }
                     },
-                    "description": "A list of recommendations for improving the execution."
-                  },
-                  "analysis": {
-                    "type": "string",
-                    "description": "Detailed analysis or textual feedback on the execution."
-                  }
+                    "required": ["score", "recommendations", "analysis"],
+                    "additionalProperties": false
                 },
-                "required": ["score", "recommendations", "analysis"],
-                "additionalProperties": false
-              },
-              "strict": true
+                "strict": true
             }
-          },
-        messages: [{
-            role: "system",
-            content: "You are an expert evaluator that assesses task execution results. Always respond in valid JSON format."
-        }, {
-            role: "user",
-            content: prompt
-        }],
-        temperature: 0.3,
+        },
+        temperature: 0.7,
         max_tokens: 1000
     });
 
-    return response.choices[0].message.content;
+    return response.content;
 }
 
 module.exports = { evaluator };

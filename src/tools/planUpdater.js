@@ -36,41 +36,36 @@ class PlanUpdaterTool {
         const shortTermMemory = await memory.retrieveShortTerm();
         
         // Build prompt for OpenAI
-        const messages = [
-            {
-                role: 'system',
-                content: `You are a plan evaluation assistant. Your job is to:
-                1. Analyze the current plan and execution state
-                2. Identify any dependencies or conflicts
-                3. Determine if the plan needs updating
-                4. If needed, provide an updated plan with the next step to execute
-                
-                Return your response as a JSON object with the following structure:
-                {
-                    "needs_update": boolean,
-                    "reason": string,
-                    "updated_plan": object (only if needs_update is true),
-                    "next_step_index": number (this should be the index of the next step to execute, the one immediately after the current planUpdate step. Index beings at 0)
-                }`
-            },
-            {
-                role: 'user',
-                content: `Current Plan: ${JSON.stringify(plan)}
+        const prompt = `Current Plan: ${JSON.stringify(plan)}
                 Current Step: ${currentStepNumber}
                 Execution History: ${JSON.stringify(shortTermMemory)}
                 
                 Please analyze this plan and determine if it needs updating. Pay special attention to:
                 - Dependencies between steps
                 - Required inputs that will be generated in previous steps
-                - Any conflicts or issues based on the execution history`
+                - Any conflicts or issues based on the execution history`;
+
+        const messages = [
+            {
+                role: 'system',
+                content: `You are a plan evaluator and updater. Your role is to assess whether a plan needs updating based on new information and execution results. You must respond with valid JSON.
+
+Remember:
+1. Only suggest updates if truly necessary
+2. Consider both success and failure scenarios
+3. Maintain consistency with original goals
+4. Be specific about why updates are needed`
+            },
+            {
+                role: 'user',
+                content: prompt
             }
         ];
 
         try {
             const openai = getOpenAIClient();
-            const response = await openai.chat.completions.create({
+            const response = await openai.chat(messages, {
                 model: 'gpt-4o-mini',
-                messages: messages,
                 response_format: {
                     type: "json_schema",
                     json_schema: {
@@ -125,12 +120,11 @@ class PlanUpdaterTool {
                         additionalProperties: false
                     }
                 },
-                temperature: 0.2, // Low temperature for more consistent logical analysis
-                max_tokens: 1500,
-                response_format: { type: "json_object" }
+                temperature: 0.7,
+                max_tokens: 1000
             });
 
-            const evaluation = JSON.parse(response.choices[0].message.content);
+            const evaluation = JSON.parse(response.content);
             
             logger.debug('PlanUpdaterTool', 'Evaluation for update result:', evaluation);
 

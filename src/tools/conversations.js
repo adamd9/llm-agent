@@ -69,15 +69,14 @@ class ConversationTool {
 
         logger.debug('conversationTool', 'conversationTool messages being sent to OpenAI', { messages }, false);
         const openai = getOpenAIClient();
-        const response = await openai.chat.completions.create({
+        const response = await openai.chat(messages, {
             model: 'gpt-4o-mini',
-            messages: messages,
             temperature: 0.7,
             max_tokens: 1000
         });
 
         logger.debug('conversationTool', 'conversationTool message OpenAI response', { response }, false);
-        const receivedMessage = response.choices[0].message.content;
+        const receivedMessage = response.content;
         return { status: 'success', message: `Response: ${receivedMessage}` };
     }
 

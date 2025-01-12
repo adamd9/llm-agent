@@ -224,6 +224,23 @@ class Ego {
             if (evaluation.recommendations && evaluation.recommendations.length > 0) {
                 evalMessage += `\nSuggested improvements:\n${evaluation.recommendations.map(r => `• ${r}`).join('\n')}`;
             }
+            
+            // Add plan information in a readable format
+            const plan = JSON.parse(planResult.plan);
+            evalMessage += '\n\nExecuted Plan:';
+            plan.forEach((step, index) => {
+                evalMessage += `\n${index + 1}. ${step.tool}.${step.action}`;
+                if (step.parameters && step.parameters.length > 0) {
+                    evalMessage += '\n   Parameters:';
+                    step.parameters.forEach(param => {
+                        evalMessage += `\n   - ${param.name}: ${param.value}`;
+                    });
+                }
+                if (step.description) {
+                    evalMessage += `\n   Description: ${step.description}`;
+                }
+            });
+            
             await sharedEventEmitter.emit('assistantWorking', {
                 message: evalMessage,
                 persistent: true
@@ -307,15 +324,14 @@ async handleBubble(input, extraInstruction) {
 
     logger.debug('handleBubble', 'Bubble messages being sent to OpenAI', { messages }, false);
     const openai = getOpenAIClient();
-    const response = await openai.chat.completions.create({
+    const response = await openai.chat(messages, {
         model: 'gpt-4o-mini',
-        messages: messages,
         temperature: 0.7,
         max_tokens: 1000
     });
 
     logger.debug('handleBubble', 'Bubble message OpenAI response', { response }, false);
-    const assistantMessage = response.choices[0].message.content;
+    const assistantMessage = response.content;
     await memory.storeShortTerm('Assistant response', assistantMessage);
     await sharedEventEmitter.emit('assistantResponse', assistantMessage);
 }

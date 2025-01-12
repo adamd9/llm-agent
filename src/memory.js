@@ -99,8 +99,12 @@ class Memory {
         If it doesn't fit, suggest a unique, single word category: ${dataString}`;
 
     try {
-      const response = await this.openaiClient.chat.completions.create({
-        model: "gpt-4o-mini",
+      const messages = [
+        { role: "system", content: "You are a categorization assistant. You must respond with valid JSON." },
+        { role: "user", content: userPrompt },
+      ];
+      const response = await this.openaiClient.chat(messages, {
+        model: 'gpt-4o-mini',
         response_format: {
           "type": "json_schema",
           "json_schema": {
@@ -126,15 +130,10 @@ class Memory {
             "strict": true
           }
         },
-        messages: [
-          { role: "system", content: "You are a categorization assistant." },
-          { role: "user", content: userPrompt },
-        ],
         temperature: 0.7,
-        max_tokens: 10,
+        max_tokens: 10
       });
-
-      const category = JSON.parse(response.choices[0].message.content).category.name.trim();
+      const category = JSON.parse(response.content).category.name.trim();
       logger.debug("Memory", "Categorized long term memory", { dataString, category });
 
       const filePath = path.join(longTermPath, `${category}.txt`);
@@ -171,8 +170,16 @@ class Memory {
 
     try {
       // First LLM call to determine relevant subjects to check
-      let completion = await this.openaiClient.chat.completions.create({
-        model: "gpt-4o-mini",
+      const messages = [
+        {
+          role: "system",
+          content:
+            "You are a component of an artificial long-term memory system. Your role is to intelligently categorize and determine relevant subjects in response to queries, enabling efficient retrieval of stored information. You must respond with valid JSON. Leverage your ability to analyze context and identify subject matter relevance accurately.",
+        },
+        { role: "user", content: initialPrompt },
+      ];
+      let completion = await this.openaiClient.chat(messages, {
+        model: 'gpt-4o-mini',
         response_format: {
           "type": "json_schema",
           "json_schema": {
@@ -201,26 +208,18 @@ class Memory {
             "strict": true
           }
         },
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a component of an artificial long-term memory system. Your role is to intelligently categorize and determine relevant subjects in response to queries, enabling efficient retrieval of stored information. Leverage your ability to analyze context and identify subject matter relevance accurately.",
-          },
-          { role: "user", content: initialPrompt },
-        ],
         temperature: 0.7,
-        max_tokens: 100,
+        max_tokens: 100
       });
 
       logger.debug(
         "Memory",
         "Initial long-term memory retrieval OpenAI response",
-        completion.choices[0].message.content
+        completion.content
       );
 
       // Retrieve relevant subjects from LLM response
-      const relevantSubjects = JSON.parse(completion.choices[0].message.content).categories;
+      const relevantSubjects = JSON.parse(completion.content).categories;
       // Read content from relevant files
       let consolidatedContent = "";
       for (const subject of relevantSubjects) {
@@ -243,21 +242,39 @@ class Memory {
       The ordering of content is important. Do not change the order of the content.
       If later lines appear to supercede earlier lines, make a note in brackets to indicate this, but otherwise return the content in the order it was provided to you.
       The question or query is: "${question}".\n\nTotal potential content:\n${consolidatedContent}`;
-      completion = await this.openaiClient.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an analog to a humans long term memory system. Your role is to intelligently retrieve information from your long term memory. Leverage your ability to analyze context and identify subject matter relevance accurately.",
-          },
-          { role: "user", content: finalPrompt },
-        ],
+      const messages2 = [
+        {
+          role: "system",
+          content:
+            "You are an analog to a human's long term memory system. Your role is to intelligently retrieve information from your long term memory. You must respond with valid JSON. Leverage your ability to analyze context and identify subject matter relevance accurately.",
+        },
+        { role: "user", content: finalPrompt },
+      ];
+      completion = await this.openaiClient.chat(messages2, {
+        model: 'gpt-4o-mini',
         temperature: 0.7,
         max_tokens: 1000,
+        response_format: {
+          "type": "json_schema",
+          "json_schema": {
+            "name": "memory_response",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "response": {
+                  "type": "string",
+                  "description": "The retrieved memory content in order"
+                }
+              },
+              "required": ["response"],
+              "additionalProperties": false
+            },
+            "strict": true
+          }
+        }
       });
 
-      const answer = completion.choices[0].message.content.trim();
+      const answer = JSON.parse(completion.content).response.trim();
       return answer;
     } catch (error) {
       logger.debug("Memory", "Error retrieving long-term memory", {
