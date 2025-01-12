@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <title>AI Agent Chat Interface</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="data:,">
     <style>
         body {
@@ -15,18 +15,23 @@
             overflow: hidden;
         }
 
+        #main-container {
+            display: flex;
+            height: calc(100% - 60px);
+            flex-direction: row;
+        }
+
         #chat-container {
-            flex-grow: 1;
+            flex: 7;
             border: 1px solid #ccc;
             padding: 20px;
             margin: 20px 10px 10px 20px;
             overflow-y: auto;
             background: #f9f9f9;
-            width: calc(70% - 50px);
         }
 
         #output-container {
-            width: calc(30% - 30px);
+            flex: 3;
             margin: 20px 20px 10px 0;
             background-color: #1e1e1e;
             color: #a8e6cf;
@@ -34,6 +39,7 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
         }
 
         #output-container h3 {
@@ -78,6 +84,7 @@
             min-height: 60px;
             opacity: 0;
             transition: opacity 0.3s ease-in-out;
+            overflow-y: auto;
         }
 
         #status-output.visible {
@@ -90,22 +97,68 @@
             justify-content: flex-start;
         }
 
+        #input-container {
+            padding: 10px 20px;
+            background: #fff;
+            border-top: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #message-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+            min-width: 0;
+        }
+
+        #send-button, #debug-toggle {
+            padding: 12px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            white-space: nowrap;
+        }
+
+        #send-button {
+            width: 80px;
+        }
+
+        #debug-toggle {
+            width: 120px;
+            background: #666;
+        }
+
+        #send-button:hover {
+            background: #0056b3;
+        }
+
+        #debug-toggle:hover {
+            background: #555;
+        }
+
         .message {
             margin: 10px 0;
-            padding: 10px;
-            border-radius: 5px;
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 80%;
+            word-wrap: break-word;
         }
 
         .user-message {
             background: #e3f2fd;
-            margin-left: 20%;
-            width: 600px;
+            margin-left: auto;
         }
 
         .agent-message {
-            background: #f5f5f5;
-            margin-right: 20%;
-            width: 600px;
+            background: white;
+            margin-right: auto;
         }
 
         .error-message {
@@ -124,6 +177,7 @@
             padding: 10px;
             margin-top: 5px;
             border-radius: 3px;
+            display: none;
         }
 
         .debug-message span.title {
@@ -135,40 +189,13 @@
             overflow-y: scroll;
         }
 
-        .debug-message {
-            display: none;
-        }
-
-        #input-container {
-            display: flex;
-            height: 44px;
-            gap: 10px;
-            padding: 10px 20px 20px 20px;
-        }
-
-        #message-input {
-            flex-grow: 1;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-
-        button {
-            padding: 10px 20px;
-            background: #2196f3;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-
-        button:hover {
-            background: #1976d2;
-        }
-
         #debug-toggle {
             background: #666;
             margin-left: 10px;
+        }
+
+        #debug-toggle:hover {
+            background: #555;
         }
 
         .debug-container {
@@ -187,11 +214,72 @@
             font-size: 0.9em;
             white-space: pre-wrap;
         }
+
+        @media (max-width: 768px) {
+            #main-container {
+                flex-direction: column;
+            }
+
+            #chat-container {
+                flex: 1;
+                margin: 10px;
+                max-height: 60vh;
+            }
+
+            #output-container {
+                flex: none;
+                margin: 0 10px 10px 10px;
+                max-height: 30vh;
+            }
+
+            #input-container {
+                padding: 10px;
+                gap: 8px;
+            }
+
+            #message-input {
+                padding: 10px;
+            }
+
+            #send-button, #debug-toggle {
+                width: auto;
+                min-width: 60px;
+                padding: 10px;
+                font-size: 14px;
+            }
+
+            .message {
+                max-width: 90%;
+                padding: 12px;
+            }
+
+            #input-container {
+                padding: 10px;
+            }
+
+            #send-button {
+                padding: 10px;
+            }
+
+            .debug-container {
+                margin: 5px;
+                max-height: 150px;
+            }
+
+            .debug-message {
+                font-size: 0.8em;
+                padding: 8px;
+            }
+
+            #debug-toggle {
+                padding: 10px;
+                font-size: 14px;
+            }
+        }
     </style>
 </head>
-
 <body>
-    <div style="display: flex; height: calc(100% - 60px);">
+    <div id="main-container">
         <div id="chat-container"></div>
         <div id="output-container">
             <h3>
@@ -203,12 +291,10 @@
     </div>
     <div id="input-container">
         <input type="text" id="message-input" placeholder="Type your message...">
-        <button onclick="sendMessage()">Send</button>
+        <button id="send-button" onclick="sendMessage()">Send</button>
         <button id="debug-toggle" onclick="toggleDebug()">Toggle Debug</button>
     </div>
-    <div id="debug-container" class="debug-container" style="display: none;">
-        <pre id="debug-output" class="debug-output"></pre>
-    </div>
+    <div id="debug-container" class="debug-container"></div>
 
     <script>
         let ws;
