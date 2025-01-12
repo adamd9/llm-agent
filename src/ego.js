@@ -135,8 +135,7 @@ class Ego {
         // Get plan from planner
         const planResult = await planner(enrichedMessage);
         logger.debug('executeWithEvaluation', 'Planner result', { planResult });
-        await memory.storeLongTerm('Planner result', { planResult });
-
+        await memory.storeLongTerm({ type: 'Planner result', data: planResult });
 
         if (planResult.status === 'error') {
             logger.debug('executeWithEvaluation', 'Planning failed', { error: planResult.error });
