@@ -225,7 +225,18 @@ class Ego {
             
             // Add plan information in a readable format
             const plan = JSON.parse(planResult.plan);
-            evalMessage += '\n\nExecuted Plan:';
+            const correlationId = `exec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            
+            // Log detailed execution results for debugging
+            logger.debug('execution_results', {
+                correlationId,
+                plan,
+                executionResult,
+                evaluation
+            });
+            
+            evalMessage += `\n\nExecution ID: ${correlationId}`;
+            evalMessage += '\nExecuted Plan:';
             plan.forEach((step, index) => {
                 evalMessage += `\n${index + 1}. ${step.tool}.${step.action}`;
                 if (step.parameters && step.parameters.length > 0) {
@@ -237,11 +248,36 @@ class Ego {
                 if (step.description) {
                     evalMessage += `\n   Description: ${step.description}`;
                 }
+                
+                // Add execution result for this step if available
+                const stepResult = executionResult.response[index];
+                if (stepResult && stepResult.result) {
+                    evalMessage += '\n   Result:';
+                    if (stepResult.result.data && stepResult.result.data.message) {
+                        evalMessage += `\n   - ${stepResult.result.data.message}`;
+                    } else if (typeof stepResult.result.data === 'string') {
+                        evalMessage += `\n   - ${stepResult.result.data}`;
+                    } else {
+                        const resultData = stepResult.result.data;
+                        // Handle complex data structures more gracefully
+                        if (resultData && typeof resultData === 'object') {
+                            Object.entries(resultData).forEach(([key, value]) => {
+                                evalMessage += `\n   - ${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`;
+                            });
+                        } else {
+                            evalMessage += `\n   - ${JSON.stringify(resultData)}`;
+                        }
+                    }
+                    if (stepResult.result.status === 'error') {
+                        evalMessage += `\n   - Error: ${stepResult.result.error || 'Unknown error'}`;
+                    }
+                }
             });
             
             await sharedEventEmitter.emit('assistantWorking', {
                 message: evalMessage,
-                persistent: true
+                persistent: true,
+                correlationId  // Include correlation ID in the event
             });
         }
 
