@@ -9,7 +9,7 @@ const sharedEventEmitter = require('./utils/eventEmitter.js');
 const memory = require('./memory');
 
 // Configuration
-const MAX_RETRIES = 4;
+const MAX_RETRIES = 1;
 const EVALUATION_THRESHOLD = 80; // Score threshold for success
 
 class Ego {
@@ -135,7 +135,6 @@ class Ego {
         // Get plan from planner
         const planResult = await planner(enrichedMessage);
         logger.debug('executeWithEvaluation', 'Planner result', { planResult });
-        await memory.storeLongTerm({ type: 'Planner result', data: planResult });
 
         if (planResult.status === 'error') {
             logger.debug('executeWithEvaluation', 'Planning failed', { error: planResult.error });

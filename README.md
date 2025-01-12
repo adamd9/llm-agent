@@ -65,6 +65,117 @@ This feedback system allows for iterative improvement while maintaining user eng
   - Use sensible defaults where possible
   - Don't assume perfect parameter formatting from the executor
 
+#### Tool Generator
+The Tool Generator is a specialized tool for creating new tools within the system. It leverages the agent's capabilities to understand natural language descriptions and generate appropriate test cases.
+
+##### Core Capabilities
+1. **Natural Language Processing**
+   - Processes natural language descriptions of desired tool functionality
+   - Extracts key parameters, actions, and requirements
+   - Generates formal tool specifications
+
+2. **Example Generation**
+   - Agent analyzes tool description to generate realistic test cases
+   - Creates diverse input scenarios covering edge cases
+   - Provides expected outputs for validation
+   - Supports both simple and complex data structures
+
+3. **Tool Validation**
+   - Ensures compliance with tool interface requirements
+   - Validates parameter types and requirements
+   - Verifies proper method implementation
+   - Checks documentation completeness
+
+4. **Template Generation**
+   - Creates standardized tool code structure
+   - Implements required methods (execute, getCapabilities)
+   - Generates parameter validation
+   - Adds error handling and logging
+
+5. **Documentation Generation**
+   - Creates JSDoc comments
+   - Generates usage examples
+   - Documents parameters and types
+   - Provides capability descriptions
+
+##### Interface
+```typescript
+interface ToolGeneratorParams {
+  description: string;           // Natural language description of tool
+  contextPrompt?: string;       // Additional context for example generation
+  constraints?: {               // Optional constraints for example generation
+    inputTypes?: string[];      // Expected input data types
+    outputTypes?: string[];     // Expected output data types
+    complexity?: 'simple' | 'moderate' | 'complex';
+    coverage?: string[];        // Specific cases to cover
+  };
+  context?: {                   // Optional context information
+    relatedTools?: string[];    // Related tool names
+    dependencies?: string[];    // Required dependencies
+    tags?: string[];           // Categorization tags
+  };
+  capabilities?: {              // Optional explicit capabilities
+    actions?: {
+      name: string;
+      description: string;
+      parameters: Parameter[];
+    }[];
+  };
+}
+
+interface GeneratedExample {
+  input: any;
+  expectedOutput: any;
+  description: string;          // Explanation of what this example tests
+  coverage: string[];          // What aspects this example covers
+}
+```
+
+##### Usage Example
+```javascript
+const result = await toolGenerator.execute({
+  description: "Create a tool that can compress images while maintaining quality",
+  contextPrompt: "Focus on common image formats like JPEG and PNG, with quality settings",
+  constraints: {
+    inputTypes: ['file', 'number'],
+    outputTypes: ['file'],
+    complexity: 'moderate',
+    coverage: ['quality_settings', 'file_formats', 'error_handling']
+  },
+  context: {
+    relatedTools: ["fileSystem"],
+    dependencies: ["sharp"],
+    tags: ["image", "compression"]
+  }
+});
+```
+
+The tool will automatically generate appropriate test examples based on the description and constraints, such as:
+```javascript
+{
+  examples: [
+    {
+      input: { path: "image.jpg", quality: 0.8 },
+      expectedOutput: { success: true, newPath: "image-compressed.jpg" },
+      description: "Standard JPEG compression with good quality",
+      coverage: ["quality_settings", "jpeg_format"]
+    },
+    {
+      input: { path: "image.png", quality: 0.9 },
+      expectedOutput: { success: true, newPath: "image-compressed.png" },
+      description: "PNG compression with high quality retention",
+      coverage: ["quality_settings", "png_format"]
+    },
+    {
+      input: { path: "nonexistent.jpg", quality: 0.8 },
+      expectedOutput: { success: false, error: "File not found" },
+      description: "Error handling for missing input file",
+      coverage: ["error_handling"]
+    }
+  ]
+}
+```
+
 ### Conversations Tool
 - A new tool has been added in `src/tools/conversations.js` to handle conversations generically.
 - The tool includes methods for `request`, `response`, `getCapabilities`, and `execute`.
