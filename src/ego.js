@@ -99,7 +99,13 @@ class Ego {
 
             const result = await this.executeWithEvaluation(enrichedMessage, sessionHistory);
 
-            this.handleBubble(result, 'As long as the evaluation score was greater than 80, just respond using the contents of the response object. If less than 80, include a summary of the analysis and suggestions for how to improve.');
+            logger.debug('process', 'Execution complete', { result });
+
+            this.handleBubble(result, `Your original request was: "${enrichedMessage.original_message}"
+
+As long as the evaluation score was greater than 80, respond naturally to the original request using the execution results. If less than 80, include a summary of the analysis and suggestions for how to improve.
+
+Remember to maintain conversation continuity with the original request.`);
             return;
         } catch (error) {
             logger.debug('process', 'Error processing message', {
