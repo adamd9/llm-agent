@@ -251,15 +251,7 @@ Important:
 
                         if (save) {
                             const toolName = await this._generateToolName(description);
-                            const finalPath = path.join(this.dataToolsDir, `${toolName}.js`);
-                            
-                            // Ensure directory exists
-                            if (!fs.existsSync(this.dataToolsDir)) {
-                                fs.mkdirSync(this.dataToolsDir, { recursive: true });
-                            }
-                            
-                            // Write the file
-                            fs.writeFileSync(finalPath, code, 'utf8');
+                            const finalPath = await this._saveToolToFile(toolName, code);
                             
                             return {
                                 status: 'success',
@@ -445,8 +437,17 @@ Important:
             fs.mkdirSync(this.dataToolsDir, { recursive: true });
         }
 
-        // Always use .js extension since we're generating JavaScript tools
-        const fileName = `${toolName.toLowerCase()}.js`;
+        // Extract class name from code
+        const classMatch = code.match(/class\s+(\w+)/);
+        if (!classMatch) {
+            throw new Error('Could not find class name in generated code');
+        }
+
+        // Convert PascalCase class name to lowercase
+        const fileName = classMatch[1].replace(/([A-Z])/g, (match, letter, offset) => {
+            return offset === 0 ? letter.toLowerCase() : letter.toLowerCase();
+        }) + '.js';
+
         const filePath = path.join(this.dataToolsDir, fileName);
         
         // Ensure code is a string
@@ -609,12 +610,34 @@ ${tools.map(t => `- ${t.name}: ${t.description}`).join('\n')}`;
             required: input.required !== false // Default to true unless explicitly set to false
         })) || [];
 
-        // Generate action name based on description
-        const actionName = description.toLowerCase()
-            .replace(/\s+/g, '_')
-            .replace(/[^a-z0-9_]/g, '')
-            .replace(/_+/g, '_')
-            .replace(/^_|_$/g, '');
+        // Generate action name by extracting key verbs and nouns
+        const openai = getOpenAIClient();
+        const prompt = `Given this tool description: "${description}"
+Generate a short, clear action name following these rules:
+1. Use 1-2 words maximum
+2. Start with a verb in camelCase (e.g. get, create, update, delete)
+3. Add a noun only if needed for clarity
+4. Keep it simple and intuitive
+5. Examples:
+   - "A tool that returns a random hex color" -> "getColor"
+   - "A tool that compresses image files" -> "compressImage"
+   - "A tool that validates JSON data" -> "validateJson"
+   - "A tool that generates random numbers" -> "generateNumber"
+
+Return ONLY the action name, nothing else.`;
+
+        const response = await openai.chat([
+            { 
+                role: 'system', 
+                content: 'You are an expert at creating clear, concise function names. Only respond with the exact function name, no explanation.' 
+            },
+            { role: 'user', content: prompt }
+        ], {
+            model: 'gpt-4o-mini',
+            temperature: 0.2
+        });
+
+        const actionName = response.content.trim();
 
         return {
             actions: [
