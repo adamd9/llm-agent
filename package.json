@@ -6,7 +6,7 @@
         "start": "DEBUG=llm-agent:* node src/index.js",
         "test": "jest",
         "test:watch": "jest --watch",
-        "dev": "DEBUG=llm-agent:* node src/index.js"
+        "dev": "DEBUG=llm-agent:* nodemon --watch src --watch public --ext js,html,css src/index.js"
     },
     "dependencies": {
         "body-parser": "^1.20.2",
@@ -20,6 +20,7 @@
     },
     "devDependencies": {
         "jest": "^29.7.0",
+        "nodemon": "^2.0.22",
         "supertest": "^6.3.3"
     }
 }

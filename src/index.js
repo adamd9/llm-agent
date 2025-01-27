@@ -20,7 +20,7 @@ const wsConnections = new Map();
 logger.setWSConnections(wsConnections);
 
 // Initialize ego instance
-const ego = new Ego(["conversation", "file-system"]);
+const ego = new Ego(["llmquery", "file-system"]);
 
 async function startServer() {
   await ego.initialize();
