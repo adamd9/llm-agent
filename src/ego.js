@@ -216,70 +216,70 @@ class Ego {
 
         logger.debug('executeWithEvaluation', 'Execution complete, returning final response', { response });
 
-        // Emit evaluation results as a working status
-        if (evaluation.score < 100) {
-            let evalMessage = `Score: ${evaluation.score}%\n`;
-            if (evaluation.recommendations && evaluation.recommendations.length > 0) {
-                evalMessage += `\nSuggested improvements:\n${evaluation.recommendations.map(r => `• ${r}`).join('\n')}`;
+        // Always emit evaluation results as a working status
+        let evalMessage = `Score: ${evaluation.score}%\n`;
+        if (evaluation.score === 100) {
+            evalMessage += '\n✨ Perfect execution! All requirements met.';
+        } else if (evaluation.recommendations && evaluation.recommendations.length > 0) {
+            evalMessage += `\nSuggested improvements:\n${evaluation.recommendations.map(r => `• ${r}`).join('\n')}`;
+        }
+        
+        // Add plan information in a readable format
+        const plan = JSON.parse(planResult.plan);
+        const correlationId = `exec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Log detailed execution results for debugging
+        logger.debug('execution_results', {
+            correlationId,
+            plan,
+            executionResult,
+            evaluation
+        });
+        
+        evalMessage += `\n\nExecution ID: ${correlationId}`;
+        evalMessage += '\nExecuted Plan:';
+        plan.forEach((step, index) => {
+            evalMessage += `\n${index + 1}. ${step.tool}.${step.action}`;
+            if (step.parameters && step.parameters.length > 0) {
+                evalMessage += '\n   Parameters:';
+                step.parameters.forEach(param => {
+                    evalMessage += `\n   - ${param.name}: ${param.value}`;
+                });
+            }
+            if (step.description) {
+                evalMessage += `\n   Description: ${step.description}`;
             }
             
-            // Add plan information in a readable format
-            const plan = JSON.parse(planResult.plan);
-            const correlationId = `exec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-            
-            // Log detailed execution results for debugging
-            logger.debug('execution_results', {
-                correlationId,
-                plan,
-                executionResult,
-                evaluation
-            });
-            
-            evalMessage += `\n\nExecution ID: ${correlationId}`;
-            evalMessage += '\nExecuted Plan:';
-            plan.forEach((step, index) => {
-                evalMessage += `\n${index + 1}. ${step.tool}.${step.action}`;
-                if (step.parameters && step.parameters.length > 0) {
-                    evalMessage += '\n   Parameters:';
-                    step.parameters.forEach(param => {
-                        evalMessage += `\n   - ${param.name}: ${param.value}`;
-                    });
-                }
-                if (step.description) {
-                    evalMessage += `\n   Description: ${step.description}`;
-                }
-                
-                // Add execution result for this step if available
-                const stepResult = executionResult.response[index];
-                if (stepResult && stepResult.result) {
-                    evalMessage += '\n   Result:';
-                    if (stepResult.result.data && stepResult.result.data.message) {
-                        evalMessage += `\n   - ${stepResult.result.data.message}`;
-                    } else if (typeof stepResult.result.data === 'string') {
-                        evalMessage += `\n   - ${stepResult.result.data}`;
+            // Add execution result for this step if available
+            const stepResult = executionResult.response[index];
+            if (stepResult && stepResult.result) {
+                evalMessage += '\n   Result:';
+                if (stepResult.result.data && stepResult.result.data.message) {
+                    evalMessage += `\n   - ${stepResult.result.data.message}`;
+                } else if (typeof stepResult.result.data === 'string') {
+                    evalMessage += `\n   - ${stepResult.result.data}`;
+                } else {
+                    const resultData = stepResult.result.data;
+                    // Handle complex data structures more gracefully
+                    if (resultData && typeof resultData === 'object') {
+                        Object.entries(resultData).forEach(([key, value]) => {
+                            evalMessage += `\n   - ${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`;
+                        });
                     } else {
-                        const resultData = stepResult.result.data;
-                        // Handle complex data structures more gracefully
-                        if (resultData && typeof resultData === 'object') {
-                            Object.entries(resultData).forEach(([key, value]) => {
-                                evalMessage += `\n   - ${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`;
-                            });
-                        } else {
-                            evalMessage += `\n   - ${JSON.stringify(resultData)}`;
-                        }
-                    }
-                    if (stepResult.result.status === 'error') {
-                        evalMessage += `\n   - Error: ${stepResult.result.error || 'Unknown error'}`;
+                        evalMessage += `\n   - ${JSON.stringify(resultData)}`;
                     }
                 }
-            });
-            
-            await sharedEventEmitter.emit('assistantWorking', {
-                message: evalMessage,
-                persistent: true,
-                correlationId  // Include correlation ID in the event
-            });
-        }
+                if (stepResult.result.status === 'error') {
+                    evalMessage += `\n   - Error: ${stepResult.result.error || 'Unknown error'}`;
+                }
+            }
+        });
+        
+        await sharedEventEmitter.emit('assistantWorking', {
+            message: evalMessage,
+            persistent: true,
+            correlationId
+        });
 
         // Extract and return just the final task response
         let finalResponse;
