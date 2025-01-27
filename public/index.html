@@ -138,6 +138,10 @@
             border-radius: 4px;
             font-size: 16px;
             min-width: 0;
+            resize: none;
+            min-height: 50px;
+            max-height: 150px;
+            overflow-y: auto;
         }
 
         #send-button, #debug-toggle {
@@ -318,7 +322,7 @@
         </div>
     </div>
     <div id="input-container">
-        <input type="text" id="message-input" placeholder="Type your message...">
+        <textarea id="message-input" placeholder="Type your message... (Shift+Enter for new line)"></textarea>
         <button id="send-button" onclick="sendMessage()">Send</button>
         <button id="debug-toggle" onclick="toggleDebug()">Toggle Debug</button>
     </div>
@@ -569,8 +573,13 @@
         document.getElementById('message-input').focus();
 
         // Handle Enter key
-        document.getElementById('message-input').addEventListener('keypress', function (e) {
+        document.getElementById('message-input').addEventListener('keydown', function (e) {
             if (e.key === 'Enter') {
+                if (e.shiftKey) {
+                    // Allow the default behavior for Shift+Enter (new line)
+                    return;
+                }
+                e.preventDefault();
                 sendMessage();
             }
         });
