@@ -16,7 +16,7 @@ class ToolGenerator {
     }
 
     /** @returns {import('../types/tool').ToolCapabilities} */
-    getCapabilities() {
+    getCapabilities(toolName) {
         return {
             name: this.name,
             description: this.description,
@@ -39,7 +39,7 @@ class ToolGenerator {
                         },
                         {
                             name: 'save',
-                            description: 'Whether to save the tool to disk',
+                            description: 'Whether to save the generated tool to disk',
                             type: 'boolean',
                             required: false
                         }
@@ -60,12 +60,6 @@ class ToolGenerator {
                             description: 'Updates to apply to the tool',
                             type: 'object',
                             required: true
-                        },
-                        {
-                            name: 'contextPrompt',
-                            description: 'Additional context for tool update',
-                            type: 'string',
-                            required: false
                         }
                     ]
                 }
@@ -74,98 +68,138 @@ class ToolGenerator {
     }
 
     async _generateToolCode(description, examples, capabilities, maxRetries = 3) {
-        const openai = getOpenAIClient();
-        const prompt = 
-`Create a JavaScript tool that implements the following interface:
+        const prompt = `Create a JavaScript tool class that:
+1. Matches this description: ${description}
+2. Supports these capabilities: ${JSON.stringify(capabilities, null, 2)}
+3. Handles these example cases: ${JSON.stringify(examples, null, 2)}
 
-/**
- * @typedef {Object} Tool
- * @property {string} name - Tool name
- * @property {string} description - Tool description
- * @property {function(): Object} getCapabilities - Get tool capabilities
- * @property {function(string, any[]): Promise<{status: string, message?: string, error?: string}>} execute - Execute tool action
- */
+Important guidelines:
+1. ONLY use these approved dependencies:
+   - Native Node.js modules (fs, path, etc)
+   - Native fetch API for HTTP requests (no axios, request, etc)
+   - Already imported modules from relative paths
+2. For HTTP requests, use fetch like this:
+   await fetch(url, {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json' },
+     body: JSON.stringify(data)
+   });
+3. Parameters are passed as an array of objects with name/value pairs:
+   parameters = [
+     { name: 'paramName', value: paramValue }
+   ]
+   Always use parameters.find(p => p.name === 'name').value to get values
 
-The tool should:
-1. Implement the Tool interface using JSDoc @implements annotation
-2. Include proper error handling
-3. Return properly structured responses
-4. Match this description: ${description}
-5. Support these capabilities: ${JSON.stringify(capabilities, null, 2)}
-6. Handle these example cases: ${JSON.stringify(examples, null, 2)}
-
-Example structure:
+Required structure (copy this EXACTLY):
 /**
  * @implements {import('../types/tool').Tool}
  */
-class MyTool {
+class YourToolName {
     constructor() {
-        this.name = 'tool-name';
-        this.description = 'tool description';
+        this.name = 'toolName';  // Lowercase, no spaces
+        this.description = 'Tool description';  // Must be a string
     }
 
     getCapabilities() {
         return {
             name: this.name,
             description: this.description,
-            actions: [/* actions */]
+            actions: [
+                {
+                    name: 'actionName',  // Must match execute method
+                    description: 'Action description',
+                    parameters: []  // Add parameters as needed
+                }
+            ]
         };
     }
 
     async execute(action, parameters) {
-        // Implementation
+        try {
+            switch (action) {
+                case 'actionName': {
+                    // Get parameters by name from the parameters array
+                    const param1 = parameters.find(p => p.name === 'parameterName');
+                    if (!param1 || !param1.value) {
+                        return { status: 'error', error: 'Invalid input: parameterName is required' };
+                    }
+
+                    // Implementation using param1.value
+                    return { status: 'success', message: 'Success message' };
+                }
+                default:
+                    return { status: 'error', error: \`Unknown action: \${action}\` };
+            }
+        } catch (error) {
+            return { status: 'error', error: error.message };
+        }
     }
 }
 
-module.exports = new MyTool();
+module.exports = new YourToolName();
 
-Important:
-- Use proper TypeScript-style JSDoc annotations
-- Implement the Tool interface exactly
-- Return {status: 'success', message: string} for success
-- Return {status: 'error', error: string} for errors
-- Include all necessary imports
-- Make the tool practical and useful
-- Return ONLY the JavaScript code without any markdown formatting or explanation`;
+Requirements:
+1. Use CommonJS (require/module.exports), NOT ES modules (import/export)
+2. Return {status: 'success', message: string} for success
+3. Return {status: 'error', error: string} for errors
+4. Include proper error handling
+5. Use TypeScript-style JSDoc annotations
+6. Make the tool practical and useful
+7. Include all necessary imports at the top`;
 
         let attempts = 0;
         let lastError = null;
+        const strategies = [
+            { 
+                model: 'gpt-4o', 
+                temp: 0.2,
+                systemPrompt: 'You are a JavaScript developer expert in creating tools. Follow the template EXACTLY. Only return valid CommonJS JavaScript code with no markdown.'
+            },
+            { 
+                model: 'gpt-4o', 
+                temp: 0.1,
+                systemPrompt: 'You are a JavaScript developer expert in creating tools. Focus on matching the interface exactly. Only return valid CommonJS JavaScript code.'
+            },
+            { 
+                model: 'gpt-4o', 
+                temp: 0.1,
+                systemPrompt: 'You are a minimal JavaScript developer. Create the simplest possible implementation that matches the interface. Only use native fetch for HTTP requests.'
+            }
+        ];
 
         while (attempts < maxRetries) {
             try {
                 attempts++;
-                logger.debug('toolGenerator', `Attempt ${attempts} to generate tool code`);
+                const strategy = strategies[attempts - 1] || strategies[0];
+                logger.debug('toolGenerator', `Attempt ${attempts} to generate tool code using strategy:`, strategy);
 
-                const response = await openai.chat([
+                const openai = getOpenAIClient();
+                const messages = [
                     { 
                         role: 'system', 
-                        content: 'You are a JavaScript developer expert in creating tools for an AI agent system. Always return only the code without any markdown formatting or explanation.' 
+                        content: strategy.systemPrompt
                     },
-                    { 
-                        role: 'user', 
-                        content: prompt 
-                    },
-                    ...(lastError ? [{
+                    { role: 'user', content: prompt }
+                ];
+
+                if (lastError) {
+                    messages.push({
                         role: 'user',
-                        content: `Previous attempt failed validation with error: ${lastError}. Please fix these issues and try again.`
-                    }] : [])
-                ], {
-                    model: 'gpt-4o-mini',
-                    temperature: 0.7,
+                        content: `Previous attempt failed validation with error: ${lastError}. Please fix these issues and try again. Remember to only use native fetch for HTTP requests, no external libraries.`
+                    });
+                }
+
+                const response = await openai.chat(messages, {
+                    model: strategy.model,
+                    temperature: strategy.temp,
                     max_tokens: 1000
                 });
 
                 // Clean up the response
                 let code = response.content;
-                
-                // Remove markdown code blocks if present
                 code = code.replace(/```javascript\n?|\n?```/g, '');
-                
-                // Remove any explanatory text before or after the code
-                code = code.replace(/^[\s\S]*?(?=(?:const|class|let|var|import|\/\*\*))/, '');
+                code = code.replace(/^[\s\S]*?(?=(?:const|class|let|var|\/\*\*))/, '');
                 code = code.replace(/\/\/ Example Usage[\s\S]*$/, '');
-                
-                // Trim whitespace
                 code = code.trim();
 
                 // Create a temporary file for validation
@@ -177,16 +211,10 @@ Important:
                         fs.mkdirSync(this.dataToolsDir, { recursive: true });
                     }
 
-                    // Write code to temp file
                     fs.writeFileSync(tempFile, code, 'utf8');
-
-                    // Try to require the file to check for syntax errors
                     const tempModule = require(tempFile);
-                    
-                    // Validate the tool
                     const validation = validateTool(tempModule);
                     
-                    // Clean up temp file
                     fs.unlinkSync(tempFile);
                     delete require.cache[require.resolve(tempFile)];
 
@@ -207,7 +235,6 @@ Important:
                         throw error;
                     }
                 } finally {
-                    // Clean up temp file if it exists
                     if (fs.existsSync(tempFile)) {
                         fs.unlinkSync(tempFile);
                     }
@@ -250,7 +277,13 @@ Important:
                         const code = await this._generateToolCode(description, examples, capabilities);
 
                         if (save) {
-                            const toolName = await this._generateToolName(description);
+                            // Extract class name from code
+                            const classMatch = code.match(/class\s+(\w+)/);
+                            if (!classMatch) {
+                                throw new Error('Could not find class name in generated code');
+                            }
+                            const toolName = classMatch[1];
+                            
                             const finalPath = await this._saveToolToFile(toolName, code);
                             
                             return {
@@ -418,7 +451,7 @@ Important:
                 },
                 { role: 'user', content: prompt }
             ], {
-                model: 'gpt-4o-mini',
+                model: 'gpt-4o',
                 temperature: 0.7,
                 max_tokens: 1000
             });
@@ -437,17 +470,8 @@ Important:
             fs.mkdirSync(this.dataToolsDir, { recursive: true });
         }
 
-        // Extract class name from code
-        const classMatch = code.match(/class\s+(\w+)/);
-        if (!classMatch) {
-            throw new Error('Could not find class name in generated code');
-        }
-
-        // Convert PascalCase class name to lowercase
-        const fileName = classMatch[1].replace(/([A-Z])/g, (match, letter, offset) => {
-            return offset === 0 ? letter.toLowerCase() : letter.toLowerCase();
-        }) + '.js';
-
+        // Use the provided tool name for the filename
+        const fileName = toolName + '.js';
         const filePath = path.join(this.dataToolsDir, fileName);
         
         // Ensure code is a string
@@ -601,7 +625,7 @@ ${tools.map(t => `- ${t.name}: ${t.description}`).join('\n')}`;
      * Generate capabilities from description and constraints
      * @private
      */
-    _generateCapabilities(description, constraints) {
+    async _generateCapabilities(description, constraints) {
         // If constraints.inputTypes is provided, use it to generate parameters
         const parameters = constraints?.inputTypes?.map(input => ({
             name: input.name,
@@ -633,7 +657,7 @@ Return ONLY the action name, nothing else.`;
             },
             { role: 'user', content: prompt }
         ], {
-            model: 'gpt-4o-mini',
+            model: 'gpt-4o',
             temperature: 0.2
         });
 

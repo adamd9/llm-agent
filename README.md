@@ -89,14 +89,33 @@ The system uses a hybrid approach combining JSDoc type definitions and JSON Sche
     * @property {string} description
     * @property {function(): Object} getCapabilities
     * @property {function(string, any[]): Promise<Object>} execute
+    ```
+   ```javascript
+   /**
+    * @typedef {Object} ToolParameter
+    * @property {string} name
+    * @property {string} description
+    * @property {('string'|'number'|'boolean'|'array'|'object')} type
+    * @property {boolean} required
     */
-   ```
+
+   /**
+    * @typedef {Object} Tool
+    * @property {string} name
+    * @property {string} description
+    * @property {function(): Object} getCapabilities
+    * @property {function(string, any[]): Promise<Object>} execute
+    ```
 
 2. **JSON Schema Validation**
    - Runtime validation of tool interfaces
    - Validates tool structure and parameter types
    - Provides detailed error messages
    - Used by Tool Generator for validation
+   - OpenAI API response format requirements:
+     - Must include `name` property in JSON schema
+     - Uses `json_schema` format for response validation
+     - Enforces strict type checking and required fields
 
 3. **Validation Rules**
    - All tools must implement the standard interface
@@ -145,6 +164,15 @@ The Tool Generator is a specialized tool for creating new tools within the syste
    - Generates usage examples
    - Documents parameters and types
    - Provides capability descriptions
+
+6. **Dependency Management**
+   - Uses only approved dependencies to ensure reliability:
+     - Native Node.js modules (fs, path, etc)
+     - Native fetch API for HTTP requests
+     - Already imported modules from relative paths
+   - Provides clear guidance on HTTP request patterns
+   - Implements progressive retry strategies with different approaches
+   - Validates tool functionality without external dependencies
 
 ##### Interface
 ```typescript

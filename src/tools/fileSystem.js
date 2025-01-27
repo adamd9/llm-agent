@@ -197,23 +197,71 @@ class FileSystemTool {
 
     async listFiles(dirPath) {
         const validPath = this._validatePath(dirPath);
-        const items = await fs.readdir(validPath, { withFileTypes: true });
-        const files = await Promise.all(items.map(async item => {
-            const fullPath = path.join(validPath, item.name);
-            const stats = await fs.stat(fullPath);
-            return {
-                name: item.name,
-                path: fullPath,
-                type: item.isDirectory() ? 'directory' : 'file',
-                size: stats.size
-            };
-        }));
 
-        return {
-            status: 'success',
-            files,
-            path: validPath
-        };
+        async function getFilesRecursively(currentPath) {
+            try {
+                const items = await fs.readdir(currentPath, { withFileTypes: true });
+                const files = await Promise.all(items.map(async item => {
+                    const fullPath = path.join(currentPath, item.name);
+                    try {
+                        const stats = await fs.stat(fullPath);
+                        const result = {
+                            name: item.name,
+                            path: fullPath,
+                            type: item.isDirectory() ? 'directory' : 'file',
+                            size: stats.size,
+                            modifiedTime: stats.mtime
+                        };
+
+                        if (item.isDirectory()) {
+                            try {
+                                result.children = await getFilesRecursively(fullPath);
+                            } catch (dirError) {
+                                // If we can't read directory contents, mark it as inaccessible
+                                result.children = [];
+                                result.error = 'Directory not accessible';
+                            }
+                        }
+
+                        return result;
+                    } catch (statError) {
+                        // If we can't stat the file, return basic info
+                        return {
+                            name: item.name,
+                            path: fullPath,
+                            type: 'unknown',
+                            error: 'File not accessible'
+                        };
+                    }
+                }));
+
+                return files;
+            } catch (error) {
+                if (error.code === 'ENOENT') {
+                    // Directory doesn't exist, return empty array
+                    return [];
+                }
+                throw error; // Re-throw other errors
+            }
+        }
+
+        try {
+            // Ensure data directory exists
+            await fs.mkdir(validPath, { recursive: true });
+            const files = await getFilesRecursively(validPath);
+
+            return {
+                status: 'success',
+                files,
+                path: validPath
+            };
+        } catch (error) {
+            return {
+                status: 'error',
+                error: error.message,
+                path: validPath
+            };
+        }
     }
 
     async fileExists(filePath) {
@@ -241,13 +289,8 @@ class FileSystemTool {
             actions: [
                 {
                     name: 'list',
-                    description: 'List files in a directory',
-                    parameters: [{
-                        name: 'path',
-                        description: 'Path to list (defaults to data directory)',
-                        type: 'string',
-                        required: false
-                    }]
+                    description: 'List files in the data directory',
+                    parameters: []
                 },
                 {
                     name: 'read',

@@ -58,15 +58,32 @@ class ToolManager {
                             this.tools.set(tool.name, tool);
                             logger.debug('tools', `Successfully loaded and registered tool: ${tool.name}`);
                         } else {
-                            logger.error('tools', `Invalid tool in ${file}: missing required properties`);
+                            logger.error('tools', `Invalid tool in ${file}: missing required properties`, {
+                                name: tool?.name,
+                                description: tool?.description,
+                                hasExecute: typeof tool?.execute === 'function',
+                                hasCapabilities: typeof tool?.getCapabilities === 'function'
+                            });
                         }
                     } catch (error) {
-                        logger.error('tools', `Error loading tool ${file}:`, error);
+                        // Log full error details including stack trace
+                        logger.error('tools', `Error loading tool ${file}:`, {
+                            error: error.message,
+                            stack: error.stack,
+                            code: error.code,
+                            details: error
+                        });
                     }
                 }
             }
         } catch (error) {
-            logger.error('tools', `Error reading directory ${directory}:`, error);
+            // Log full error details for directory reading errors
+            logger.error('tools', `Error reading directory ${directory}:`, {
+                error: error.message,
+                stack: error.stack,
+                code: error.code,
+                details: error
+            });
             throw error;
         }
     }

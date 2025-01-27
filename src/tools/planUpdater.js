@@ -69,55 +69,59 @@ Remember:
                 response_format: {
                     type: "json_schema",
                     json_schema: {
-                        type: "object",
-                        properties: {
-                            needs_update: {
-                                type: "boolean",
-                                description: "Indicates whether the plan needs to be updated"
-                            },
-                            reason: {
-                                type: "string",
-                                description: "Explanation of why the plan needs updating (if it does)"
-                            },
-                            updated_plan: {
-                                type: "object",
-                                properties: {
-                                    steps: {
-                                        type: "array",
-                                        items: {
-                                            type: "object",
-                                            properties: {
-                                                tool: { type: "string" },
-                                                action: { type: "string" },
-                                                parameters: {
-                                                    type: "array",
-                                                    items: {
-                                                        type: "object",
-                                                        properties: {
-                                                            name: { type: "string" },
-                                                            value: { type: "string" }
-                                                        },
-                                                        required: ["name", "value"],
-                                                        additionalProperties: false
-                                                    }
-                                                },
-                                                description: { type: "string" }
-                                            },
-                                            required: ["tool", "action", "parameters", "description"],
-                                            additionalProperties: false
-                                        }
-                                    }
+                        name: "evaluation",
+                        schema: {
+                            type: "object",
+                            properties: {
+                                needs_update: {
+                                    type: "boolean",
+                                    description: "Indicates whether the plan needs to be updated"
                                 },
-                                required: ["steps"],
-                                additionalProperties: false
+                                reason: {
+                                    type: "string",
+                                    description: "Explanation of why the plan needs updating (if it does)"
+                                },
+                                updated_plan: {
+                                    type: "object",
+                                    properties: {
+                                        steps: {
+                                            type: "array",
+                                            items: {
+                                                type: "object",
+                                                properties: {
+                                                    tool: { type: "string" },
+                                                    action: { type: "string" },
+                                                    parameters: {
+                                                        type: "array",
+                                                        items: {
+                                                            type: "object",
+                                                            properties: {
+                                                                name: { type: "string" },
+                                                                value: { type: "string" }
+                                                            },
+                                                            required: ["name", "value"],
+                                                            additionalProperties: false
+                                                        }
+                                                    },
+                                                    description: { type: "string" }
+                                                },
+                                                required: ["tool", "action", "parameters", "description"],
+                                                additionalProperties: false
+                                            }
+                                        }
+                                    },
+                                    required: ["steps"],
+                                    additionalProperties: false
+                                },
+                                next_step_index: {
+                                    type: "integer",
+                                    description: "0-based index of the next step to execute"
+                                }
                             },
-                            next_step_index: {
-                                type: "integer",
-                                description: "0-based index of the next step to execute"
-                            }
+                            required: ["needs_update", "reason", "updated_plan", "next_step_index"],
+                            additionalProperties: false
                         },
-                        required: ["needs_update", "reason", "next_step_index"],
-                        additionalProperties: false
+                        strict: true
                     }
                 },
                 temperature: 0.7,
