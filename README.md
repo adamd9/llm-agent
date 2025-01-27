@@ -65,6 +65,54 @@ This feedback system allows for iterative improvement while maintaining user eng
   - Use sensible defaults where possible
   - Don't assume perfect parameter formatting from the executor
 
+#### Tool Interface Validation
+The system uses a hybrid approach combining JSDoc type definitions and JSON Schema validation to ensure tool interface consistency without requiring full TypeScript adoption:
+
+##### Core Components
+
+1. **JSDoc Type Definitions**
+   - Provides development-time type checking in IDEs
+   - Generates documentation automatically
+   - Defines standard tool interfaces and types
+   ```javascript
+   /**
+    * @typedef {Object} ToolParameter
+    * @property {string} name
+    * @property {string} description
+    * @property {('string'|'number'|'boolean'|'array'|'object')} type
+    * @property {boolean} required
+    */
+
+   /**
+    * @typedef {Object} Tool
+    * @property {string} name
+    * @property {string} description
+    * @property {function(): Object} getCapabilities
+    * @property {function(string, any[]): Promise<Object>} execute
+    */
+   ```
+
+2. **JSON Schema Validation**
+   - Runtime validation of tool interfaces
+   - Validates tool structure and parameter types
+   - Provides detailed error messages
+   - Used by Tool Generator for validation
+
+3. **Validation Rules**
+   - All tools must implement the standard interface
+   - Required properties: name, description, getCapabilities, execute
+   - getCapabilities must return properly structured actions
+   - Parameters must specify name, type, description, and required status
+   - Execute method must handle both stringified and object parameters
+
+4. **Development Workflow**
+   - Tools can be created manually or via Tool Generator
+   - Interface validation occurs during development and runtime
+   - Clear error messages guide developers to fix interface issues
+   - Documentation automatically generated from JSDoc comments
+
+This validation system ensures consistency and reliability while maintaining flexibility and ease of development.
+
 #### Tool Generator
 The Tool Generator is a specialized tool for creating new tools within the system. It leverages the agent's capabilities to understand natural language descriptions and generate appropriate test cases.
 

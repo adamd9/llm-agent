@@ -1,9 +1,12 @@
 const { isValidTool } = require('./index');
 const fs = require('fs');
 const path = require('path');
-const { getClient } = require('../utils/llmClient');
+const { getOpenAIClient } = require('../utils/openaiClient.js');
 const ToolManager = require('./index.js');
+const { validateTool, validateToolResponse } = require('../validation/toolValidator');
+const logger = require('../utils/logger.js');
 
+/** @implements {import('../types/tool').Tool} */
 class ToolGenerator {
     constructor() {
         this.name = 'toolGenerator';
@@ -12,10 +15,7 @@ class ToolGenerator {
         this.dataToolsDir = path.join(__dirname, '../../data/tools');
     }
 
-    /**
-     * Get the capabilities of the tool generator
-     * @returns {Object} Capabilities object with actions
-     */
+    /** @returns {import('../types/tool').ToolCapabilities} */
     getCapabilities() {
         return {
             name: this.name,
@@ -71,6 +71,570 @@ class ToolGenerator {
                 }
             ]
         };
+    }
+
+    async _generateToolCode(description, examples, capabilities, maxRetries = 3) {
+        const openai = getOpenAIClient();
+        const prompt = 
+`Create a JavaScript tool that implements the following interface:
+
+/**
+ * @typedef {Object} Tool
+ * @property {string} name - Tool name
+ * @property {string} description - Tool description
+ * @property {function(): Object} getCapabilities - Get tool capabilities
+ * @property {function(string, any[]): Promise<{status: string, message?: string, error?: string}>} execute - Execute tool action
+ */
+
+The tool should:
+1. Implement the Tool interface using JSDoc @implements annotation
+2. Include proper error handling
+3. Return properly structured responses
+4. Match this description: ${description}
+5. Support these capabilities: ${JSON.stringify(capabilities, null, 2)}
+6. Handle these example cases: ${JSON.stringify(examples, null, 2)}
+
+Example structure:
+/**
+ * @implements {import('../types/tool').Tool}
+ */
+class MyTool {
+    constructor() {
+        this.name = 'tool-name';
+        this.description = 'tool description';
+    }
+
+    getCapabilities() {
+        return {
+            name: this.name,
+            description: this.description,
+            actions: [/* actions */]
+        };
+    }
+
+    async execute(action, parameters) {
+        // Implementation
+    }
+}
+
+module.exports = new MyTool();
+
+Important:
+- Use proper TypeScript-style JSDoc annotations
+- Implement the Tool interface exactly
+- Return {status: 'success', message: string} for success
+- Return {status: 'error', error: string} for errors
+- Include all necessary imports
+- Make the tool practical and useful
+- Return ONLY the JavaScript code without any markdown formatting or explanation`;
+
+        let attempts = 0;
+        let lastError = null;
+
+        while (attempts < maxRetries) {
+            try {
+                attempts++;
+                logger.debug('toolGenerator', `Attempt ${attempts} to generate tool code`);
+
+                const response = await openai.chat([
+                    { 
+                        role: 'system', 
+                        content: 'You are a JavaScript developer expert in creating tools for an AI agent system. Always return only the code without any markdown formatting or explanation.' 
+                    },
+                    { 
+                        role: 'user', 
+                        content: prompt 
+                    },
+                    ...(lastError ? [{
+                        role: 'user',
+                        content: `Previous attempt failed validation with error: ${lastError}. Please fix these issues and try again.`
+                    }] : [])
+                ], {
+                    model: 'gpt-4o-mini',
+                    temperature: 0.7,
+                    max_tokens: 1000
+                });
+
+                // Clean up the response
+                let code = response.content;
+                
+                // Remove markdown code blocks if present
+                code = code.replace(/```javascript\n?|\n?```/g, '');
+                
+                // Remove any explanatory text before or after the code
+                code = code.replace(/^[\s\S]*?(?=(?:const|class|let|var|import|\/\*\*))/, '');
+                code = code.replace(/\/\/ Example Usage[\s\S]*$/, '');
+                
+                // Trim whitespace
+                code = code.trim();
+
+                // Create a temporary file for validation
+                const tempFile = path.join(this.dataToolsDir, '_temp_validation.js');
+                
+                try {
+                    // Ensure directory exists
+                    if (!fs.existsSync(this.dataToolsDir)) {
+                        fs.mkdirSync(this.dataToolsDir, { recursive: true });
+                    }
+
+                    // Write code to temp file
+                    fs.writeFileSync(tempFile, code, 'utf8');
+
+                    // Try to require the file to check for syntax errors
+                    const tempModule = require(tempFile);
+                    
+                    // Validate the tool
+                    const validation = validateTool(tempModule);
+                    
+                    // Clean up temp file
+                    fs.unlinkSync(tempFile);
+                    delete require.cache[require.resolve(tempFile)];
+
+                    if (validation.isValid) {
+                        logger.debug('toolGenerator', 'Tool validation successful');
+                        return code;
+                    } else {
+                        lastError = validation.errors.join(', ');
+                        logger.debug('toolGenerator', `Tool validation failed: ${lastError}`);
+                        if (attempts >= maxRetries) {
+                            throw new Error(`Tool validation failed after ${maxRetries} attempts: ${lastError}`);
+                        }
+                    }
+                } catch (error) {
+                    lastError = error.message;
+                    logger.debug('toolGenerator', `Tool validation error: ${lastError}`);
+                    if (attempts >= maxRetries) {
+                        throw error;
+                    }
+                } finally {
+                    // Clean up temp file if it exists
+                    if (fs.existsSync(tempFile)) {
+                        fs.unlinkSync(tempFile);
+                    }
+                }
+            } catch (error) {
+                lastError = error.message;
+                logger.debug('toolGenerator', `Generation attempt ${attempts} failed: ${lastError}`);
+                if (attempts >= maxRetries) {
+                    throw new Error(`Failed to generate valid tool after ${maxRetries} attempts: ${lastError}`);
+                }
+            }
+        }
+
+        throw new Error(`Failed to generate valid tool after ${maxRetries} attempts: ${lastError}`);
+    }
+
+    /**
+     * @param {string} action - Action to execute
+     * @param {any[]} parameters - Action parameters
+     * @returns {Promise<import('../types/tool').ToolResponse>}
+     */
+    async execute(action, parameters) {
+        try {
+            switch (action) {
+                case 'generateTool': {
+                    const description = parameters.find(p => p.name === 'description')?.value;
+                    const contextPrompt = parameters.find(p => p.name === 'contextPrompt')?.value;
+                    const save = parameters.find(p => p.name === 'save')?.value || false;
+
+                    if (!description) {
+                        return { status: 'error', error: 'Missing required parameter: description' };
+                    }
+
+                    try {
+                        // Generate examples and capabilities
+                        const examples = await this.generateExamples(description, contextPrompt);
+                        const capabilities = await this._generateCapabilities(description);
+
+                        // Generate the tool code
+                        const code = await this._generateToolCode(description, examples, capabilities);
+
+                        if (save) {
+                            const toolName = await this._generateToolName(description);
+                            const finalPath = path.join(this.dataToolsDir, `${toolName}.js`);
+                            
+                            // Ensure directory exists
+                            if (!fs.existsSync(this.dataToolsDir)) {
+                                fs.mkdirSync(this.dataToolsDir, { recursive: true });
+                            }
+                            
+                            // Write the file
+                            fs.writeFileSync(finalPath, code, 'utf8');
+                            
+                            return {
+                                status: 'success',
+                                message: `Tool generated and saved to ${finalPath}`,
+                                data: { code, path: finalPath }
+                            };
+                        } else {
+                            return {
+                                status: 'success',
+                                message: 'Tool generated successfully',
+                                data: { code }
+                            };
+                        }
+                    } catch (error) {
+                        logger.error('Error in tool generation:', error);
+                        return {
+                            status: 'error',
+                            error: `Failed to generate tool: ${error.message}`
+                        };
+                    }
+                }
+                case 'updateTool': {
+                    console.log('Processing updateTool with params:', parameters);
+                    
+                    // Extract and validate toolName
+                    const { toolName } = parameters;
+                    if (!toolName) {
+                        throw new Error('Tool name is required for updating a tool');
+                    }
+
+                    // Extract updates with fallback to empty object
+                    let updates = {};
+                    if ('updates' in parameters) {
+                        if (typeof parameters.updates === 'string') {
+                            try {
+                                // Clean up the JSON string if needed
+                                const cleanJson = parameters.updates.replace(/}"+$/, '}');
+                                updates = JSON.parse(cleanJson);
+                            } catch (e) {
+                                console.error('Failed to parse updates JSON:', parameters.updates, e);
+                                throw new Error('Updates string must be valid JSON');
+                            }
+                        } else if (parameters.updates && typeof parameters.updates === 'object') {
+                            updates = parameters.updates;
+                        }
+                    }
+                    
+                    console.log('Processed updates:', updates);
+
+                    // Validate updates object
+                    if (typeof updates !== 'object' || Array.isArray(updates)) {
+                        throw new Error('Updates must be a valid object');
+                    }
+
+                    const result = await this._updateTool(toolName, updates, parameters.contextPrompt);
+                    result.message = `Tool '${toolName}' updated successfully.`;
+                    return result;
+                }
+                default:
+                    return { status: 'error', error: `Unknown action: ${action}` };
+            }
+        } catch (error) {
+            logger.error('ToolGenerator error:', error);
+            return { status: 'error', error: error.message };
+        }
+    }
+
+    async _updateTool(toolName, updates, contextPrompt) {
+        console.log('_updateTool called with:', { toolName, updates, contextPrompt });
+        
+        try {
+            // Load existing tool
+            const { code: existingCode, filePath } = await this._loadTool(toolName);
+            
+            // Parse existing code to extract current capabilities
+            const currentTool = require(filePath);
+            const currentCapabilities = currentTool.getCapabilities();
+            
+            console.log('Current capabilities:', currentCapabilities);
+            
+            // Create updated capabilities
+            const updatedCapabilities = {
+                actions: currentCapabilities.actions.map(action => {
+                    // Update action parameters if provided
+                    if (updates.parameters) {
+                        return {
+                            ...action,
+                            parameters: updates.parameters
+                        };
+                    }
+                    return action;
+                })
+            };
+            
+            console.log('Updated capabilities:', updatedCapabilities);
+
+            // Generate examples for the updated tool
+            const examples = this.generateExamples(
+                updates.description || currentTool.description,
+                contextPrompt,
+                { inputTypes: updatedCapabilities.actions[0].parameters.map(p => p.type) }
+            );
+
+            // Generate updated code using the existing code as reference
+            const updatedCode = await this._generateUpdatedToolCode(
+                toolName,
+                existingCode,
+                updates.description || currentTool.description,
+                examples,
+                updatedCapabilities
+            );
+
+            // Save updated tool
+            await this._saveToolToFile(toolName, updatedCode);
+
+            // Create a user-friendly message about the changes
+            const parameterChanges = updates.parameters ? 
+                `Updated parameters: ${updates.parameters.map(p => `${p.name} (${p.type}${p.required ? ', required' : ''})`).join(', ')}` :
+                'No parameter changes';
+
+            return {
+                success: true,
+                toolName,
+                filePath,
+                capabilities: updatedCapabilities,
+                newExamples: examples,
+                message: `Successfully updated tool '${toolName}'. ${parameterChanges}`
+            };
+        } catch (error) {
+            console.error('Update tool error:', error);
+            throw error;
+        }
+    }
+
+    async _generateUpdatedToolCode(toolName, toolCode, description, examples, capabilities) {
+        try {
+            // Get LLM client
+            const openai = getOpenAIClient();
+            
+            // Generate implementation
+            const prompt = 
+`You are updating a JavaScript tool. Here is the current implementation:
+
+${toolCode}
+
+Please update this tool to:
+1. Match this description: ${description}
+2. Support these capabilities: ${JSON.stringify(capabilities, null, 2)}
+3. Handle these example cases: ${JSON.stringify(examples, null, 2)}
+
+Important:
+- Maintain the same class name and basic structure
+- Keep existing imports
+- Keep working functionality that doesn't need to change
+- Only update what's necessary to support the new requirements
+- Return {status: 'success', message: string} for success
+- Return {status: 'error', error: string} for errors
+- Include JSDoc comments for all changes`;
+
+            const response = await openai.chat([
+                { 
+                    role: 'system', 
+                    content: 'You are an expert JavaScript developer who writes clean, efficient, and well-documented code. You are particularly skilled at updating existing code while maintaining its core functionality.' 
+                },
+                { role: 'user', content: prompt }
+            ], {
+                model: 'gpt-4o-mini',
+                temperature: 0.7,
+                max_tokens: 1000
+            });
+
+            return response.content;
+
+        } catch (error) {
+            logger.error('Failed to generate updated tool code:', error);
+            throw new Error(`Failed to generate updated tool code: ${error.message}`);
+        }
+    }
+
+    async _saveToolToFile(toolName, code) {
+        // Create tools directory if it doesn't exist
+        if (!fs.existsSync(this.dataToolsDir)) {
+            fs.mkdirSync(this.dataToolsDir, { recursive: true });
+        }
+
+        // Always use .js extension since we're generating JavaScript tools
+        const fileName = `${toolName.toLowerCase()}.js`;
+        const filePath = path.join(this.dataToolsDir, fileName);
+        
+        // Ensure code is a string
+        const codeStr = typeof code === 'string' ? code : await code;
+        
+        await fs.promises.writeFile(filePath, codeStr, 'utf8');
+        return filePath;
+    }
+
+    async _loadTool(toolName) {
+        try {
+            const toolInfo = await this._findToolByName(toolName);
+            const code = await fs.promises.readFile(toolInfo.filePath, 'utf8');
+            return { code, filePath: toolInfo.filePath };
+        } catch (error) {
+            throw new Error(`Failed to load tool: ${error.message}`);
+        }
+    }
+
+    async _findToolByName(toolNameOrDescription) {
+        // Get LLM client for semantic matching
+        const openai = getOpenAIClient();
+        
+        // Load all tools
+        await this.toolManager.loadTools();
+        const tools = Array.from(this.toolManager.tools.values());
+        
+        // If exact match exists, return it
+        const exactMatch = tools.find(t => t.name === toolNameOrDescription);
+        if (exactMatch) {
+            return {
+                tool: exactMatch,
+                filePath: path.join(this.dataToolsDir, `${exactMatch.name}.js`)
+            };
+        }
+
+        // Generate embeddings or use LLM to find best match
+        const prompt = `Given the tool name or description "${toolNameOrDescription}", which of these tools is the most likely match? Consider file names, tool names, and descriptions. Only return the exact name of the best matching tool, nothing else.
+
+Available tools:
+${tools.map(t => `- ${t.name}: ${t.description}`).join('\n')}`;
+
+        const response = await openai.chat([
+            { role: 'system', content: 'You are a tool matching expert. Only respond with the exact tool name that best matches the query.' },
+            { role: 'user', content: prompt }
+        ], {
+            model: 'gpt-4o',
+            temperature: 0.2
+        });
+
+        const matchedName = response.content.trim();
+        const matchedTool = tools.find(t => t.name === matchedName);
+        
+        if (!matchedTool) {
+            throw new Error(`Could not find a matching tool for "${toolNameOrDescription}"`);
+        }
+
+        return {
+            tool: matchedTool,
+            filePath: path.join(this.dataToolsDir, `${matchedTool.name}.js`)
+        };
+    }
+
+    async _testTool(toolName, examples) {
+        try {
+            const { filePath } = await this._loadTool(toolName);
+            const tool = require(filePath);
+
+            if (!isValidTool(tool)) {
+                throw new Error(`Invalid tool: ${toolName}`);
+            }
+
+            const results = [];
+            for (const example of examples) {
+                try {
+                    const result = await tool.execute(example.input);
+                    const passed = JSON.stringify(result) === JSON.stringify(example.expectedOutput);
+                    results.push({
+                        description: example.description,
+                        passed,
+                        expected: example.expectedOutput,
+                        actual: result
+                    });
+                } catch (error) {
+                    results.push({
+                        description: example.description,
+                        passed: false,
+                        error: error.message
+                    });
+                }
+            }
+
+            return results;
+        } catch (error) {
+            throw new Error(`Failed to test tool: ${error.message}`);
+        }
+    }
+
+    async _validateGeneratedCode(code, toolName, description, capabilities) {
+        try {
+            // Create a temporary file to test the tool
+            const tempFile = path.join(this.dataToolsDir, '_temp_tool.js');
+            fs.writeFileSync(tempFile, code);
+
+            // Load and validate the tool
+            const tempTool = require(tempFile);
+            const validation = validateTool(tempTool);
+
+            // Remove the temporary file
+            fs.unlinkSync(tempFile);
+
+            return validation;
+        } catch (error) {
+            return { valid: false, reasons: [error.message] };
+        }
+    }
+
+    /**
+     * Generate tool name from description
+     * @private
+     */
+    _generateToolName(description) {
+        if (!description || typeof description !== 'string') {
+            throw new Error('Tool description is required and must be a string');
+        }
+
+        // Extract key words from the description
+        const words = description.toLowerCase()
+            .replace(/[^\w\s]/g, '')
+            .split(/\s+/)
+            .filter(word => 
+                !['a', 'an', 'the', 'to', 'from', 'that', 'which', 'with', 'for', 'and', 'or', 'will', 'based'].includes(word) && 
+                word.length > 0
+            )
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1));
+        
+        if (words.length === 0) {
+            // If no valid words found, use a generic name with a timestamp
+            const timestamp = Date.now();
+            return `CustomTool${timestamp}`;
+        }
+
+        // Take the first 3 most relevant words to form the tool name
+        const toolName = words.slice(0, 3).join('') + 'Tool';
+        
+        // Ensure the first character is uppercase
+        return toolName.charAt(0).toUpperCase() + toolName.slice(1);
+    }
+
+    /**
+     * Generate capabilities from description and constraints
+     * @private
+     */
+    _generateCapabilities(description, constraints) {
+        // If constraints.inputTypes is provided, use it to generate parameters
+        const parameters = constraints?.inputTypes?.map(input => ({
+            name: input.name,
+            description: input.description,
+            type: input.type || this._inferParameterType(input.name),
+            required: input.required !== false // Default to true unless explicitly set to false
+        })) || [];
+
+        // Generate action name based on description
+        const actionName = description.toLowerCase()
+            .replace(/\s+/g, '_')
+            .replace(/[^a-z0-9_]/g, '')
+            .replace(/_+/g, '_')
+            .replace(/^_|_$/g, '');
+
+        return {
+            actions: [
+                {
+                    name: actionName,
+                    description: description,
+                    parameters: parameters
+                }
+            ]
+        };
+    }
+
+    _inferParameterType(param) {
+        const paramLower = param.toLowerCase();
+        if (/number|count|amount|quantity|index|id/i.test(paramLower)) return 'number';
+        if (/boolean|flag|condition|state/i.test(paramLower)) return 'boolean';
+        if (/array|list|collection|set/i.test(paramLower)) return 'array';
+        if (/object|config|options|settings/i.test(paramLower)) return 'object';
+        if (/file|path/i.test(paramLower)) return 'string';
+        return 'string';
     }
 
     /**
@@ -226,682 +790,6 @@ class ToolGenerator {
             }
         });
         return output;
-    }
-
-    /**
-     * Generate tool code based on description and examples
-     * @private
-     */
-    async _generateToolCode(toolName, description, examples, capabilities) {
-        try {
-            // Generate the action methods
-            const actionMethods = capabilities.actions.map(action => {
-                const paramValidation = action.parameters.map(param => 
-                    `const ${param.name}Param = parameters.find(param => param.name === '${param.name}');
-                    ${param.required ? 
-                        `if (!${param.name}Param) {
-                            throw new Error('Missing required parameter: ${param.name}');
-                        }` : ''}`
-                ).join('\n        ');
-
-                const paramExtraction = action.parameters.map(param => 
-                    `const ${param.name} = ${param.name}Param${param.required ? '' : '?'}.value;`
-                ).join('\n            ');
-
-                return `
-    async ${action.name}(parameters) {
-        ${paramValidation}
-
-        try {
-            ${paramExtraction}
-            
-            // TODO: Implement ${action.name} logic here
-            return {
-                status: 'success',
-                result: {
-                    // Add your result fields here
-                }
-            };
-        } catch (error) {
-            logger.debug('tools', '${toolName} error:', error);
-            return {
-                status: 'error',
-                error: 'Failed to execute ${action.name}',
-                details: error.message
-            };
-        }
-    }`;
-            }).join('\n\n');
-
-            // Create switch cases for execute method
-            const switchCases = capabilities.actions.map(action => 
-                `                case '${action.name}':
-                    return await this.${action.name}(parsedParams);`
-            ).join('\n');
-
-            // Create the template
-            const template = `
-const logger = require('../../src/utils/logger');
-
-class ${toolName} {
-    constructor() {
-        this.name = '${toolName.charAt(0).toLowerCase() + toolName.slice(1)}';
-        this.description = '${description}';
-    }
-
-    getCapabilities() {
-        return ${JSON.stringify(capabilities, null, 8)};
-    }
-
-    ${actionMethods}
-
-    async execute(action, parameters) {
-        logger.debug('tools', '${toolName} executing:', { action, parameters });
-        try {
-            // Parse parameters if they're passed as a string
-            let parsedParams = parameters;
-            if (typeof parameters === 'string') {
-                try {
-                    parsedParams = JSON.parse(parameters);
-                } catch (parseError) {
-                    logger.debug('tools', 'Parameter parsing error:', {
-                        error: parseError.message,
-                        parameters
-                    });
-                    return {
-                        status: 'error',
-                        error: 'Invalid parameters format',
-                        details: parseError.message
-                    };
-                }
-            }
-
-            // Validate that parsedParams is an array
-            if (!Array.isArray(parsedParams)) {
-                return {
-                    status: 'error',
-                    error: 'Parameters must be provided as an array'
-                };
-            }
-
-            switch (action) {
-${switchCases}
-                default:
-                    throw new Error(\`Unknown action: \${action}\`);
-            }
-        } catch (error) {
-            logger.debug('tools', '${toolName} error:', {
-                error: error.message,
-                stack: error.stack,
-                action,
-                parameters
-            });
-            return {
-                status: 'error',
-                error: error.message,
-                stack: error.stack,
-                action,
-                parameters
-            };
-        }
-    }
-}
-
-module.exports = new ${toolName}();
-`;
-
-            return template;
-        } catch (error) {
-            throw new Error(`Failed to generate tool implementation: ${error.message}`);
-        }
-    }
-
-    /**
-     * Generate updated tool code based on description and examples
-     * @private
-     */
-    async _generateUpdatedToolCode(toolName, description, examples, capabilities, existingCode, contextPrompt) {
-        // Generate implementation using LLM
-        const prompt = `You are a JavaScript developer tasked with updating an existing tool implementation.
-
-Current Implementation:
-${existingCode}
-
-Required Updates:
-1. Tool Name: ${toolName} (must remain exactly the same)
-2. New Description: ${description}
-3. New Capabilities: ${JSON.stringify(capabilities, null, 2)}
-4. Update Context: ${contextPrompt}
-
-The updated implementation must:
-1. Keep the exact same class name and module.exports
-2. Update the description and capabilities as specified
-3. Update the execute method to handle the new parameters
-4. Maintain any existing functionality not affected by the updates
-5. Keep any useful helper methods or properties from the original code
-6. Return results in {success: true/false, data?: any, error?: string} format
-
-Example test cases:
-${JSON.stringify(examples, null, 2)}
-
-Generate only the complete updated JavaScript class implementation with no explanation or comments.`;
-
-        try {
-            // Get LLM client
-            const llmClient = getClient('openai');
-            
-            // Generate implementation
-            const response = await llmClient.chat([
-                { 
-                    role: 'system', 
-                    content: 'You are an expert JavaScript developer who writes clean, efficient, and well-documented code. You are particularly skilled at updating existing code while maintaining its core functionality.' 
-                },
-                { role: 'user', content: prompt }
-            ], {
-                model: 'gpt-4o',
-                temperature: 0.2,
-                max_tokens: 2000
-            });
-
-            // Extract code from response
-            let code = response.content;
-            
-            // Clean up the code if it's wrapped in markdown code blocks
-            code = code.replace(/```javascript\n?|\n?```/g, '').trim();
-
-            console.log('Generated updated code:', code);
-
-            // Validate the generated code
-            const validationResult = await this._validateGeneratedCode(code, toolName, description, capabilities);
-            if (!validationResult.valid) {
-                console.error('Code validation failed:', validationResult.reasons);
-                throw new Error(`Generated code does not meet requirements: ${validationResult.reasons.join(', ')}`);
-            }
-
-            return code;
-        } catch (error) {
-            throw new Error(`Failed to generate updated tool implementation: ${error.message}`);
-        }
-    }
-
-    /**
-     * Save tool to data/tools folder
-     * @private
-     */
-    async _saveToolToFile(toolName, code) {
-        // Create tools directory if it doesn't exist
-        if (!fs.existsSync(this.dataToolsDir)) {
-            fs.mkdirSync(this.dataToolsDir, { recursive: true });
-        }
-
-        // Always use .js extension since we're generating JavaScript tools
-        const fileName = `${toolName.toLowerCase()}.js`;
-        const filePath = path.join(this.dataToolsDir, fileName);
-        
-        // Ensure code is a string
-        const codeStr = typeof code === 'string' ? code : await code;
-        
-        await fs.promises.writeFile(filePath, codeStr, 'utf8');
-        return filePath;
-    }
-
-    /**
-     * Load tool from data/tools folder
-     * @private
-     */
-    async _loadTool(toolName) {
-        try {
-            const toolInfo = await this._findToolByName(toolName);
-            const code = await fs.promises.readFile(toolInfo.filePath, 'utf8');
-            return { code, filePath: toolInfo.filePath };
-        } catch (error) {
-            throw new Error(`Failed to load tool: ${error.message}`);
-        }
-    }
-
-    async _findToolByName(toolNameOrDescription) {
-        // Get LLM client for semantic matching
-        const llmClient = getClient('openai');
-        
-        // Load all tools
-        await this.toolManager.loadTools();
-        const tools = Array.from(this.toolManager.tools.values());
-        
-        // If exact match exists, return it
-        const exactMatch = tools.find(t => t.name === toolNameOrDescription);
-        if (exactMatch) {
-            return {
-                tool: exactMatch,
-                filePath: path.join(this.dataToolsDir, `${exactMatch.name}.js`)
-            };
-        }
-
-        // Generate embeddings or use LLM to find best match
-        const prompt = `Given the tool name or description "${toolNameOrDescription}", which of these tools is the most likely match? Consider file names, tool names, and descriptions. Only return the exact name of the best matching tool, nothing else.
-
-Available tools:
-${tools.map(t => `- ${t.name}: ${t.description}`).join('\n')}`;
-
-        const response = await llmClient.chat([
-            { role: 'system', content: 'You are a tool matching expert. Only respond with the exact tool name that best matches the query.' },
-            { role: 'user', content: prompt }
-        ], {
-            model: 'gpt-4o',
-            temperature: 0.2
-        });
-
-        const matchedName = response.content.trim();
-        const matchedTool = tools.find(t => t.name === matchedName);
-        
-        if (!matchedTool) {
-            throw new Error(`Could not find a matching tool for "${toolNameOrDescription}"`);
-        }
-
-        return {
-            tool: matchedTool,
-            filePath: path.join(this.dataToolsDir, `${matchedTool.name}.js`)
-        };
-    }
-
-    /**
-     * Test a tool with examples
-     * @private
-     */
-    async _testTool(toolName, examples) {
-        try {
-            const { filePath } = await this._loadTool(toolName);
-            const tool = require(filePath);
-
-            if (!isValidTool(tool)) {
-                throw new Error(`Invalid tool: ${toolName}`);
-            }
-
-            const results = [];
-            for (const example of examples) {
-                try {
-                    const result = await tool.execute(example.input);
-                    const passed = JSON.stringify(result) === JSON.stringify(example.expectedOutput);
-                    results.push({
-                        description: example.description,
-                        passed,
-                        expected: example.expectedOutput,
-                        actual: result
-                    });
-                } catch (error) {
-                    results.push({
-                        description: example.description,
-                        passed: false,
-                        error: error.message
-                    });
-                }
-            }
-
-            return results;
-        } catch (error) {
-            throw new Error(`Failed to test tool: ${error.message}`);
-        }
-    }
-
-    async _updateTool(toolName, updates, contextPrompt) {
-        console.log('_updateTool called with:', { toolName, updates, contextPrompt });
-        
-        try {
-            // Load existing tool
-            const { code: existingCode, filePath } = await this._loadTool(toolName);
-            
-            // Parse existing code to extract current capabilities
-            const currentTool = require(filePath);
-            const currentCapabilities = currentTool.getCapabilities();
-            
-            console.log('Current capabilities:', currentCapabilities);
-            
-            // Create updated capabilities
-            const updatedCapabilities = {
-                actions: currentCapabilities.map(action => {
-                    // Update action parameters if provided
-                    if (updates.parameters) {
-                        return {
-                            ...action,
-                            parameters: updates.parameters
-                        };
-                    }
-                    return action;
-                })
-            };
-            
-            console.log('Updated capabilities:', updatedCapabilities);
-
-            // Generate examples for the updated tool
-            const examples = this.generateExamples(
-                updates.description || currentTool.description,
-                contextPrompt,
-                { inputTypes: updatedCapabilities.actions[0].parameters.map(p => p.type) }
-            );
-
-            // Generate updated code using the existing code as reference
-            const updatedCode = await this._generateUpdatedToolCode(
-                toolName,
-                updates.description || currentTool.description,
-                examples,
-                updatedCapabilities,
-                existingCode,
-                contextPrompt
-            );
-
-            // Save updated tool
-            await this._saveToolToFile(toolName, updatedCode);
-
-            // Create a user-friendly message about the changes
-            const parameterChanges = updates.parameters ? 
-                `Updated parameters: ${updates.parameters.map(p => `${p.name} (${p.type}${p.required ? ', required' : ''})`).join(', ')}` :
-                'No parameter changes';
-
-            return {
-                success: true,
-                toolName,
-                filePath,
-                capabilities: updatedCapabilities,
-                newExamples: examples,
-                message: `Successfully updated tool '${toolName}'. ${parameterChanges}`
-            };
-        } catch (error) {
-            console.error('Update tool error:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Generate tool name from description
-     * @private
-     */
-    _generateToolName(description) {
-        if (!description || typeof description !== 'string') {
-            throw new Error('Tool description is required and must be a string');
-        }
-
-        // Extract key words from the description
-        const words = description.toLowerCase()
-            .replace(/[^\w\s]/g, '')
-            .split(/\s+/)
-            .filter(word => 
-                !['a', 'an', 'the', 'to', 'from', 'that', 'which', 'with', 'for', 'and', 'or', 'will', 'based'].includes(word) && 
-                word.length > 0
-            )
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1));
-        
-        if (words.length === 0) {
-            // If no valid words found, use a generic name with a timestamp
-            const timestamp = Date.now();
-            return `CustomTool${timestamp}`;
-        }
-
-        // Take the first 3 most relevant words to form the tool name
-        const toolName = words.slice(0, 3).join('') + 'Tool';
-        
-        // Ensure the first character is uppercase
-        return toolName.charAt(0).toUpperCase() + toolName.slice(1);
-    }
-
-    /**
-     * Generate capabilities from description and constraints
-     * @private
-     */
-    _generateCapabilities(description, constraints) {
-        // If constraints.inputTypes is provided, use it to generate parameters
-        const parameters = constraints?.inputTypes?.map(input => ({
-            name: input.name,
-            description: input.description,
-            type: input.type || this._inferParameterType(input.name),
-            required: input.required !== false // Default to true unless explicitly set to false
-        })) || [];
-
-        // Generate action name based on description
-        const actionName = description.toLowerCase()
-            .replace(/\s+/g, '_')
-            .replace(/[^a-z0-9_]/g, '')
-            .replace(/_+/g, '_')
-            .replace(/^_|_$/g, '');
-
-        return {
-            actions: [
-                {
-                    name: actionName,
-                    description: description,
-                    parameters: parameters
-                }
-            ]
-        };
-    }
-
-    _inferParameterType(param) {
-        const paramLower = param.toLowerCase();
-        if (/number|count|amount|quantity|index|id/i.test(paramLower)) return 'number';
-        if (/boolean|flag|condition|state/i.test(paramLower)) return 'boolean';
-        if (/array|list|collection|set/i.test(paramLower)) return 'array';
-        if (/object|config|options|settings/i.test(paramLower)) return 'object';
-        if (/file|path/i.test(paramLower)) return 'string';
-        return 'string';
-    }
-
-    /**
-     * Execute the tool generator
-     * @param {string|Object} actionOrParams Action name or parameters object
-     * @param {Array|Object} [parameters] Parameters for the action
-     * @returns {Object} Generated tool code and examples
-     */
-    async execute(actionOrParams, parameters) {
-        try {
-            let params;
-            if (typeof actionOrParams === 'string' && parameters) {
-                if (Array.isArray(parameters)) {
-                    params = parameters.reduce((acc, param) => {
-                        if (param && typeof param === 'object' && 'name' in param && 'value' in param) {
-                            acc[param.name] = param.value;
-                        }
-                        return acc;
-                    }, {});
-                } else if (typeof parameters === 'object') {
-                    params = parameters;
-                }
-            } else if (typeof actionOrParams === 'object') {
-                params = actionOrParams;
-            } else {
-                throw new Error('Parameters must be provided as an object or action string with parameters');
-            }
-
-            // Ensure we have a description
-            const description = params.description || (params.parameters && params.parameters.find(p => p.name === 'description')?.value);
-            if (!description) {
-                throw new Error('Description is required for generating a tool');
-            }
-
-            const action = params.action || 'generateTool';
-
-            switch (action) {
-                case 'generateTool': {
-                    const {
-                        contextPrompt,
-                        constraints = {
-                            inputTypes: [],
-                            outputTypes: [],
-                            complexity: 'moderate',
-                            coverage: ['happy', 'error']
-                        },
-                        context,
-                        capabilities,
-                        save = false
-                    } = params;
-
-                    // Generate examples with default constraints
-                    const examples = this.generateExamples(description, contextPrompt, constraints);
-
-                    // Generate tool name from description
-                    const toolName = this._generateToolName(description);
-                    if (!toolName || typeof toolName !== 'string' || toolName.length === 0) {
-                        throw new Error('Failed to generate valid tool name');
-                    }
-
-                    // Generate capabilities if not explicitly provided
-                    const finalCapabilities = capabilities || this._generateCapabilities(description, constraints);
-
-                    // Generate tool code
-                    const code = await this._generateToolCode(toolName, description, examples, finalCapabilities);
-
-                    // Save tool if requested
-                    let filePath;
-                    if (save) {
-                        filePath = await this._saveToolToFile(toolName, code);
-                    }
-
-                    return {
-                        success: true,
-                        toolName,
-                        code,
-                        examples,
-                        capabilities: finalCapabilities,
-                        context,
-                        filePath
-                    };
-                }
-
-                case 'updateTool': {
-                    console.log('Processing updateTool with params:', params);
-                    
-                    // Extract and validate toolName
-                    const { toolName } = params;
-                    if (!toolName) {
-                        throw new Error('Tool name is required for updating a tool');
-                    }
-
-                    // Extract updates with fallback to empty object
-                    let updates = {};
-                    if ('updates' in params) {
-                        if (typeof params.updates === 'string') {
-                            try {
-                                // Clean up the JSON string if needed
-                                const cleanJson = params.updates.replace(/}"+$/, '}');
-                                updates = JSON.parse(cleanJson);
-                            } catch (e) {
-                                console.error('Failed to parse updates JSON:', params.updates, e);
-                                throw new Error('Updates string must be valid JSON');
-                            }
-                        } else if (params.updates && typeof params.updates === 'object') {
-                            updates = params.updates;
-                        }
-                    }
-                    
-                    console.log('Processed updates:', updates);
-
-                    // Validate updates object
-                    if (typeof updates !== 'object' || Array.isArray(updates)) {
-                        throw new Error('Updates must be a valid object');
-                    }
-
-                    const result = await this._updateTool(toolName, updates, params.contextPrompt);
-                    result.message = `Tool '${toolName}' updated successfully.`;
-                    return result;
-                }
-
-                case 'testTool': {
-                    if (!params.toolName) {
-                        throw new Error('Tool name is required for testing a tool');
-                    }
-
-                    const { toolName, examples } = params;
-                    const results = await this._testTool(toolName, examples || []);
-                    return {
-                        success: true,
-                        toolName,
-                        testResults: results,
-                        message: `Tool '${toolName}' tested successfully.`
-                    };
-                }
-
-                case 'validateTool': {
-                    const { toolName } = params;
-                    if (!toolName) {
-                        throw new Error('Tool name is required for validation');
-                    }
-
-                    try {
-                        // Find and load the tool
-                        const { code: existingCode, filePath } = await this._loadTool(toolName);
-                        
-                        // Get tool module for validation
-                        const toolModule = require(filePath);
-                        
-                        // Get current description and capabilities
-                        const description = toolModule.description;
-                        const capabilities = toolModule.getCapabilities();
-
-                        // Basic tool validation using ToolManager's isValidTool
-                        const isValid = this.toolManager.isValidTool(toolModule);
-                        const basicValidationIssues = isValid ? [] : ['Tool fails basic validation checks'];
-
-                        // Detailed code validation
-                        const codeValidation = await this._validateGeneratedCode(
-                            existingCode,
-                            toolModule.name,
-                            description,
-                            capabilities
-                        );
-
-                        // Combine validation results
-                        const allIssues = [...basicValidationIssues, ...codeValidation.reasons];
-
-                        return {
-                            success: isValid && codeValidation.valid,
-                            toolName: toolModule.name,
-                            valid: isValid && codeValidation.valid,
-                            issues: allIssues,
-                            message: isValid && codeValidation.valid ? 
-                                `Tool '${toolModule.name}' passed all validation checks.` :
-                                `Tool '${toolModule.name}' has validation issues: ${allIssues.join(', ')}`
-                        };
-                    } catch (error) {
-                        if (error.message.includes('Could not find a matching tool')) {
-                            return {
-                                success: false,
-                                error: `No matching tool found for "${toolName}"`,
-                                message: `Could not find a tool matching "${toolName}". Please check the tool name or provide a more specific description.`
-                            };
-                        }
-                        throw error;
-                    }
-                }
-
-                default: {
-                    // Try to find the tool and execute it
-                    const toolInfo = await this._findToolByName(params.toolName || this.name);
-                    if (!toolInfo || !toolInfo.tool) {
-                        throw new Error('Tool not found');
-                    }
-
-                    // Convert array parameters to object if needed
-                    let execParams = {};
-                    if (Array.isArray(params.parameters)) {
-                        params.parameters.forEach(param => {
-                            if (param.name && 'value' in param) {
-                                execParams[param.name] = param.value;
-                            }
-                        });
-                    } else {
-                        execParams = params.parameters || {};
-                    }
-
-                    // Execute the tool with converted parameters
-                    return await toolInfo.tool.execute(execParams);
-                }
-            }
-        } catch (error) {
-            console.error('Tool execution error:', error);
-            return {
-                success: false,
-                error: error.message,
-                details: error.stack,
-                message: 'An error occurred while executing the tool.'
-            };
-        }
     }
 }
 

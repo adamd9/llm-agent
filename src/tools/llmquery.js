@@ -1,13 +1,16 @@
 const logger = require('../utils/logger.js');
 const memory = require('../memory');
 const { getOpenAIClient } = require("../utils/openaiClient.js");
+const { validateToolResponse } = require('../validation/toolValidator');
 
+/** @implements {import('../types/tool').Tool} */
 class LLMQueryTool {
     constructor() {
         this.name = 'llmquery';
         this.description = 'Tool for sending any type of query to the LLM and receiving a response.';
     }
 
+    /** @returns {import('../types/tool').ToolCapabilities} */
     getCapabilities() {
         return {
             name: this.name,
@@ -29,10 +32,14 @@ class LLMQueryTool {
         };
     }
 
+    /**
+     * @param {any[]} parameters - Tool parameters
+     * @returns {Promise<import('../types/tool').ToolResponse>}
+     */
     async query(parameters) {
         const queryParam = parameters.find(param => param.name === 'query');
         if (!queryParam) {
-            throw new Error('Missing required parameter: query');
+            return { status: 'error', error: 'Missing required parameter: query' };
         }
 
         logger.debug('LLMQueryTool', 'Sending query:', queryParam.value);
@@ -42,7 +49,7 @@ class LLMQueryTool {
         } else if (typeof queryParam.value === 'object') {
             query = JSON.stringify(queryParam.value);
         } else {
-            throw new Error('Input must be a string or an object');
+            return { status: 'error', error: 'Input must be a string or an object' };
         }
 
         const shortTermMemory = await memory.retrieveShortTerm();
@@ -74,9 +81,22 @@ class LLMQueryTool {
 
         logger.debug('llmquery', 'OpenAI response', { response }, false);
         const receivedMessage = response.content;
-        return { status: 'success', message: `Response: ${receivedMessage}` };
+        const toolResponse = { status: 'success', message: `Response: ${receivedMessage}` };
+        
+        const validation = validateToolResponse(toolResponse);
+        if (!validation.isValid) {
+            logger.error('llmquery', 'Invalid tool response:', validation.errors);
+            return { status: 'error', error: 'Internal tool response validation failed' };
+        }
+        
+        return toolResponse;
     }
 
+    /**
+     * @param {string} action - Action to execute
+     * @param {any[]} parameters - Action parameters
+     * @returns {Promise<import('../types/tool').ToolResponse>}
+     */
     async execute(action, parameters) {
         logger.debug('llmquery executing:', JSON.stringify({ action, parameters }));
         try {
@@ -90,8 +110,8 @@ class LLMQueryTool {
                         parameters
                     });
                     return {
-                        status: 'success',
-                        parameters
+                        status: 'error',
+                        error: 'Invalid parameters format'
                     };
                 }
             }
@@ -100,10 +120,13 @@ class LLMQueryTool {
                 case 'query':
                     return await this.query(parsedParams);
                 default:
-                    throw new Error(`Unknown action: ${action}`);
+                    return {
+                        status: 'error',
+                        error: `Unknown action: ${action}`
+                    };
             }
         } catch (error) {
-            console.error('LLMQueryTool error:', {
+            logger.error('LLMQueryTool error:', {
                 error: error.message,
                 action,
                 parameters
