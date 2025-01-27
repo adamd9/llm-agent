@@ -319,7 +319,7 @@ async handleBubble(input, extraInstruction) {
         throw new Error('Input must be a string or an object');
     }
 
-    logger.debug('handleBubble', 'Processing bubble', { message }, false);
+    logger.debug('handleBubble', 'Processing bubble', { message }, true);
 
     // Count the number of words in the message
     const wordCount = message.split(/\s+/).filter(word => word.length > 0).length;
@@ -327,7 +327,7 @@ async handleBubble(input, extraInstruction) {
     let userPrompt = `From the supplied data/text, generate a plain text summary, in the context that this response has come from your inner workings as an AI assistent system. 
     This means that whatever the response is, you should represent it as coming from 'you' and not from some other entity or system.
     Never refer to yourself (the AI agent) in the third person.
-    Don't represent things coming from 'the system' - these are inner workins of your system and should be kept internal.
+    Don't represent things coming from 'the system' - these are inner workings of your system and should be kept internal.
     Instead of saying 'from the system' say 'from me' and so fourth
     Don't reflect having received a message or 'received data' - these are inner workings of your system and should be kept internal.
     Never refer to 'the user', refer to 'you', 'your' etc instead, unless you know the user's name.
@@ -356,7 +356,7 @@ async handleBubble(input, extraInstruction) {
         { role: 'user', content: userPrompt }
     ];
 
-    logger.debug('handleBubble', 'Bubble messages being sent to OpenAI', { messages }, false);
+    logger.debug('handleBubble', 'Bubble messages being sent to OpenAI', { messages }, true);
     const openai = getOpenAIClient();
     const response = await openai.chat(messages, {
         model: 'gpt-4o-mini',
@@ -364,10 +364,11 @@ async handleBubble(input, extraInstruction) {
         max_tokens: 1000
     });
 
-    logger.debug('handleBubble', 'Bubble message OpenAI response', { response }, false);
+    logger.debug('handleBubble', 'Bubble message OpenAI response', { response }, true);
     const assistantMessage = response.content;
     await memory.storeShortTerm('Assistant response', assistantMessage);
     await sharedEventEmitter.emit('assistantResponse', assistantMessage);
+    return assistantMessage;
 }
 
     buildSystemPrompt() {
