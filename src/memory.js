@@ -104,7 +104,6 @@ class Memory {
         { role: "user", content: userPrompt },
       ];
       const response = await this.openaiClient.chat(messages, {
-        model: 'gpt-4o-mini',
         response_format: {
           "type": "json_schema",
           "json_schema": {
@@ -179,7 +178,6 @@ class Memory {
         { role: "user", content: initialPrompt },
       ];
       let completion = await this.openaiClient.chat(messages, {
-        model: 'gpt-4o-mini',
         response_format: {
           "type": "json_schema",
           "json_schema": {
@@ -251,7 +249,6 @@ class Memory {
         { role: "user", content: finalPrompt },
       ];
       completion = await this.openaiClient.chat(messages2, {
-        model: 'gpt-4o-mini',
         temperature: 0.7,
         max_tokens: 1000,
         response_format: {

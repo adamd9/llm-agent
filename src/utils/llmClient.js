@@ -21,12 +21,14 @@ class OpenAIClient extends LLMClient {
         this.client = new OpenAI({
             apiKey: process.env.OPENAI_API_KEY
         });
+        this.defaultModel = process.env.OPENAI_DEFAULT_MODEL;
         logger.debug('OpenAI Client', 'Client initialized', { client: this.client.baseURL });
     }
 
     async chat(messages, options = {}) {
+        console.log('OpenAI Client', 'Chatting', { messages, options, defaultModel: this.defaultModel });
         const response = await this.client.chat.completions.create({
-            model: options.model || 'gpt-4o-mini',
+            model: options.model || this.defaultModel,
             messages,
             temperature: options.temperature || 0.7,
             max_tokens: options.max_tokens || 1000,

@@ -74,7 +74,6 @@ class LLMQueryTool {
         logger.debug('llmquery', 'messages being sent to OpenAI', { messages }, false);
         const openai = getOpenAIClient();
         const response = await openai.chat(messages, {
-            model: 'gpt-4o-mini',
             temperature: 0.7,
             max_tokens: 1000
         });

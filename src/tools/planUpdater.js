@@ -65,7 +65,6 @@ Remember:
         try {
             const openai = getOpenAIClient();
             const response = await openai.chat(messages, {
-                model: 'gpt-4o-mini',
                 response_format: {
                     type: "json_schema",
                     json_schema: {

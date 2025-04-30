@@ -42,15 +42,19 @@ Remember:
 1. Each step should be atomic and achievable with a single tool action
 2. Steps should be ordered logically
 3. Include all necessary parameters for each tool action
-4. Be specific and concrete in descriptions`
+4. Be specific and concrete in descriptions
+5. Only use appropriate tools from the list of possible tools. You don't need to use all available tools.`
             },
-            { role: 'user', content: `Request: "${enrichedMessage.original_message}"\nCreate a plan using the available tools.` }
+            { role: 'user', content: `Request: "${enrichedMessage.original_message}"\n
+            Create a plan using the available tools.
+            Relevant short-term memory: ${enrichedMessage.short_term_memory}
+            Relevant long-term memory: ${enrichedMessage.long_term_memory}
+            ` }
         ];
 
         logger.debug('handleBubble', 'Planning prompt messages being sent to OpenAI', { planningPrompts });
 
         const planningResponse = await openai.chat(planningPrompts, {
-            model: 'gpt-4o-mini',
             response_format: {
                 "type": "json_schema",
                 "json_schema": {
@@ -94,6 +98,8 @@ Remember:
             max_tokens: 2000
         });
 
+        //delete response.response.raw.context before logging to debug (if the key exists)
+        delete planningResponse.raw?.context;
         logger.debug('response', 'Received OpenAI response', {
             response: planningResponse
         });

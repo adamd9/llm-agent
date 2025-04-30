@@ -3,10 +3,10 @@ const fetch = require('node-fetch');
 /**
  * @implements {import('../types/tool').Tool}
  */
-class NotificationTool {
+class CallMyPhoneTool {
     constructor() {
-        this.name = 'notificationtool';  // Lowercase, no spaces
-        this.description = 'A tool that sends a notification to a specified endpoint with a message.';  // Must be a string
+        this.name = 'CallMyPhoneTool';  // Lowercase, no spaces
+        this.description = 'A tool that sends a notification to the users phone. Only to be used if the user specifically requests a message to be sent as a call to their phone.';  // Must be a string
         this.endpoint = 'https://cmp.greatmachineinthesky.com/sendnotify';
         this.secret = 'x8K#mP9$vL2@nQ5';  // Replace with actual secret
     }
@@ -17,8 +17,8 @@ class NotificationTool {
             description: this.description,
             actions: [
                 {
-                    name: 'sendNotification',  // Must match execute method
-                    description: 'A tool that sends a notification to a specified endpoint with a message.',
+                    name: 'callPhone',  // Must match execute method
+                    description: 'Sends the suppied message so that it appears as a call on the users phone.',
                     parameters: [
                         {
                             name: 'message',
@@ -35,7 +35,7 @@ class NotificationTool {
     async execute(action, parameters) {
         try {
             switch (action) {
-                case 'sendNotification': {
+                case 'callPhone': {
                     const messageParam = parameters.find(p => p.name === 'message');
                     if (!messageParam || !messageParam.value) {
                         return { status: 'error', error: 'Invalid input: message parameter is required' };
@@ -63,4 +63,4 @@ class NotificationTool {
     }
 }
 
-module.exports = new NotificationTool();
+module.exports = new CallMyPhoneTool();

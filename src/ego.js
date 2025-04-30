@@ -365,11 +365,11 @@ async handleBubble(input, extraInstruction) {
     logger.debug('handleBubble', 'Bubble messages being sent to OpenAI', { messages }, true);
     const openai = getOpenAIClient();
     const response = await openai.chat(messages, {
-        model: 'gpt-4o-mini',
         temperature: 0.7,
         max_tokens: 1000
     });
-
+    //delete response.response.raw.context before logging to debug (if the key exists)
+    delete response.raw?.context;
     logger.debug('handleBubble', 'Bubble message OpenAI response', { response }, true);
     const assistantMessage = response.content;
     await memory.storeShortTerm('Assistant response', assistantMessage);
