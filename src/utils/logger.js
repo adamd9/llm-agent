@@ -4,7 +4,7 @@ const PREFIX = 'llm-agent';
 
 class Logger {
     constructor() {
-        this.debug = debug(PREFIX);
+        this.debugInstance = debug(PREFIX);
         this.wsConnections = new Map();
     }
 

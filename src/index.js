@@ -7,6 +7,7 @@ const logger = require("./utils/logger");
 const sharedEventEmitter = require("./utils/eventEmitter");
 const memory = require('./memory');
 const cliLogger = require('./utils/cliLogger');
+const safeStringify = require('./utils/safeStringify');
 const app = express();
 app.use(express.json());
 app.use(express.static("public"));
@@ -116,7 +117,7 @@ async function startServer() {
 
         while (messageQueue.length > 0) {
             const { type, data } = messageQueue.shift();
-            ws.send(JSON.stringify({ type, data }));      
+            ws.send(safeStringify({ type, data }));      
         }
         isSending = false;
     }
@@ -132,7 +133,7 @@ async function startServer() {
         cliLogger.initialize(sessionId);
 
         // Send session ID to client
-        ws.send(JSON.stringify({ type: "session", sessionId }));
+        ws.send(safeStringify({ type: "session", sessionId }));
 
         ws.on("message", async (message) => {
             try {
@@ -154,7 +155,7 @@ async function startServer() {
                     },
                 });
                 ws.send(
-                    JSON.stringify({
+                    safeStringify({
                         type: "error",
                         error: "Internal server error",
                         details: {

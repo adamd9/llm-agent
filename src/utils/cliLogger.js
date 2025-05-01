@@ -1,25 +1,27 @@
 const fs = require('fs').promises;
 const path = require('path');
-const logger = require('./logger');
+const safeStringify = require('./safeStringify');
 
 class CLILogger {
     constructor() {
         this.sessionId = null;
         this.outputPath = null;
         this.messages = [];
+        this.isLogging = false; // Guard against recursive logging
     }
 
     initialize(sessionId) {
         this.sessionId = sessionId;
         this.outputPath = path.join(__dirname, '../../data/temp', `session_${sessionId}.json`);
         this.messages = [];
-        logger.debug('cliLogger', 'Initialized CLI logger', { sessionId, outputPath: this.outputPath });
+        console.log(`[cliLogger] Initialized CLI logger for session ${sessionId}`);
     }
 
     async logMessage(type, data) {
-        if (!this.sessionId) return;
+        if (!this.sessionId || this.isLogging) return;
 
         try {
+            this.isLogging = true;
             const message = {
                 timestamp: new Date().toISOString(),
                 type,
@@ -29,7 +31,9 @@ class CLILogger {
             this.messages.push(message);
             await this.writeToFile();
         } catch (error) {
-            logger.error('cliLogger', 'Error logging message', error);
+            console.error('[cliLogger] Error logging message:', error);
+        } finally {
+            this.isLogging = false;
         }
     }
 
@@ -39,15 +43,14 @@ class CLILogger {
         try {
             await fs.writeFile(
                 this.outputPath,
-                JSON.stringify({ 
+                safeStringify({ 
                     sessionId: this.sessionId, 
                     messages: this.messages 
-                }, null, 2)
+                })
             );
-            logger.debug('cliLogger', 'Successfully wrote to file', { outputPath: this.outputPath });
+            console.log('[cliLogger] Successfully wrote to file:', this.outputPath);
         } catch (error) {
-            logger.error('cliLogger', 'Error writing to file', error);
-            throw error; // Re-throw to handle in calling function
+            console.error('[cliLogger] Error writing to file:', error);
         }
     }
 }
