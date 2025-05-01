@@ -37,7 +37,7 @@ class LongTermMemoryTool {
                         },
                         {
                             name: 'context',
-                            description: 'Context to use for retrieval',
+                            description: 'Context to use for retrieval (e.g. ego, execution, planning, evaluation)',
                             type: 'string',
                             required: false
                         }
@@ -56,7 +56,7 @@ class LongTermMemoryTool {
             throw new Error('Missing required parameter: data');
         }
         try {
-            const result = await memory.storeLongTerm(dataParam.value); // Call the storeLongTerm method from Memory
+            const result = await memory.storeLongTerm(dataParam.value);
             const actionResponse = {
                 status: 'success',
                 result
@@ -78,7 +78,7 @@ class LongTermMemoryTool {
             throw new Error('Missing required parameter: question');
         }
         try {
-            const result = await memory.retrieveLongTerm(contextParam ? contextParam.value : null, questionParam.value); // Call the retrieveLongTerm method from Memory
+            const result = await memory.retrieveLongTerm(contextParam ? contextParam.value : null, questionParam.value);
             return {
                 status: 'success',
                 result
