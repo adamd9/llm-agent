@@ -22,10 +22,11 @@ class CLILogger {
 
         try {
             this.isLogging = true;
+            // Create a new message object without any references to this.messages
             const message = {
                 timestamp: new Date().toISOString(),
                 type,
-                data
+                data: JSON.parse(JSON.stringify(data)) // Deep clone to break any circular references
             };
 
             this.messages.push(message);
@@ -41,14 +42,20 @@ class CLILogger {
         if (!this.outputPath) return;
         
         try {
+            // Create a clean object for writing to file
+            const fileContent = {
+                sessionId: this.sessionId,
+                messages: this.messages.map(msg => ({
+                    timestamp: msg.timestamp,
+                    type: msg.type,
+                    data: msg.data
+                }))
+            };
+            
             await fs.writeFile(
                 this.outputPath,
-                safeStringify({ 
-                    sessionId: this.sessionId, 
-                    messages: this.messages 
-                })
+                safeStringify(fileContent, 'CLILogger.writeToFile')
             );
-            console.log('[cliLogger] Successfully wrote to file:', this.outputPath);
         } catch (error) {
             console.error('[cliLogger] Error writing to file:', error);
         }

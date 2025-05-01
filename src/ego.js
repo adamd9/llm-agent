@@ -362,7 +362,7 @@ async handleBubble(input, extraInstruction) {
     });
     //delete response.response.raw.context before logging to debug (if the key exists)
     delete response.raw?.context;
-    logger.debug('handleBubble', 'Bubble message OpenAI response', { response }, false);
+    logger.debug('handleBubble', 'Bubble message OpenAI response', { response }, 'OpenAI Response Logging');
     const assistantMessage = response.content;
     await memory.storeShortTerm('Assistant response', assistantMessage);
     await sharedEventEmitter.emit('assistantResponse', assistantMessage);
