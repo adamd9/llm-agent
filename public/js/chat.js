@@ -47,7 +47,7 @@ function toggleStatus(messageDiv) {
     }
 }
 
-function showStatus(message) {
+function showStatus(message, options = {}) {
     // Process message
     let messageText, isPersistent;
     if (typeof message === 'string') {
@@ -82,7 +82,7 @@ function showStatus(message) {
         systemMessageDiv.innerHTML = `${spinner}Results ready ${viewButton}`;
     } else {
         // Show non-persistent messages in the system message area
-        const spinner = '<span class="spinner"></span>';
+        const spinner = options.noSpinner ? '' : '<span class="spinner"></span>';
         systemMessageDiv.innerHTML = `${spinner}${messageText}`;
     }
     
@@ -143,15 +143,16 @@ function addMessage(type, content, format = 'basic') {
 }
 
 function connect() {
-    ws = new WebSocket(`ws://${window.location.host}`);
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    
+    ws = new WebSocket(wsUrl);
     
     ws.onopen = () => {
         console.log('Connected to server');
-        showStatus('Connected to server');
-        
-        // Enable input and button
         document.getElementById('user-input').disabled = false;
         document.getElementById('send-button').disabled = false;
+        showStatus('Connected to server', { noSpinner: true });
     };
     
     ws.onmessage = (event) => {
