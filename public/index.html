@@ -8,7 +8,11 @@
     <link rel="stylesheet" href="/styles/main.css">
 </head>
 <body>
-    <div id="main-container">
+    <div id="app-container">
+        <header>
+            <button onclick="toggleDebug()" class="debug-toggle">Debug ▼</button>
+        </header>
+
         <div id="chat-container">
             <div id="messages"></div>
             <div id="input-container">
@@ -16,23 +20,27 @@
                 <button id="send-button" disabled>Send</button>
             </div>
         </div>
-        <div id="side-panel">
-            <div id="status-container">
-                <h3>Status</h3>
-                <div id="status-output">
-                    <span class="status-text"></span>
-                    <div class="spinner"></div>
-                </div>
+    </div>
+
+    <!-- Debug Modal -->
+    <div id="debug-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Debug Output</h3>
+                <button onclick="toggleDebug()" class="close-button">&times;</button>
             </div>
-            <div id="output-container" class="collapsed">
-                <h3>
-                    Debug Output
-                    <button onclick="toggleDebug()" class="toggle-button">▼</button>
-                </h3>
-                <div class="debug-content">
-                    <pre id="debug-output"></pre>
-                </div>
+            <pre id="debug-output"></pre>
+        </div>
+    </div>
+
+    <!-- Results Modal -->
+    <div id="results-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Results</h3>
+                <button onclick="toggleResults()" class="close-button">&times;</button>
             </div>
+            <pre id="results-output"></pre>
         </div>
     </div>
 
