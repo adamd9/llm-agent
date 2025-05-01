@@ -28,13 +28,11 @@ class Memory {
     logger.debug('Memory', 'Resetting memory');
     try {
       const shortTermFile = path.join(shortTermPath, SHORT_TERM_FILE);
-      const longTermFile = path.join(longTermPath, LONG_TERM_FILE);
 
       // If short term file exists, move its contents to long term
       if (fs.existsSync(shortTermFile)) {
         const shortTermData = fs.readFileSync(shortTermFile, 'utf8');
         if (shortTermData.trim()) {
-          fs.appendFileSync(longTermFile, shortTermData);
           // Clear the short term file
           fs.writeFileSync(shortTermFile, '');
         }
