@@ -6,6 +6,7 @@ const http = require("http");
 const logger = require("./utils/logger");
 const sharedEventEmitter = require("./utils/eventEmitter");
 const memory = require('./memory');
+const cliLogger = require('./utils/cliLogger');
 const app = express();
 app.use(express.json());
 app.use(express.static("public"));
@@ -31,14 +32,57 @@ async function processInitialMessage() {
     logger.debug("initial-message", "Processing initial message", { message: initialMessage });
     try {
         // Create a temporary session for the initial message
-        const tempSessionId = 'initial-session';
+        const tempSessionId = `cli_${uuidv4()}`;
         const sessionHistory = [];
         
-        // Process the message
-        const result = await ego.processMessage(initialMessage, sessionHistory);
+        // Initialize CLI logger
+        cliLogger.initialize(tempSessionId);
         
-        // Log the result and exit
-        logger.debug("initial-message", "Result", { result });
+        // Create promise to track message completion
+        let messagePromise = new Promise((resolve) => {
+            const messages = [];
+            
+            // Set up event listeners for CLI mode
+            const cliEventListeners = {
+                assistantResponse: async (data) => {
+                    await cliLogger.logMessage("response", { response: data });
+                    messages.push({ type: "response", data });
+                    // Resolve after getting the main response
+                    resolve(messages);
+                },
+                assistantWorking: async (data) => {
+                    await cliLogger.logMessage("working", { status: data });
+                    messages.push({ type: "working", data });
+                },
+                debugResponse: async (data) => {
+                    await cliLogger.logMessage("debug", data);
+                    messages.push({ type: "debug", data });
+                }
+            };
+
+            // Register CLI event listeners
+            Object.entries(cliEventListeners).forEach(([event, listener]) => {
+                sharedEventEmitter.on(event, listener);
+            });
+            
+            // Process the message
+            ego.processMessage(initialMessage, sessionHistory).catch((error) => {
+                logger.error("initial-message", "Error in message processing", error);
+                resolve(messages); // Resolve even on error to ensure cleanup
+            });
+        });
+
+        // Wait for message processing to complete
+        const messages = await messagePromise;
+        
+        // Give a small delay to ensure all async operations complete
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Log final message location if we got any messages
+        if (messages.length > 0) {
+            console.log(`\nSession output saved to: ${cliLogger.outputPath}`);
+        }
+        
         process.exit(0);
     } catch (error) {
         logger.error("initial-message", "Error processing initial message", error);
@@ -84,6 +128,9 @@ async function startServer() {
         memory.resetMemory();
         logger.debug("websocket", "New WebSocket connection", { sessionId });
 
+        // Initialize CLI logger for this session
+        cliLogger.initialize(sessionId);
+
         // Send session ID to client
         ws.send(JSON.stringify({ type: "session", sessionId }));
 
@@ -116,6 +163,14 @@ async function startServer() {
                         },
                     })
                 );
+                // Log error to file
+                await cliLogger.logMessage("error", {
+                    error: "Internal server error",
+                    details: {
+                        message: error.message,
+                        timestamp: new Date().toISOString(),
+                    }
+                });
             }
         });
 
@@ -124,7 +179,7 @@ async function startServer() {
             wsConnections.delete(sessionId);
         });
 
-        sharedEventEmitter.on("assistantResponse", (data) => {
+        sharedEventEmitter.on("assistantResponse", async (data) => {
             messageQueue.push({ type: "response", data: { response: data } });
             processQueue(ws);
 
@@ -134,14 +189,20 @@ async function startServer() {
                 content: data,
             });
             sessions.set(sessionId, sessionHistory);
+
+            // Log response to file
+            await cliLogger.logMessage("response", { response: data });
         });
 
-        sharedEventEmitter.on("assistantWorking", (data) => {
+        sharedEventEmitter.on("assistantWorking", async (data) => {
             messageQueue.push({ type: "working", data: { status: data } });
             processQueue(ws);
+
+            // Log working status to file
+            await cliLogger.logMessage("working", { status: data });
         });
 
-        sharedEventEmitter.on("debugResponse", (data) => {
+        sharedEventEmitter.on("debugResponse", async (data) => {
             messageQueue.push({ type: "debug", data });
             processQueue(ws);
 
@@ -151,6 +212,9 @@ async function startServer() {
                 content: data,
             });
             sessions.set(sessionId, sessionHistory);
+
+            // Log debug message to file
+            await cliLogger.logMessage("debug", data);
         });
     });
 
