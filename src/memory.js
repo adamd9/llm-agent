@@ -23,21 +23,17 @@ class Memory {
     this.openaiClient = getOpenAIClient();
   }
 
-  // Reset memory by moving short-term contents to long-term
+  // Reset memory by clearing short-term memory
   async resetMemory() {
-    logger.debug('Memory', 'Resetting memory');
+    logger.debug('Memory', 'Resetting short-term memory');
     try {
       const shortTermFile = path.join(shortTermPath, SHORT_TERM_FILE);
 
-      // If short term file exists, move its contents to long term
+      // Clear the short term file
       if (fs.existsSync(shortTermFile)) {
-        const shortTermData = fs.readFileSync(shortTermFile, 'utf8');
-        if (shortTermData.trim()) {
-          // Clear the short term file
-          fs.writeFileSync(shortTermFile, '');
-        }
+        fs.writeFileSync(shortTermFile, '');
+        logger.debug('Memory', 'Short-term memory cleared');
       }
-      logger.debug('Memory', 'Memory reset successful');
     } catch (error) {
       logger.error('Memory', 'Error resetting memory:', { error: error.message });
       throw error;
@@ -45,18 +41,10 @@ class Memory {
   }
 
   // Store short term memory
-  async storeShortTerm(context, data, module = 'ego', overwrite = false) {
+  async storeShortTerm(context, data, module = 'ego') {
     logger.debug('Memory', 'Storing short-term memory', { context, data, module });
     const filePath = path.join(shortTermPath, SHORT_TERM_FILE);
     const timestamp = Math.floor(Date.now() / 1000);
-    let fileContent = '';
-
-    // Check if the file exists
-    if (fs.existsSync(filePath)) {
-      fileContent = fs.readFileSync(filePath, 'utf-8');
-    }
-
-    const lines = fileContent.split('\n').filter(line => line.trim() !== '');
 
     // Convert data to string if it's not already
     let dataString;
@@ -71,30 +59,15 @@ class Memory {
       }
     }
 
-    const newLines = dataString.split('\n').filter(line => line.trim() !== '');
-    const totalLines = lines.length + newLines.length;
-
-    if (overwrite) {
-      fs.writeFileSync(filePath, `[${module}][${context}][${timestamp}] ${dataString}\n`);
-      return;
-    } else if (totalLines > maxLines) {
-      const linesToMove = totalLines - maxLines;
-      const linesToRetain = lines.slice(linesToMove);
-
-      // Move the oldest lines to the long term storage
-      const longTermFilePath = path.join(longTermPath, LONG_TERM_FILE);
-      const linesToMoveContent = lines.slice(0, linesToMove).join('\n') + '\n';
-      fs.appendFileSync(longTermFilePath, linesToMoveContent);
-
-      // Retain only recent lines and add new data
-      const updatedContent = linesToRetain.join('\n') + '\n' + newLines.join('\n') + '\n';
-      fs.writeFileSync(filePath, `[${module}][${context}][${timestamp}] ${updatedContent}`);
-    } else {
-      // Append new data if within limits
-      fs.appendFileSync(filePath, `[${module}][${context}][${timestamp}] ${dataString}\n`);
+    // Format and append the memory entry
+    const memoryEntry = `[${module}][${context}][${timestamp}] ${dataString}\n`;
+    try {
+      fs.appendFileSync(filePath, memoryEntry);
+      logger.debug('Memory', 'Stored short-term memory successfully');
+    } catch (error) {
+      logger.error('Memory', 'Error storing short-term memory', { error: error.message });
+      throw error;
     }
-
-    logger.debug('Memory', 'Stored short-term memory', { data: dataString }, false);
   }
 
   // Retrieve short term memory
@@ -219,7 +192,6 @@ class Memory {
       const response = await this.openaiClient.chat(messages);
       return {
         status: "success",
-        memories: relevantMemories,
         analysis: response.content
       };
     } catch (error) {

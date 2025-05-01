@@ -6,7 +6,6 @@ const http = require("http");
 const logger = require("./utils/logger");
 const sharedEventEmitter = require("./utils/eventEmitter");
 const memory = require('./memory');
-const cliLogger = require('./utils/cliLogger');
 const safeStringify = require('./utils/safeStringify');
 const app = express();
 app.use(express.json());
@@ -36,41 +35,30 @@ async function processInitialMessage() {
         const tempSessionId = `cli_${uuidv4()}`;
         const sessionHistory = [];
         
-        // Initialize CLI logger
-        cliLogger.initialize(tempSessionId);
+        // Initialize logger for this session
+        await logger.initialize(tempSessionId);
         
         // Create promise to track message completion
         let messagePromise = new Promise((resolve) => {
             const messages = [];
             
-            // Set up event listeners for CLI mode
-            const cliEventListeners = {
-                assistantResponse: async (data) => {
-                    await cliLogger.logMessage("response", { response: data });
-                    messages.push({ type: "response", data });
-                    // Resolve after getting the main response
-                    resolve(messages);
-                },
-                assistantWorking: async (data) => {
-                    await cliLogger.logMessage("working", { status: data });
-                    messages.push({ type: "working", data });
-                },
-                debugResponse: async (data) => {
-                    await cliLogger.logMessage("debug", data);
-                    messages.push({ type: "debug", data });
-                }
+            // Listen for debug responses
+            const debugHandler = async (data) => {
+                messages.push(data);
             };
-
-            // Register CLI event listeners
-            Object.entries(cliEventListeners).forEach(([event, listener]) => {
-                sharedEventEmitter.on(event, listener);
-            });
+            
+            // Listen for completion
+            const completionHandler = () => {
+                sharedEventEmitter.off('debugResponse', debugHandler);
+                sharedEventEmitter.off('assistantComplete', completionHandler);
+                resolve(messages);
+            };
+            
+            sharedEventEmitter.on('debugResponse', debugHandler);
+            sharedEventEmitter.once('assistantComplete', completionHandler);
             
             // Process the message
-            ego.processMessage(initialMessage, sessionHistory).catch((error) => {
-                logger.error("initial-message", "Error in message processing", error);
-                resolve(messages); // Resolve even on error to ensure cleanup
-            });
+            ego.processMessage(initialMessage, sessionHistory);
         });
 
         // Wait for message processing to complete
@@ -81,7 +69,7 @@ async function processInitialMessage() {
         
         // Log final message location if we got any messages
         if (messages.length > 0) {
-            console.log(`\nSession output saved to: ${cliLogger.outputPath}`);
+            console.log(`\nSession output saved to: ${logger.outputPath}`);
         }
         
         process.exit(0);
@@ -107,115 +95,150 @@ async function startServer() {
     const wss = new WebSocket.Server({ server });
 
     // Message queue to hold messages to be sent
-    const messageQueue = [];
-    let isSending = false;
+    const messageQueue = new Map(); 
 
     // Function to process the message queue
     async function processQueue(ws) {
-        if (isSending || messageQueue.length === 0) return;
-        isSending = true;
+        const sessionId = ws.sessionId;
+        const queue = messageQueue.get(sessionId);
+        if (!queue || queue.length === 0) return;
 
-        while (messageQueue.length > 0) {
-            const { type, data } = messageQueue.shift();
-            ws.send(safeStringify({ type, data }));      
+        const message = queue.shift();
+        if (!message) return;
+
+        try {
+            await new Promise((resolve, reject) => {
+                ws.send(JSON.stringify(message), (error) => {
+                    if (error) reject(error);
+                    else resolve();
+                });
+            });
+            
+            // Process next message if any
+            if (queue.length > 0) {
+                setTimeout(() => processQueue(ws), 10); 
+            }
+        } catch (error) {
+            logger.error('websocket', 'Error sending message', { error, message });
         }
-        isSending = false;
     }
 
-    // WebSocket connection handler
-    wss.on("connection", (ws) => {
-        let sessionId = uuidv4();
+    // Handle WebSocket connections
+    wss.on('connection', async (ws) => {
+        const sessionId = uuidv4();
+        const isNewSession = !sessions.has(sessionId);
+        
+        sessions.set(sessionId, []);
         wsConnections.set(sessionId, ws);
-        memory.resetMemory();
-        logger.debug("websocket", "New WebSocket connection", { sessionId });
+        ws.sessionId = sessionId;
+        messageQueue.set(sessionId, []); 
+        
+        // Only reset memory for new sessions, not reconnections
+        if (isNewSession) {
+            await memory.resetMemory();
+        }
 
-        // Initialize CLI logger for this session
-        cliLogger.initialize(sessionId);
+        // Initialize logger for this session
+        await logger.initialize(sessionId);
 
-        // Send session ID to client
-        ws.send(safeStringify({ type: "session", sessionId }));
+        // Send initial connection message
+        ws.send(JSON.stringify({
+            type: 'connected',
+            sessionId,
+            isNewSession
+        }));
+
+        logger.debug('websocket', 'New WebSocket connection', { sessionId, isNewSession });
 
         ws.on("message", async (message) => {
             try {
                 const data = JSON.parse(message);
-                logger.debug("websocket", "Received message", { sessionId, data });
+                logger.debug("websocket", "Received message", { sessionId: ws.sessionId, data });
 
                 // Get session history
-                let sessionHistory = sessions.get(sessionId) || [];
+                let sessionHistory = sessions.get(ws.sessionId) || [];
 
                 // Process message through ego
                 await ego.processMessage(data.message, sessionHistory);
-
             } catch (error) {
-                logger.debug("websocket", "Error processing message", {
-                    sessionId,
+                logger.error("websocket", "Error processing message", {
+                    sessionId: ws.sessionId,
                     error: {
                         message: error.message,
                         stack: error.stack,
                     },
                 });
+
                 ws.send(
-                    safeStringify({
+                    JSON.stringify({
                         type: "error",
-                        error: "Internal server error",
-                        details: {
+                        error: {
                             message: error.message,
                             timestamp: new Date().toISOString(),
                         },
                     })
                 );
-                // Log error to file
-                await cliLogger.logMessage("error", {
-                    error: "Internal server error",
-                    details: {
-                        message: error.message,
-                        timestamp: new Date().toISOString(),
-                    }
-                });
             }
         });
 
         ws.on("close", () => {
-            logger.debug("websocket", "Connection closed", { sessionId });
-            wsConnections.delete(sessionId);
+            logger.debug("websocket", "Connection closed", { sessionId: ws.sessionId });
+            wsConnections.delete(ws.sessionId);
+            messageQueue.delete(ws.sessionId); 
+            sessions.delete(ws.sessionId);
         });
 
         sharedEventEmitter.on("assistantResponse", async (data) => {
-            messageQueue.push({ type: "response", data: { response: data } });
-            processQueue(ws);
+            const queue = messageQueue.get(ws.sessionId);
+            if (queue) {
+                queue.push({ 
+                    type: "response", 
+                    data: { response: data }  
+                });
+                processQueue(ws);
+            }
 
-            let sessionHistory = sessions.get(sessionId) || [];
+            let sessionHistory = sessions.get(ws.sessionId) || [];
             sessionHistory.push({
                 role: "assistant",
                 content: data,
             });
-            sessions.set(sessionId, sessionHistory);
+            sessions.set(ws.sessionId, sessionHistory);
 
             // Log response to file
-            await cliLogger.logMessage("response", { response: data });
+            await logger.debug("response", "Assistant response", { response: data });
         });
 
         sharedEventEmitter.on("assistantWorking", async (data) => {
-            messageQueue.push({ type: "working", data: { status: data } });
-            processQueue(ws);
+            const queue = messageQueue.get(ws.sessionId);
+            if (queue) {
+                queue.push({ 
+                    type: "working", 
+                    data: { status: data }  
+                });
+                processQueue(ws);
+            }
 
             // Log working status to file
-            await cliLogger.logMessage("working", { status: data });
+            await logger.debug("working", "Assistant working", { status: data });
         });
 
         sharedEventEmitter.on("debugResponse", async (data) => {
-            messageQueue.push({ type: "debug", data });
-            processQueue(ws);
+            const queue = messageQueue.get(ws.sessionId);
+            if (queue) {
+                queue.push({
+                    type: "debug",
+                    data: data  
+                });
+                processQueue(ws);
+            }
 
-            let sessionHistory = sessions.get(sessionId) || [];
+            let sessionHistory = sessions.get(ws.sessionId) || [];
             sessionHistory.push({
                 role: "assistantDebug",
                 content: data,
             });
-            sessions.set(sessionId, sessionHistory);
-
-            // Log debug message to file
-            await cliLogger.logMessage("debug", data);
+            sessions.set(ws.sessionId, sessionHistory);
         });
     });
 

@@ -81,7 +81,7 @@ class LongTermMemoryTool {
             const result = await memory.retrieveLongTerm(contextParam ? contextParam.value : null, questionParam.value);
             return {
                 status: 'success',
-                result
+                result: result.analysis
             };
         } catch (error) {
             return {

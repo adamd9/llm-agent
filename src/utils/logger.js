@@ -1,35 +1,88 @@
 const debug = require('debug');
 const sharedEventEmitter = require('./eventEmitter');
+const fs = require('fs').promises;
+const path = require('path');
+const safeStringify = require('./safeStringify');
 const PREFIX = 'llm-agent';
 
 class Logger {
     constructor() {
         this.debugInstance = debug(PREFIX);
         this.wsConnections = new Map();
+        this.sessionId = null;
+        this.outputPath = null;
+        this.messages = [];
+        this.isLogging = false; // Guard against recursive logging
     }
 
     setWSConnections(connections) {
         this.wsConnections = connections;
     }
 
-    /**
-     * Safely stringifies data, handling circular references
-     * @param {any} data - Data to stringify
-     * @param {string} [context] - Context for safeStringify
-     * @returns {string} - Stringified data
-     */
-    safeStringify(data, context) {
-        if (typeof data !== 'object' || data === null) {
-            return String(data);
+    async initialize(sessionId) {
+        this.sessionId = sessionId;
+        // Use absolute path to data/temp directory
+        const tempDir = path.join(process.cwd(), 'data', 'temp');
+        
+        // Ensure temp directory exists
+        try {
+            await fs.access(tempDir);
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                await fs.mkdir(tempDir, { recursive: true });
+            }
         }
+        
+        this.outputPath = path.join(tempDir, `session_${sessionId}.json`);
+        this.messages = [];
+        console.log(`[logger] Initialized logger for session ${sessionId} at ${this.outputPath}`);
+    }
+
+    async writeToFile() {
+        if (!this.sessionId || !this.outputPath || this.isLogging) return;
+        
+        try {
+            this.isLogging = true;
+            
+            // Ensure directory exists
+            const dir = path.dirname(this.outputPath);
+            await fs.mkdir(dir, { recursive: true });
+            
+            // Write messages to file
+            const data = {
+                sessionId: this.sessionId,
+                messages: this.messages,
+                timestamp: new Date().toISOString()
+            };
+            
+            await fs.writeFile(this.outputPath, JSON.stringify(data, null, 2));
+            console.log(`[logger] Wrote ${this.messages.length} messages to ${this.outputPath}`);
+        } catch (error) {
+            console.error('[logger] Error writing to file:', error);
+            console.error('[logger] Failed path:', this.outputPath);
+        } finally {
+            this.isLogging = false;
+        }
+    }
+
+    async logMessage(type, data) {
+        if (!this.sessionId || this.isLogging) return;
 
         try {
-            return JSON.stringify(data, null, 2);
+            this.isLogging = true;
+            // Create a new message object without any references to this.messages
+            const message = {
+                timestamp: new Date().toISOString(),
+                type,
+                data: JSON.parse(JSON.stringify(data)) // Deep clone to break any circular references
+            };
+
+            this.messages.push(message);
+            await this.writeToFile();
         } catch (error) {
-            if (error.message.includes('circular')) {
-                return `[Object with circular reference - unable to display full contents in ${context}]`;
-            }
-            return `[Error stringifying object in ${context}: ${error.message}]`;
+            console.error('[logger] Error logging message:', error);
+        } finally {
+            this.isLogging = false;
         }
     }
 
@@ -41,26 +94,36 @@ class Logger {
      * @param {string|boolean} [sendToUser=true] - If string, used as context for safeStringify. If boolean, controls whether to send to connected users
      */
     async debug(context, message, data = {}, sendToUser = true) {
-        // Handle if message is an object
-        if (typeof message === 'object') {
-            data = message;
-            message = '';
-        }
+        if (this.isLogging) return;
 
-        const debugInfo = {
-            timestamp: new Date().toISOString(),
+        const timestamp = new Date().toISOString();
+        const debugMessage = {
             type: 'debug',
             context,
             message,
-            data: typeof data === 'object' ? JSON.parse(this.safeStringify(data, typeof sendToUser === 'string' ? sendToUser : context)) : data
+            data,
+            timestamp
         };
 
-        // Log to debug console
-        this.debugInstance(JSON.stringify(debugInfo));
+        // Add to messages array
+        this.messages.push(debugMessage);
 
-        // Send to websocket connections if enabled
-        if (sendToUser === true || typeof sendToUser === 'string') {
-            await sharedEventEmitter.emit('debugResponse', debugInfo);
+        // Write to file
+        await this.writeToFile();
+
+        // Log to console
+        console.log(`[logger] ${context}: ${message}`, data);
+
+        // Send to WebSocket if needed
+        if (sendToUser && this.wsConnections) {
+            for (const [sessionId, ws] of this.wsConnections) {
+                if (sessionId === this.sessionId) {
+                    ws.send(JSON.stringify({
+                        type: 'debug',
+                        data: debugMessage
+                    }));
+                }
+            }
         }
     }
 
@@ -71,31 +134,41 @@ class Logger {
      * @param {*} [data] - Optional data to log
      * @param {boolean} [sendToUser=true] - Whether to send to connected users
      */
-    async error(context, error, data = {}, sendToUser = true) {
-        // Handle if error is an object
-        if (typeof error === 'object' && !(error instanceof Error)) {
-            data = error;
-            error = '';
-        }
+    async error(context, message, error = {}) {
+        if (this.isLogging) return;
 
-        const errorInfo = {
+        const timestamp = new Date().toISOString();
+        const errorMessage = {
+            type: 'error',
             context,
-            message: error instanceof Error ? error.stack || error.message : error,
-            data,
-            timestamp: new Date().toISOString()
+            message,
+            error: {
+                message: error.message || error,
+                stack: error.stack,
+            },
+            timestamp
         };
 
-        const dataString = this.safeStringify(data);
-        console.error(`[${context}] ${errorInfo.message}`, dataString);
+        // Add to messages array
+        this.messages.push(errorMessage);
 
-        if (sendToUser !== false) {
-            await sharedEventEmitter.emit('debugResponse', errorInfo);
+        // Write to file
+        await this.writeToFile();
+
+        // Log to console
+        console.error(`[logger] Error in ${context}: ${message}`, error);
+
+        // Send to WebSocket
+        if (this.wsConnections) {
+            for (const [sessionId, ws] of this.wsConnections) {
+                if (sessionId === this.sessionId) {
+                    ws.send(JSON.stringify({
+                        type: 'error',
+                        data: errorMessage
+                    }));
+                }
+            }
         }
-    }
-
-    // Helper method for code blocks
-    code(message, language = 'javascript', metadata = {}) {
-        this.response(message, { format: 'code', language, metadata });
     }
 }
 

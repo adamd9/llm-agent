@@ -61,8 +61,8 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
     let hasErrors = false;
     let step;
 
-    memory.storeShortTerm('LatestPan', JSON.stringify(plan), 'coordinator', true);
-    memory.storeShortTerm('LatestPan', JSON.stringify(plan), 'ego', false);
+    memory.storeShortTerm('LatestPan', JSON.stringify(plan), 'coordinator');
+    memory.storeShortTerm('LatestPan', JSON.stringify(plan), 'ego');
 
     try {
         const tools = await toolManager.loadTools();
@@ -97,7 +97,7 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
             try {
                 const result = await tool.execute(step.action, step.parameters, plan);
                 logger.debug('Tool execution result:', result);
-                memory.storeShortTerm('toolExecutionResult for' + step.action, JSON.stringify(result), 'ego', false);
+                memory.storeShortTerm('toolExecutionResult for' + step.action, JSON.stringify(result), 'ego');
                 await sharedEventEmitter.emit('assistantWorking', {
                     message: `Completed ${step.action}`,
                     persistent: false
