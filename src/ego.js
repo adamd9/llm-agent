@@ -320,34 +320,26 @@ async handleBubble(input, extraInstruction) {
     if (typeof input === 'string') {
         message = input;
     } else if (typeof input === 'object') {
-        message = JSON.stringify(input);
+        // If it's a tool response, extract the actual data
+        if (input.response?.result?.data?.result) {
+            message = input.response.result.data.result;
+        } else {
+            message = JSON.stringify(input);
+        }
     } else {
         throw new Error('Input must be a string or an object');
     }
 
-    logger.debug('handleBubble', 'Processing bubble', { message }, true);
+    logger.debug('handleBubble', 'Processing bubble', { message }, false);
 
-    // Count the number of words in the message
-    const wordCount = message.split(/\s+/).filter(word => word.length > 0).length;
-
-    let userPrompt = `From the supplied data/text, generate a plain text summary, in the context that this response has come from your inner workings as an AI assistent system. 
-    This means that whatever the response is, you should represent it as coming from 'you' and not from some other entity or system.
-    Never refer to yourself (the AI agent) in the third person.
-    Don't represent things coming from 'the system' - these are inner workings of your system and should be kept internal.
-    Instead of saying 'from the system' say 'from me' and so fourth
+    let userPrompt = `From the supplied data/text, generate a response in your personality's style. 
+    If this is weather data, make sure to preserve all temperature and condition information.
     Don't reflect having received a message or 'received data' - these are inner workings of your system and should be kept internal.
     Never refer to 'the user', refer to 'you', 'your' etc instead, unless you know the user's name.
-    Never refer to providing a summarised or translated version of the original message. Always present the response as coming from you as the AI agent.    
-    Keep it simple, to the point, and avoid unnecessary details. 
-    When interpreting JSON, if you see a "status" key of "success", you don't need to mention it - this is just confirming success of the comms layer and not relevant to the content or end user.
+    Never refer to providing a summarised or translated version of the original message.
     Don't use any indicators like plaintext etc, as it is assumed it will be plaintext.
     Make sure the response is in keeping with the current personality.
     Data/text: ${message}`;
-
-    // If the word count is less than 10, add an additional instruction
-    if (wordCount < 10) {
-        userPrompt += "\nAdditionally, ensure the response is less than 10 words.";
-    }
 
     if (extraInstruction) {
         userPrompt += `\nAdditionally, follow this instruction:
@@ -362,7 +354,7 @@ async handleBubble(input, extraInstruction) {
         { role: 'user', content: userPrompt }
     ];
 
-    logger.debug('handleBubble', 'Bubble messages being sent to OpenAI', { messages }, true);
+    logger.debug('handleBubble', 'Bubble messages being sent to OpenAI', { messages }, false);
     const openai = getOpenAIClient();
     const response = await openai.chat(messages, {
         temperature: 0.7,
@@ -370,7 +362,7 @@ async handleBubble(input, extraInstruction) {
     });
     //delete response.response.raw.context before logging to debug (if the key exists)
     delete response.raw?.context;
-    logger.debug('handleBubble', 'Bubble message OpenAI response', { response }, true);
+    logger.debug('handleBubble', 'Bubble message OpenAI response', { response }, false);
     const assistantMessage = response.content;
     await memory.storeShortTerm('Assistant response', assistantMessage);
     await sharedEventEmitter.emit('assistantResponse', assistantMessage);
