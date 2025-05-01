@@ -2,6 +2,7 @@ const OpenAI = require('openai');
 const logger = require('../utils/logger');
 const fs = require('fs').promises;
 const path = require('path');
+const memory = require('../memory');
 
 /** @implements {import('../types/tool').Tool} */
 class LLMQueryOpenAITool {
@@ -60,15 +61,29 @@ class LLMQueryOpenAITool {
         }
 
         try {
+            // Retrieve memory
+            const shortTermMemory = await memory.retrieveShortTerm();
+            const longTermRelevantMemory = await memory.retrieveLongTerm('ego', 'retrieve anything relevant to carrying out a users request');
+
             // Create responses directory if it doesn't exist
             const responsesDir = path.join(__dirname, '../../data/temp/openai_responses');
             await fs.mkdir(responsesDir, { recursive: true });
+
+            // Construct input with memory context
+            const input = `
+            ${queryParam.value}
+            Use the following memory:
+            Short term memory (from this conversation):
+            ${JSON.stringify(shortTermMemory)}
+            Long term relevant memory:
+            ${JSON.stringify(longTermRelevantMemory)}
+            `;
 
             // Call OpenAI responses API
             const response = await this.client.responses.create({
                 model: this.defaultModel,
                 tools: [{ type: "web_search_preview" }],
-                input: queryParam.value
+                input: input
             });
 
             // Save raw response for analysis
