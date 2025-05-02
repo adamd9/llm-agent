@@ -203,100 +203,18 @@ Remember to maintain conversation continuity with the original request.`);
         }
 
         // Return final result
-        const response = {
-            type: 'task',
-            response: executionResult.response,
-            enriched_message: enrichedMessage,
-            evaluation: {
-                score: evaluation.score,
-                analysis: evaluation.analysis,
-                recommendations: evaluation.recommendations
-            }
-        };
-
-        // If this was a retry, add context about the attempts
-        if (attempt > 1) {
-            response.response = `Final result (after ${attempt} attempts, score: ${evaluation.score}%):\n` +
-                executionResult.response;
-        }
-
-        logger.debug('executeWithEvaluation', 'Execution complete, returning final response', { response });
-
-        // Always emit evaluation results as a working status
-        let evalMessage = `Score: ${evaluation.score}%\n`;
-        if (evaluation.score === 100) {
-            evalMessage += '\n✨ Perfect execution! All requirements met.';
-        } else if (evaluation.recommendations && evaluation.recommendations.length > 0) {
-            evalMessage += `\nSuggested improvements:\n${evaluation.recommendations.map(r => `• ${r}`).join('\n')}`;
-        }
-        
-        // Add plan information in a readable format
-        const plan = JSON.parse(planResult.plan);
-        const correlationId = `exec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        
-        // Log detailed execution results for debugging
-        logger.debug('execution_results', {
-            correlationId,
-            plan,
-            executionResult,
-            evaluation
-        });
-        
-        evalMessage += `\n\nExecution ID: ${correlationId}`;
-        evalMessage += '\nExecuted Plan:';
-        plan.forEach((step, index) => {
-            evalMessage += `\n${index + 1}. ${step.tool}.${step.action}`;
-            if (step.parameters && step.parameters.length > 0) {
-                evalMessage += '\n   Parameters:';
-                step.parameters.forEach(param => {
-                    evalMessage += `\n   - ${param.name}: ${param.value}`;
-                });
-            }
-            if (step.description) {
-                evalMessage += `\n   Description: ${step.description}`;
-            }
-            
-            // Add execution result for this step if available
-            const stepResult = executionResult.response[index];
-            if (stepResult && stepResult.result) {
-                evalMessage += '\n   Result:';
-                if (stepResult.result.data && stepResult.result.data.message) {
-                    evalMessage += `\n   - ${stepResult.result.data.message}`;
-                } else if (typeof stepResult.result.data === 'string') {
-                    evalMessage += `\n   - ${stepResult.result.data}`;
-                } else {
-                    const resultData = stepResult.result.data;
-                    // Handle complex data structures more gracefully
-                    if (resultData && typeof resultData === 'object') {
-                        Object.entries(resultData).forEach(([key, value]) => {
-                            evalMessage += `\n   - ${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`;
-                        });
-                    } else {
-                        evalMessage += `\n   - ${JSON.stringify(resultData)}`;
-                    }
-                }
-                if (stepResult.result.status === 'error') {
-                    evalMessage += `\n   - Error: ${stepResult.result.error || 'Unknown error'}`;
-                }
-            }
-        });
-        
-        await sharedEventEmitter.emit('assistantWorking', {
-            message: evalMessage,
-            persistent: true,
-            correlationId
-        });
-
-        // Extract and return just the final task response
         let finalResponse;
         if (Array.isArray(executionResult.response)) {
             // Handle array of results
             finalResponse = executionResult.response.map(r => {
-                if (r.result && r.result.data && r.result.data.message) {
+                // Special handling for llmqueryopenai tool
+                if (r.tool === 'llmqueryopenai' && r.result?.data?.data?.result) {
+                    return r.result.data.data.result;
+                } else if (r.result && r.result.data && r.result.data.message) {
                     return r.result.data.message;
                 }
                 return r.result || r;
-            }).join('\n');
+            });
         } else if (typeof executionResult.response === 'string') {
             // Handle string response
             finalResponse = executionResult.response;
@@ -305,12 +223,14 @@ Remember to maintain conversation continuity with the original request.`);
             finalResponse = executionResult.response.result.data.message || executionResult.response.result.data;
         } else {
             // Fallback
-            finalResponse = JSON.stringify(executionResult.response);
+            finalResponse = executionResult.response;
         }
 
         return {
             type: 'task',
-            response: finalResponse
+            response: finalResponse,
+            enriched_message: enrichedMessage,
+            evaluation: evaluation
         };
     }
 
@@ -320,11 +240,55 @@ async handleBubble(input, extraInstruction) {
     if (typeof input === 'string') {
         message = input;
     } else if (typeof input === 'object') {
-        // If it's a tool response, extract the actual data
+        // Handle different response structures
         if (input.response?.result?.data?.result) {
+            // Original path
             message = input.response.result.data.result;
+        } else if (input.type === 'task' && input.response) {
+            // Handle task response structure
+            if (Array.isArray(input.response)) {
+                // Handle array of tool results
+                const toolResults = input.response.map(item => {
+                    if (item.result?.data?.data?.result) {
+                        return item.result.data.data.result;
+                    } else if (item.result?.data?.result) {
+                        return item.result.data.result;
+                    } else if (typeof item.result?.data === 'string') {
+                        return item.result.data;
+                    } else {
+                        try {
+                            return JSON.stringify(item);
+                        } catch (error) {
+                            logger.debug('handleBubble', 'Error stringifying array item', { error: error.message });
+                            return `[Error: ${error.message}]`;
+                        }
+                    }
+                });
+                message = toolResults.join('\n');
+            } else {
+                // Special handling for weather data from LLMQueryOpenAITool
+                if (typeof input.response === 'object' && input.response.data && input.response.data.result) {
+                    message = input.response.data.result;
+                } else if (typeof input.response === 'string') {
+                    message = input.response;
+                } else {
+                    try {
+                        message = JSON.stringify(input.response);
+                    } catch (error) {
+                        logger.debug('handleBubble', 'Error stringifying response', { error: error.message });
+                        message = `[Error: ${error.message}]`;
+                    }
+                }
+            }
         } else {
-            message = JSON.stringify(input);
+            // Fallback to stringify the entire object
+            try {
+                message = JSON.stringify(input);
+            } catch (error) {
+                // Handle circular references or other JSON stringify errors
+                logger.debug('handleBubble', 'Error stringifying input', { error: error.message });
+                message = `Error processing response: ${error.message}`;
+            }
         }
     } else {
         throw new Error('Input must be a string or an object');
