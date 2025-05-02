@@ -69,7 +69,7 @@ async function processInitialMessage() {
         
         // Log final message location if we got any messages
         if (messages.length > 0) {
-            console.log(`\nSession output saved to: ${logger.outputPath}`);
+            logger.debug(`\nSession output saved to: ${logger.outputPath}`);
         }
         
         process.exit(0);
@@ -128,6 +128,9 @@ async function startServer() {
         const sessionId = uuidv4();
         const isNewSession = !sessions.has(sessionId);
         
+        // Initialize logger for this session
+        await logger.initialize(sessionId);
+        
         sessions.set(sessionId, []);
         wsConnections.set(sessionId, ws);
         ws.sessionId = sessionId;
@@ -137,9 +140,6 @@ async function startServer() {
         if (isNewSession) {
             await memory.resetMemory();
         }
-
-        // Initialize logger for this session
-        await logger.initialize(sessionId);
 
         // Send initial connection message
         ws.send(JSON.stringify({

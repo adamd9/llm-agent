@@ -10,7 +10,7 @@ class ToolManager {
     }
 
     async loadTools() {
-        console.log('Loading tools...');
+        logger.debug('Loading tools...');
         // Clear existing tools
         this.tools.clear();
 
@@ -21,10 +21,10 @@ class ToolManager {
         try {
             await this.loadToolsFromDirectory(this.dataToolsDir, 'data');
         } catch (error) {
-            console.log('No custom tools found in data directory');
+            logger.debug('No custom tools found in data directory');
         }
 
-        console.log('Loaded tools:', Array.from(this.tools.keys()));
+        logger.debug('Loaded tools:', Array.from(this.tools.keys()));
         return Array.from(this.tools.values());
     }
 
@@ -157,11 +157,11 @@ class ToolManager {
     }
 
     getTool(name) {
-        console.log(`Requesting tool: ${name}`);
+        logger.debug(`Requesting tool: ${name}`);
         const tool = this.tools.get(name);
         if (!tool) {
-            console.log(`Tool not found: ${name}`);
-            console.log('Available tools:', Array.from(this.tools.keys()));
+            logger.debug(`Tool not found: ${name}`);
+            logger.debug('Available tools:', Array.from(this.tools.keys()));
         }
         return tool;
     }

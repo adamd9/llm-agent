@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const logger = require('../utils/logger');
 
 class PersonalityManager {
     constructor() {
@@ -9,7 +10,7 @@ class PersonalityManager {
     }
 
     async loadPersonalities() {
-        console.log('Loading personalities...');
+        logger.debug('Loading personalities...');
         // Clear existing personalities
         this.personalities.clear();
 
@@ -20,20 +21,20 @@ class PersonalityManager {
         try {
             await this.loadPersonalitiesFromDirectory(this.dataPersonalitiesDir, 'data');
         } catch (error) {
-            console.log('No custom personalities found in data directory');
+            logger.debug('No custom personalities found in data directory');
         }
 
         if (this.personalities.size === 0) {
             throw new Error('No personalities found');
         }
 
-        console.log('Loaded personalities:', Array.from(this.personalities.keys()));
+        logger.debug('Loaded personalities:', Array.from(this.personalities.keys()));
         return Array.from(this.personalities.values());
     }
 
     async loadPersonalitiesFromDirectory(directory, source) {
         try {
-            console.log(`Loading personalities from ${directory}`);
+            logger.debug(`Loading personalities from ${directory}`);
             const files = await fs.readdir(directory);
             
             for (const file of files) {
@@ -42,7 +43,7 @@ class PersonalityManager {
                 if (file.endsWith('.txt')) {
                     const personalityPath = path.join(directory, file);
                     try {
-                        console.log(`Loading personality from ${file}`);
+                        logger.debug(`Loading personality from ${file}`);
                         const content = await fs.readFile(personalityPath, 'utf8');
                         const name = path.basename(file, '.txt');
                         
@@ -53,7 +54,7 @@ class PersonalityManager {
                         };
                         
                         this.personalities.set(name, personality);
-                        console.log(`Successfully loaded personality: ${name}`);
+                        logger.debug(`Successfully loaded personality: ${name}`);
                     } catch (error) {
                         console.error(`Error loading personality ${file}:`, error);
                     }

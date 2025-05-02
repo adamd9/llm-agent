@@ -26,7 +26,7 @@ class OpenAIClient extends LLMClient {
     }
 
     async chat(messages, options = {}) {
-        console.log('OpenAI Client', 'Chatting', { messages, options, defaultModel: this.defaultModel });
+        logger.debug('OpenAI Client', 'Chatting', { messages, options, defaultModel: this.defaultModel });
         const response = await this.client.chat.completions.create({
             model: options.model || this.defaultModel,
             messages,
@@ -62,7 +62,7 @@ class OllamaClient extends LLMClient {
     }
 
     async chat(messages, options = {}) {
-        console.log('MODEL for OllamaClient: ', this.model)
+        logger.debug('MODEL for OllamaClient: ', this.model)
         switch (options.model) {
             case 'gpt-4o-mini':
                 options.model = 'phi4';
@@ -95,7 +95,7 @@ class OllamaClient extends LLMClient {
         }
 
         const result = await response.json();
-        console.log('LLM Client Response: ', result.response)
+        logger.debug('LLM Client Response: ', result.response)
         if (options.response_format?.type === 'json_schema') {
             try {
                 // Check if response is wrapped in code blocks
