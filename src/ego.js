@@ -366,6 +366,7 @@ async handleBubble(input, extraInstruction) {
     const assistantMessage = response.content;
     await memory.storeShortTerm('Assistant response', assistantMessage);
     await sharedEventEmitter.emit('assistantResponse', assistantMessage);
+    await sharedEventEmitter.emit('assistantComplete');
     return assistantMessage;
 }
 

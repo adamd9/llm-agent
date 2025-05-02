@@ -14,6 +14,12 @@ class SharedEventEmitter {
         this.listeners[event].push(callback); // Add callback to the list of listeners
     }
 
+    off(event, callback) {
+        if (this.listeners[event]) {
+            this.listeners[event] = this.listeners[event].filter(listener => listener !== callback);
+        }
+    }
+
     async emit(event, data) {
         this.eventQueue.push({ event, data });
         if (!this.isProcessing) {
