@@ -1,4 +1,4 @@
-const toolManager = require('./tools');
+const toolManager = require('./mcp'); // Updated to use MCP tool manager
 const logger = require('./utils/logger');
 const sharedEventEmitter = require('./utils/eventEmitter');
 const memory = require('./memory');

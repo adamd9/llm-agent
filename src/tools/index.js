@@ -1,12 +1,15 @@
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('../utils/logger');
+const mcpClient = require('./mcpClient');
 
 class ToolManager {
     constructor() {
         this.tools = new Map();
         this.coreToolsDir = path.join(__dirname);
         this.dataToolsDir = path.join(__dirname, '../../data/tools');
+        this.mcpServersDir = path.join(__dirname, '../../data/mcp-servers');
+        this.mcpEnabled = true; // Flag to control MCP integration
     }
 
     async loadTools() {
@@ -24,8 +27,181 @@ class ToolManager {
             logger.debug('No custom tools found in data directory');
         }
 
+        // Initialize and load MCP tools if enabled
+        if (this.mcpEnabled) {
+            try {
+                await this.initializeMCPClient();
+            } catch (error) {
+                logger.error('tools', 'Error initializing MCP client:', {
+                    error: error.message,
+                    stack: error.stack
+                });
+            }
+        }
+
         logger.debug('Loaded tools:', Array.from(this.tools.keys()));
         return Array.from(this.tools.values());
+    }
+
+    async initializeMCPClient() {
+        try {
+            logger.debug('tools', 'Initializing MCP client');
+            
+            // Initialize the MCP client
+            await mcpClient.initialize();
+            
+            // Register the MCP client as a tool
+            if (this.isValidTool(mcpClient)) {
+                mcpClient.source = 'mcp';
+                this.tools.set(mcpClient.name, mcpClient);
+                logger.debug('tools', 'Registered MCP client as a tool');
+            }
+            
+            // Load MCP servers
+            await this.loadMCPServers();
+            
+            // Get MCP tools and register them
+            await this.registerMCPTools();
+            
+            logger.debug('tools', 'MCP initialization complete');
+        } catch (error) {
+            logger.error('tools', 'Error in MCP initialization:', {
+                error: error.message,
+                stack: error.stack
+            });
+            throw error;
+        }
+    }
+
+    async loadMCPServers() {
+        try {
+            logger.debug('tools', `Loading MCP servers from ${this.mcpServersDir}`);
+            
+            // Check if directory exists
+            try {
+                await fs.access(this.mcpServersDir);
+            } catch {
+                logger.debug('tools', 'MCP servers directory does not exist, creating it');
+                await fs.mkdir(this.mcpServersDir, { recursive: true });
+                return; // No servers to load yet
+            }
+            
+            // List server files
+            const files = await fs.readdir(this.mcpServersDir);
+            logger.debug('tools', 'Files in MCP servers directory:', files);
+            
+            // Connect to each server
+            for (const file of files) {
+                if (file.endsWith('.js') || file.endsWith('.py')) {
+                    const serverPath = path.join(this.mcpServersDir, file);
+                    try {
+                        logger.debug('tools', `Connecting to MCP server: ${file}`);
+                        await mcpClient.execute('connectServer', {
+                            serverPath: serverPath
+                        });
+                    } catch (error) {
+                        logger.error('tools', `Error connecting to MCP server ${file}:`, {
+                            error: error.message,
+                            stack: error.stack
+                        });
+                    }
+                }
+            }
+        } catch (error) {
+            logger.error('tools', 'Error loading MCP servers:', {
+                error: error.message,
+                stack: error.stack
+            });
+        }
+    }
+
+    async registerMCPTools() {
+        try {
+            // Get list of servers
+            const result = await mcpClient.execute('listServers', {});
+            
+            if (result.status !== 'success' || !result.servers) {
+                logger.error('tools', 'Failed to get MCP servers list:', result);
+                return;
+            }
+            
+            // Create tool adapters for each MCP tool
+            for (const server of result.servers) {
+                for (const toolName of server.tools) {
+                    // Create an adapter for this tool
+                    const toolAdapter = this.createMCPToolAdapter(toolName, server.id);
+                    
+                    // Register the tool adapter
+                    if (this.isValidTool(toolAdapter)) {
+                        toolAdapter.source = 'mcp';
+                        this.tools.set(toolAdapter.name, toolAdapter);
+                        logger.debug('tools', `Registered MCP tool: ${toolAdapter.name}`);
+                    }
+                }
+            }
+        } catch (error) {
+            logger.error('tools', 'Error registering MCP tools:', {
+                error: error.message,
+                stack: error.stack
+            });
+        }
+    }
+
+    createMCPToolAdapter(toolName, serverId) {
+        // Get the tool capabilities from MCP client
+        const capabilities = mcpClient.getCapabilities();
+        const toolAction = capabilities.actions.find(action => action.name === toolName);
+        
+        if (!toolAction) {
+            logger.error('tools', `Tool action not found for ${toolName}`);
+            return null;
+        }
+        
+        // Create a tool adapter
+        return {
+            name: toolName,
+            description: toolAction.description || `MCP Tool: ${toolName}`,
+            source: 'mcp',
+            serverId,
+            
+            // Get capabilities method
+            getCapabilities() {
+                return {
+                    actions: [
+                        {
+                            name: 'execute',
+                            description: toolAction.description,
+                            parameters: toolAction.parameters
+                        }
+                    ]
+                };
+            },
+            
+            // Execute method
+            async execute(action, parameters) {
+                if (action !== 'execute') {
+                    return {
+                        status: 'error',
+                        error: `Unknown action: ${action}`
+                    };
+                }
+                
+                try {
+                    // Call the MCP tool via the MCP client
+                    return await mcpClient.execute(toolName, parameters);
+                } catch (error) {
+                    logger.error('tools', `Error executing MCP tool ${toolName}:`, {
+                        error: error.message,
+                        stack: error.stack
+                    });
+                    
+                    return {
+                        status: 'error',
+                        error: `Error executing MCP tool: ${error.message}`
+                    };
+                }
+            }
+        };
     }
 
     async loadToolsFromDirectory(directory, source) {
@@ -177,6 +353,20 @@ class ToolManager {
             source: tool.source,
             parameters: tool.parameters || []
         }));
+    }
+
+    // Cleanup resources
+    async cleanup() {
+        if (this.mcpEnabled) {
+            try {
+                await mcpClient.cleanup();
+            } catch (error) {
+                logger.error('tools', 'Error cleaning up MCP client:', {
+                    error: error.message,
+                    stack: error.stack
+                });
+            }
+        }
     }
 }
 

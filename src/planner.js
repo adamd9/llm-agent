@@ -1,6 +1,6 @@
 const { getOpenAIClient } = require('./utils/openaiClient.js');
 require('dotenv').config();
-const toolManager = require('./tools');
+const toolManager = require('./mcp');
 const logger = require('./utils/logger.js');
 const memory = require('./memory');
 
