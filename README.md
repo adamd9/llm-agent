@@ -339,6 +339,36 @@ The agent uses WebSocket for real-time, bidirectional communication:
 - `GET /chat/:sessionId/history`: Get chat history for a session
   - Response: Array of messages in the session
 
+## Logging System
+
+The system includes a comprehensive logging mechanism that captures all console output and stores it in session files:
+
+### Key Features
+
+- **Session-Based Logging**: Each user session gets its own log file with a unique session ID
+- **Timestamped Files**: Log files are named with ISO datetime stamps (e.g., `2025-05-02T14-21-24_session_[id].json`)
+- **Structured Format**: All logs include timestamps, message type, and formatted data
+- **WebSocket Integration**: Debug and error messages are sent to connected clients via WebSocket
+- **Direct Console Output**: All logs are displayed in the console for real-time monitoring
+
+### Log File Structure
+
+```json
+{
+  "sessionId": "session-uuid",
+  "messages": [
+    {
+      "timestamp": "2025-05-02T04:21:25.738Z",
+      "type": "stdout",
+      "data": {
+        "level": "log",
+        "message": ["[logger] Message context: Message content", {}]
+      }
+    }
+  ]
+}
+```
+
 ## Development
 
 ### Prerequisites
@@ -921,3 +951,31 @@ The interface includes several key components:
    - Messages auto-hide after 5 seconds
    - Will be used for displaying code output and results in future iterations
 3. **Input Container**: Area for user input and controls
+
+## Running the Application
+
+### Development Mode
+
+```bash
+npm run dev
+```
+
+This starts the application in development mode with nodemon watching for file changes.
+
+### CLI Query Mode
+
+You can run a single query directly from the command line:
+
+```bash
+npm run query "your message here"
+```
+
+This processes a single message and returns the response without starting the web server. Useful for quick testing or scripting.
+
+### Production Mode
+
+```bash
+npm start
+```
+
+Starts the application in production mode.

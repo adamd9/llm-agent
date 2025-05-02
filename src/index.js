@@ -55,7 +55,7 @@ async function processInitialMessage() {
             };
             
             sharedEventEmitter.on('debugResponse', debugHandler);
-            sharedEventEmitter.once('assistantComplete', completionHandler);
+            sharedEventEmitter.on('assistantComplete', completionHandler);
             
             // Process the message
             ego.processMessage(initialMessage, sessionHistory);
