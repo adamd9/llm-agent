@@ -97,10 +97,10 @@ class Logger {
             
             for (const [sessionId, ws] of this.wsConnections) {
                 if (sessionId === this.sessionId) {
-                    ws.send(JSON.stringify({
+                    ws.send(safeStringify({
                         type: 'debug',
                         data: debugMessage
-                    }));
+                    }, 'logger.debug'));
                 }
             }
         }
@@ -146,10 +146,10 @@ class Logger {
 
             for (const [sessionId, ws] of this.wsConnections) {
                 if (sessionId === this.sessionId) {
-                    ws.send(JSON.stringify({
+                    ws.send(safeStringify({
                         type: 'error',
                         data: errorMessage
-                    }));
+                    }, 'logger.error'));
                 }
             }
         }

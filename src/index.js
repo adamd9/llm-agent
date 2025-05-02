@@ -108,7 +108,7 @@ async function startServer() {
 
         try {
             await new Promise((resolve, reject) => {
-                ws.send(JSON.stringify(message), (error) => {
+                ws.send(safeStringify(message, 'processQueue'), (error) => {
                     if (error) reject(error);
                     else resolve();
                 });
@@ -142,11 +142,11 @@ async function startServer() {
         }
 
         // Send initial connection message
-        ws.send(JSON.stringify({
+        ws.send(safeStringify({
             type: 'connected',
             sessionId,
             isNewSession
-        }));
+        }, 'websocket.connection'));
 
         logger.debug('websocket', 'New WebSocket connection', { sessionId, isNewSession });
 
