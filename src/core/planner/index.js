@@ -1,11 +1,19 @@
-const { getOpenAIClient } = require('./utils/openaiClient.js');
 require('dotenv').config();
-const toolManager = require('./mcp');
-const logger = require('./utils/logger.js');
-const memory = require('./memory');
-const sharedEventEmitter = require('./utils/eventEmitter');
+const { getOpenAIClient } = require('../../utils/openaiClient.js');
+const toolManager = require('../../mcp');
+const logger = require('../../utils/logger.js');
+const memory = require('../memory');
+const sharedEventEmitter = require('../../utils/eventEmitter');
+const prompts = require('./prompts');
 
 const openai = getOpenAIClient();
+
+/**
+ * Creates a plan based on the user's message and available tools
+ * @param {Object} enrichedMessage - The enriched message containing the original message and memory
+ * @param {Object} client - Optional client for OpenAI
+ * @returns {Object} - The planning result
+ */
 async function planner(enrichedMessage, client = null) {
     try {
         logger.debug('start', 'Planning for message:', enrichedMessage);
@@ -22,35 +30,18 @@ async function planner(enrichedMessage, client = null) {
         });
 
         // Create a plan
-        const toolsDescription = tools.map(tool => {
-            const capabilities = tool.getCapabilities();
-            return `${tool.name}: ${tool.description}
-    Actions:${capabilities.actions.map(action => `
-    - ${action.name}: ${action.description}
-      Parameters:${action.parameters.map(param => `
-      * ${param.name} (${param.type}${param.required ? ', required' : ''}): ${param.description}`).join('')}`).join('')}`;
-        }).join('\n');
+        const toolsDescription = formatToolsDescription(tools);
+
+        // Prepare prompts with actual data
+        const systemPrompt = prompts.PLANNER_SYSTEM.replace('{{toolsDescription}}', toolsDescription);
+        const userPrompt = prompts.PLANNER_USER
+            .replace('{{original_message}}', enrichedMessage.original_message)
+            .replace('{{short_term_memory}}', enrichedMessage.short_term_memory || '')
+            .replace('{{long_term_memory}}', enrichedMessage.long_term_memory || '');
 
         const planningPrompts = [
-            {
-                role: 'system',
-                content: `You are an expert task planner. Your role is to break down complex tasks into a series of concrete steps that can be executed using available tools. You must respond with valid JSON.
-
-Available tools:
-${toolsDescription}
-
-Remember:
-1. Each step should be atomic and achievable with a single tool action
-2. Steps should be ordered logically
-3. Include all necessary parameters for each tool action
-4. Be specific and concrete in descriptions
-5. Only use appropriate tools from the list of possible tools. You don't need to use all available tools.`
-            },
-            { role: 'user', content: `Request: "${enrichedMessage.original_message}"\n
-            Create a plan using the available tools.
-            Relevant short-term memory: ${enrichedMessage.short_term_memory}
-            Relevant long-term memory: ${enrichedMessage.long_term_memory}
-            ` }
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
         ];
 
         logger.debug('handleBubble', 'Planning prompt messages being sent to OpenAI', { planningPrompts });
@@ -66,50 +57,12 @@ Remember:
         });
 
         const planningResponse = await openai.chat(planningPrompts, {
-            response_format: {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "plan",
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "steps": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "tool": { "type": "string" },
-                                        "action": { "type": "string" }, 
-                                        "parameters": {
-                                            "type": "array",
-                                            "items": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "name": { "type": "string" },
-                                                    "value": { "type": "string" }
-                                                },
-                                                "required": ["name", "value"],
-                                                "additionalProperties": false
-                                            }
-                                        },
-                                        "description": { "type": "string" },
-                                    },
-                                    "required": ["tool", "action", "parameters", "description"],
-                                    "additionalProperties": false
-                                }
-                            }
-                        },
-                        "required": ["steps"],
-                        "additionalProperties": false
-                    },
-                    "strict": true
-                }
-            },
+            response_format: prompts.PLAN_SCHEMA,
             temperature: 0.7,
             max_tokens: 2000
         });
 
-        //delete response.response.raw.context before logging to debug (if the key exists)
+        // Delete response.response.raw.context before logging to debug (if the key exists)
         delete planningResponse.raw?.context;
         logger.debug('response', 'Received OpenAI response', {
             response: planningResponse
@@ -204,6 +157,22 @@ Remember:
             error: error.message
         };
     }
+}
+
+/**
+ * Formats the tools description for the planner prompt
+ * @param {Array} tools - The available tools
+ * @returns {string} - The formatted tools description
+ */
+function formatToolsDescription(tools) {
+    return tools.map(tool => {
+        const capabilities = tool.getCapabilities();
+        return `${tool.name}: ${tool.description}
+    Actions:${capabilities.actions.map(action => `
+    - ${action.name}: ${action.description}
+      Parameters:${action.parameters.map(param => `
+      * ${param.name} (${param.type}${param.required ? ', required' : ''}): ${param.description}`).join('')}`).join('')}`;
+    }).join('\n');
 }
 
 module.exports = { planner };

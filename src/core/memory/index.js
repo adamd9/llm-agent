@@ -1,10 +1,11 @@
 const fs = require("fs");
 const path = require("path");
-const { getOpenAIClient } = require("./utils/openaiClient.js");
-const logger = require("./utils/logger.js");
+const { getOpenAIClient } = require("../../utils/openaiClient.js");
+const logger = require("../../utils/logger.js");
+const prompts = require("./prompts");
 
 // Define the path for storing memory files
-const baseMemoryPath = path.resolve(__dirname, "../data/memory");
+const baseMemoryPath = path.resolve(__dirname, "../../../data/memory");
 const shortTermPath = path.join(baseMemoryPath, "short");
 const longTermPath = path.join(baseMemoryPath, "long");
 const maxLines = 200; // Adjust this as necessary
@@ -87,44 +88,15 @@ class Memory {
     const dataString = typeof data === 'object' ? JSON.stringify(data, null, 2) : data;
     
     // Use LLM to categorize data
-    const userPrompt = `Categorize the following data into a one-word description. Unless there is an explicit category, categorize it as one of the following: 
-        - ego (conversation style preferences, user preferences) This is also the default category
-        - execution (skills / tool usage)
-        - planning (how to structure plans)
-        - evaluation (how to evaluate plans)
-        If it doesn't fit, suggest a unique, single word category: ${dataString}`;
+    const userPrompt = prompts.CATEGORIZE_MEMORY_USER.replace('{{data}}', dataString);
 
     try {
       const messages = [
-        { role: "system", content: "You are a categorization assistant. You must respond with valid JSON." },
+        { role: "system", content: prompts.CATEGORIZE_MEMORY_SYSTEM },
         { role: "user", content: userPrompt },
       ];
       const response = await this.openaiClient.chat(messages, {
-        response_format: {
-          "type": "json_schema",
-          "json_schema": {
-            "name": "evaluation",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "category": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string",
-                      "description": "A single-word category describing the evaluation."
-                    }
-                  },
-                  "required": ["name"],
-                  "additionalProperties": false
-                }
-              },
-              "required": ["category"],
-              "additionalProperties": false
-            },
-            "strict": true
-          }
-        },
+        response_format: prompts.CATEGORIZE_SCHEMA,
         temperature: 0.7,
         max_tokens: 10
       });
@@ -173,19 +145,13 @@ class Memory {
     }
 
     // Use LLM to find the most relevant memories for the question
-    const prompt = `Given the following memories and a question, determine which memories are most relevant to answering the question.
-    
-    Question: "${question}"
-    
-    Memories:
-    ${relevantMemories.join('\n')}`;
+    const prompt = prompts.RETRIEVE_MEMORY_USER
+      .replace('{{question}}', question)
+      .replace('{{memories}}', relevantMemories.join('\n'));
 
     try {
       const messages = [
-        {
-          role: "system",
-          content: "You are a memory retrieval assistant. Find the most relevant memories to answer the question."
-        },
+        { role: "system", content: prompts.RETRIEVE_MEMORY_SYSTEM },
         { role: "user", content: prompt }
       ];
 

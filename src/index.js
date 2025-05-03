@@ -1,11 +1,10 @@
 const express = require("express");
 const { v4: uuidv4 } = require("uuid");
-const Ego = require("./ego");
+const core = require('./core');
 const WebSocket = require("ws");
 const http = require("http");
 const logger = require("./utils/logger");
 const sharedEventEmitter = require("./utils/eventEmitter");
-const memory = require('./memory');
 const safeStringify = require('./utils/safeStringify');
 const app = express();
 app.use(express.json());
@@ -24,7 +23,7 @@ logger.setWSConnections(wsConnections);
 const initialMessage = process.argv[2];
 
 // Initialize ego instance
-const ego = new Ego(["llmquery", "file-system"]);
+const ego = new core.Ego(["llmquery", "file-system"]);
 
 async function processInitialMessage() {
     if (!initialMessage) return;
@@ -143,7 +142,7 @@ async function startServer() {
         
         // Only reset memory for new sessions, not reconnections
         if (isNewSession) {
-            await memory.resetMemory();
+            await core.memory.resetMemory();
         }
 
         // Send initial connection message

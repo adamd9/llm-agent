@@ -1,5 +1,5 @@
 const logger = require('../utils/logger.js');
-const memory = require('../memory');
+const memory = require('../core/memory');
 const { getOpenAIClient } = require("../utils/openaiClient.js");
 const { validateToolResponse } = require('../validation/toolValidator');
 

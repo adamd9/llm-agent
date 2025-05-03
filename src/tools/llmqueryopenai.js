@@ -2,7 +2,7 @@ const OpenAI = require('openai');
 const logger = require('../utils/logger');
 const fs = require('fs').promises;
 const path = require('path');
-const memory = require('../memory');
+const memory = require('../core/memory');
 
 /** @implements {import('../types/tool').Tool} */
 class LLMQueryOpenAITool {
@@ -65,10 +65,6 @@ class LLMQueryOpenAITool {
             const shortTermMemory = await memory.retrieveShortTerm();
             const longTermRelevantMemory = await memory.retrieveLongTerm('ego', 'retrieve anything relevant to carrying out a users request');
 
-            // Create responses directory if it doesn't exist
-            const responsesDir = path.join(__dirname, '../../data/temp/openai_responses');
-            await fs.mkdir(responsesDir, { recursive: true });
-
             // Construct input with memory context
             const input = `
             ${queryParam.value}
@@ -86,20 +82,16 @@ class LLMQueryOpenAITool {
                 input: input
             });
 
-            // Save raw response for analysis
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const responseFile = path.join(responsesDir, `response_${timestamp}.json`);
-            await fs.writeFile(responseFile, JSON.stringify(response, null, 2));
-
-            logger.debug('llmqueryopenai.execute - Raw response saved to', { responseFile });
+            logger.debug('llmqueryopenai.execute - Response received', { 
+                output_text_length: response.output_text ? response.output_text.length : 0 
+            });
 
             // For now, return a simplified result format
             const result = {
                 status: 'success',
                 data: {
                     query: queryParam.value,
-                    result: response.output_text || 'No output text available',
-                    raw_response_file: responseFile
+                    result: response.output_text || 'No output text available'
                 }
             };
 

@@ -1,5 +1,5 @@
 const logger = require('../utils/logger');
-const memory = require('../memory');
+const memory = require('../core/memory');
 
 // New MemoryTool class for interacting with long-term memory
 class LongTermMemoryTool {

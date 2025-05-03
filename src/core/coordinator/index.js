@@ -1,7 +1,13 @@
-const toolManager = require('./mcp'); // Updated to use MCP tool manager
-const logger = require('./utils/logger');
-const sharedEventEmitter = require('./utils/eventEmitter');
-const memory = require('./memory');
+const toolManager = require('../../mcp'); // Updated to use MCP tool manager
+const logger = require('../../utils/logger');
+const sharedEventEmitter = require('../../utils/eventEmitter');
+const memory = require('../memory');
+
+/**
+ * Coordinates the execution of a plan
+ * @param {Object} enrichedMessage - The enriched message containing the plan
+ * @returns {Object} - The result of the plan execution
+ */
 async function coordinator(enrichedMessage) {
     try {
         logger.debug('Starting coordination', enrichedMessage.original_message);
@@ -56,6 +62,14 @@ async function coordinator(enrichedMessage) {
     }
 }
 
+/**
+ * Executes a plan
+ * @param {Array} plan - The plan to execute
+ * @param {boolean} isReplan - Whether this is a replan
+ * @param {Array} existingResults - Existing results from previous steps
+ * @param {number} startStep - The step to start from
+ * @returns {Object} - The result of the plan execution
+ */
 async function executePlan(plan, isReplan = false, existingResults = [], startStep = 0) {
     let results = [...existingResults];
     let hasErrors = false;
@@ -206,7 +220,6 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
             details: {
                 error: error.message,
                 stack: error.stack,
-                results,
                 lastStep: step
             }
         };
