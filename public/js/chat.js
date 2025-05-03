@@ -103,8 +103,21 @@ function toggleResults() {
     // Update results content if opening
     if (isHidden && currentResult) {
         const output = document.getElementById('results-output');
-        // Use innerHTML and replace newlines with <br> tags for better readability
-        output.innerHTML = currentResult.replace(/\n/g, '<br>');
+        
+        // Check if the content is JSON-like
+        if (currentResult.trim().startsWith('{') || currentResult.trim().startsWith('[')) {
+            try {
+                // Try to parse and format as JSON
+                const jsonObj = JSON.parse(currentResult);
+                output.innerHTML = formatJsonWithLineBreaks(jsonObj);
+            } catch (e) {
+                // If not valid JSON, fall back to text with line breaks
+                output.innerHTML = `<pre style="white-space: pre-wrap;">${currentResult.replace(/\n/g, '<br>')}</pre>`;
+            }
+        } else {
+            // For plain text, use pre tag with line breaks
+            output.innerHTML = `<pre style="white-space: pre-wrap;">${currentResult.replace(/\n/g, '<br>')}</pre>`;
+        }
     }
 }
 
@@ -135,14 +148,61 @@ function formatSubsystemContent(msg) {
                     <div class="error-location">${(msg.content.location || '').replace(/\n/g, '<br>')}</div>
                     <pre class="error-stack">${(msg.content.stack || '').replace(/\n/g, '<br>')}</pre>`;
         }
-        // For JSON content, use pre tag with proper formatting but ensure newlines are preserved
-        const formattedJson = JSON.stringify(msg.content, null, 2).replace(/\n/g, '<br>');
-        return `<strong>${msg.content.type || 'Message'}</strong><br>
-                <pre style="white-space: pre-wrap;">${formattedJson}</pre>`;
+        
+        // For JSON content, use a different approach to preserve formatting
+        const formattedContent = `<strong>${msg.content.type || 'Message'}</strong><br>
+                <pre style="white-space: pre-wrap;">${formatJsonWithLineBreaks(msg.content)}</pre>`;
+        return formattedContent;
     } else {
         // For plain text content
         return `<pre style="white-space: pre-wrap;">${(msg.content || '').replace(/\n/g, '<br>')}</pre>`;
     }
+}
+
+// Helper function to format JSON with proper HTML line breaks
+function formatJsonWithLineBreaks(obj) {
+    // Create a deep copy of the object to avoid modifying the original
+    const objCopy = JSON.parse(JSON.stringify(obj));
+    
+    // Pre-process any nested strings with newlines
+    function processNestedStrings(obj) {
+        if (obj === null || obj === undefined) return obj;
+        
+        if (typeof obj === 'string') {
+            // Replace newlines in strings with <br> tags
+            return obj.replace(/\n/g, '<br>');
+        }
+        
+        if (typeof obj === 'object') {
+            if (Array.isArray(obj)) {
+                // Process each item in the array
+                return obj.map(item => processNestedStrings(item));
+            } else {
+                // Process each property in the object
+                const result = {};
+                for (const key in obj) {
+                    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                        result[key] = processNestedStrings(obj[key]);
+                    }
+                }
+                return result;
+            }
+        }
+        
+        return obj;
+    }
+    
+    // Process any nested strings in the object
+    const processedObj = processNestedStrings(objCopy);
+    
+    // Convert the processed object to a formatted JSON string with indentation
+    const jsonString = JSON.stringify(processedObj, null, 2);
+    
+    // Replace all newlines with <br> tags and preserve spaces
+    return jsonString
+        .replace(/\n/g, '<br>')
+        .replace(/ /g, '&nbsp;')
+        .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
 }
 
 function toggleStatus(messageDiv) {
