@@ -8,6 +8,7 @@ let subsystemMessages = {
     coordinator: [],
     ego: []
 };
+let connectionError = false; // Track connection error state
 
 // Function to update message counts on buttons
 function updateMessageCounts() {
@@ -219,6 +220,7 @@ function connect() {
     ws.onopen = () => {
         console.log('Connected to server');
         document.getElementById('user-input').disabled = false;
+        connectionError = false; // Reset connection error state on successful connection
         document.getElementById('send-button').disabled = false;
         showStatus('Connected to server', { noSpinner: true });
     };
@@ -297,7 +299,16 @@ function connect() {
     
     ws.onerror = (error) => {
         console.error('WebSocket error:', error);
-        addMessage('error', 'Connection error. Please try again.');
+        if (!connectionError) {
+            // Only show the error message once
+            connectionError = true;
+            // Clear any existing system message
+            if (systemMessageDiv) {
+                systemMessageDiv.innerHTML = '';
+            }
+            // Show a system message with a spinner
+            showStatus('Connection error. Please try again.', { persistent: true });
+        }
     };
 }
 
