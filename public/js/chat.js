@@ -103,7 +103,8 @@ function toggleResults() {
     // Update results content if opening
     if (isHidden && currentResult) {
         const output = document.getElementById('results-output');
-        output.textContent = currentResult;
+        // Use innerHTML and replace newlines with <br> tags for better readability
+        output.innerHTML = currentResult.replace(/\n/g, '<br>');
     }
 }
 
@@ -130,14 +131,17 @@ function formatSubsystemContent(msg) {
     if (typeof msg.content === 'object') {
         if (msg.content.type === 'system_error') {
             return `<strong>${msg.content.module || 'Unknown'}: ${msg.content.type}</strong><br>
-                    <div class="error-message">${msg.content.error || 'Unknown error'}</div>
-                    <div class="error-location">${msg.content.location || ''}</div>
-                    <pre class="error-stack">${msg.content.stack || ''}</pre>`;
+                    <div class="error-message">${(msg.content.error || 'Unknown error').replace(/\n/g, '<br>')}</div>
+                    <div class="error-location">${(msg.content.location || '').replace(/\n/g, '<br>')}</div>
+                    <pre class="error-stack">${(msg.content.stack || '').replace(/\n/g, '<br>')}</pre>`;
         }
+        // For JSON content, use pre tag with proper formatting but ensure newlines are preserved
+        const formattedJson = JSON.stringify(msg.content, null, 2).replace(/\n/g, '<br>');
         return `<strong>${msg.content.type || 'Message'}</strong><br>
-                <pre>${JSON.stringify(msg.content, null, 2)}</pre>`;
+                <pre style="white-space: pre-wrap;">${formattedJson}</pre>`;
     } else {
-        return `<pre>${msg.content}</pre>`;
+        // For plain text content
+        return `<pre style="white-space: pre-wrap;">${(msg.content || '').replace(/\n/g, '<br>')}</pre>`;
     }
 }
 
@@ -255,10 +259,14 @@ function connect() {
     
     ws.onopen = () => {
         console.log('Connected to server');
-        document.getElementById('user-input').disabled = false;
+        const userInput = document.getElementById('user-input');
+        userInput.disabled = false;
         connectionError = false; // Reset connection error state on successful connection
         document.getElementById('send-button').disabled = false;
         showStatus('Connected to server', { noSpinner: true });
+        
+        // Auto-focus the chat input after connection is established
+        userInput.focus();
     };
     
     ws.onmessage = (event) => {

@@ -55,6 +55,16 @@ Remember:
 
         logger.debug('handleBubble', 'Planning prompt messages being sent to OpenAI', { planningPrompts });
 
+        // Emit subsystem message with the planning prompt
+        await sharedEventEmitter.emit('subsystemMessage', {
+            module: 'planner',
+            content: {
+                type: 'prompt',
+                prompt: planningPrompts,
+                message: enrichedMessage.original_message
+            }
+        });
+
         const planningResponse = await openai.chat(planningPrompts, {
             response_format: {
                 "type": "json_schema",
