@@ -80,6 +80,11 @@ async function processInitialMessage() {
 }
 
 async function startServer() {
+    // Initialize tool manager first
+    const toolManager = require('./mcp');
+    await toolManager.initialize();
+    
+    // Then initialize ego
     await ego.initialize();
     
     // If there's an initial message, process it and exit

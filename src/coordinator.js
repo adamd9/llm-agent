@@ -65,8 +65,9 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
     memory.storeShortTerm('LatestPan', JSON.stringify(plan), 'ego');
 
     try {
-        const tools = await toolManager.loadTools();
-        logger.debug('Loaded tools:', tools);
+        // Use cached tools instead of reloading them
+        const tools = await toolManager.getAllTools();
+        logger.debug('Using cached tools:', tools.length);
         const toolMap = new Map(tools.map(tool => [tool.name, tool]));
 
         for (step of plan) {

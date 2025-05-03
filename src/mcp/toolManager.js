@@ -15,6 +15,32 @@ class MCPToolManager {
     this.dataToolsDir = path.join(__dirname, '../../data/tools');
     this.mcpServersDir = path.join(__dirname, '../../data/mcp-servers');
     this.mcpClient = new MCPClient();
+    this._initialized = false;
+  }
+
+  /**
+   * Initialize the tool manager
+   * Loads all tools once during system startup
+   * @returns {Promise<Array>} List of loaded tools
+   */
+  async initialize() {
+    // Use static initialization flag to ensure tools are only loaded once
+    if (MCPToolManager._globalInitialized) {
+      logger.debug('mcpToolManager', 'Tool manager already globally initialized, using cached tools');
+      return Array.from(this.tools.values());
+    }
+    
+    if (this._initialized) {
+      logger.debug('mcpToolManager', 'Tool manager already initialized, using cached tools');
+      return Array.from(this.tools.values());
+    }
+    
+    logger.debug('mcpToolManager', 'Initializing tool manager');
+    const tools = await this.loadTools();
+    this._initialized = true;
+    MCPToolManager._globalInitialized = true;
+    logger.debug('mcpToolManager', 'Tool manager initialized with', tools.length, 'tools');
+    return tools;
   }
 
   /**
@@ -519,6 +545,9 @@ class MCPToolManager {
     }
   }
 }
+
+// Static initialization flag
+MCPToolManager._globalInitialized = false;
 
 // Singleton instance
 const mcpToolManager = new MCPToolManager();

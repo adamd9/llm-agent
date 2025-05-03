@@ -14,9 +14,9 @@ async function planner(enrichedMessage, client = null) {
             short_term_memory: enrichedMessage.short_term_memory
         });
 
-        // Load available tools
-        const tools = await toolManager.loadTools();
-        logger.debug('tools', 'Loaded tools:', tools.map(t => t.name));
+        // Use cached tools instead of reloading them
+        const tools = await toolManager.getAllTools();
+        logger.debug('tools', 'Using cached tools:', tools.length);
         logger.debug('tools', 'Available tools loaded', {
             tools: tools.map(t => ({ name: t.name, description: t.description }))
         });
