@@ -186,6 +186,18 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
             }
         });
         
+        // Emit system error message
+        await sharedEventEmitter.emit('systemError', {
+            module: 'coordinator',
+            content: {
+                type: 'system_error',
+                error: error.message,
+                stack: error.stack,
+                location: 'executePlan',
+                status: 'error'
+            }
+        });
+        
         return {
             status: 'error',
             error: error.message,

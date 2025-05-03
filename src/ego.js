@@ -114,6 +114,19 @@ Remember to maintain conversation continuity with the original request.`);
                     stack: error.stack
                 }
             });
+            
+            // Emit system error message
+            await sharedEventEmitter.emit('systemError', {
+                module: 'ego',
+                content: {
+                    type: 'system_error',
+                    error: error.message,
+                    stack: error.stack,
+                    location: 'processMessage',
+                    status: 'error'
+                }
+            });
+            
             const errorResult = {
                 type: 'error',
                 error: {
@@ -281,6 +294,19 @@ async handleBubble(input, extraInstruction) {
                             return JSON.stringify(item);
                         } catch (error) {
                             logger.debug('handleBubble', 'Error stringifying array item', { error: error.message });
+                            
+                            // Emit system error message
+                            sharedEventEmitter.emit('systemError', {
+                                module: 'ego',
+                                content: {
+                                    type: 'system_error',
+                                    error: error.message,
+                                    stack: error.stack,
+                                    location: 'handleBubble.stringifyArrayItem',
+                                    status: 'error'
+                                }
+                            });
+                            
                             return `[Error: ${error.message}]`;
                         }
                     }
@@ -297,6 +323,19 @@ async handleBubble(input, extraInstruction) {
                         message = JSON.stringify(input.response);
                     } catch (error) {
                         logger.debug('handleBubble', 'Error stringifying response', { error: error.message });
+                        
+                        // Emit system error message
+                        sharedEventEmitter.emit('systemError', {
+                            module: 'ego',
+                            content: {
+                                type: 'system_error',
+                                error: error.message,
+                                stack: error.stack,
+                                location: 'handleBubble.stringifyResponse',
+                                status: 'error'
+                            }
+                        });
+                        
                         message = `[Error: ${error.message}]`;
                     }
                 }
@@ -308,6 +347,19 @@ async handleBubble(input, extraInstruction) {
             } catch (error) {
                 // Handle circular references or other JSON stringify errors
                 logger.debug('handleBubble', 'Error stringifying input', { error: error.message });
+                
+                // Emit system error message
+                sharedEventEmitter.emit('systemError', {
+                    module: 'ego',
+                    content: {
+                        type: 'system_error',
+                        error: error.message,
+                        stack: error.stack,
+                        location: 'handleBubble.stringifyInput',
+                        status: 'error'
+                    }
+                });
+                
                 message = `Error processing response: ${error.message}`;
             }
         }

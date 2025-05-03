@@ -25,6 +25,36 @@ The system consists of three main components:
   - Step-by-step execution status
   - Contextual error information
   - Tool-specific error details
+  - System error tracking across all modules
+
+#### System Error Tracking
+The application includes a comprehensive system error tracking mechanism:
+
+1. **Error Collection**: All errors across modules are captured with:
+   - Module name and location
+   - Full error message and stack trace
+   - Error context and status
+   - Timestamp of occurrence
+
+2. **Unified Error Interface**: 
+   - All errors are emitted through a standardized "systemError" message type
+   - Errors are displayed in a dedicated UI component
+   - Errors are preserved across sessions for debugging
+
+3. **Error Visualization**:
+   - Dedicated "System Errors" button in the header
+   - Real-time error count updates
+   - Detailed error information in modal view
+   - Visual highlighting for new errors
+
+4. **Error Categories**:
+   - Execution errors (coordinator)
+   - Planning errors (planner)
+   - Evaluation errors (evaluator)
+   - Tool execution errors (toolManager)
+   - Client communication errors (llmClient)
+
+This system provides comprehensive visibility into application errors, making debugging and troubleshooting more efficient.
 
 #### Task Evaluation System
 The system evaluates task outcomes to ensure quality:

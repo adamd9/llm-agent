@@ -112,6 +112,19 @@ class OllamaClient extends LLMClient {
                     raw: result
                 };
             } catch (e) {
+                // Emit system error message
+                const sharedEventEmitter = require('./eventEmitter');
+                sharedEventEmitter.emit('systemError', {
+                    module: 'llmClient',
+                    content: {
+                        type: 'system_error',
+                        error: e.message,
+                        stack: e.stack,
+                        location: 'OllamaClient.chat.processJsonResponse',
+                        status: 'error'
+                    }
+                });
+                
                 throw new Error(`Failed to process JSON schema response: ${e.message}`);
             }
         } else {

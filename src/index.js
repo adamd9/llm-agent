@@ -243,6 +243,26 @@ async function startServer() {
             });
         });
 
+        sharedEventEmitter.on("systemError", async (data) => {
+            const queue = messageQueue.get(ws.sessionId);
+            if (queue) {
+                queue.push({ 
+                    type: "systemError", 
+                    data: { 
+                        module: data.module,
+                        content: data.content 
+                    }  
+                });
+                processQueue(ws);
+            }
+
+            // Log system error to file
+            await logger.error("systemError", `${data.module} system error`, { 
+                module: data.module,
+                content: data.content 
+            });
+        });
+
         sharedEventEmitter.on("debugResponse", async (data) => {
             const queue = messageQueue.get(ws.sessionId);
             if (queue) {

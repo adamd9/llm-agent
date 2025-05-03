@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const sharedEventEmitter = require('../utils/eventEmitter');
 
 class SubsystemTool {
     constructor() {
@@ -35,25 +36,69 @@ class SubsystemTool {
 
             switch (action) {
                 case 'tailLogs':
-                    if (!parsedParams.lines || typeof parsedParams.lines !== 'number') {
-                        throw new Error('Missing or invalid required parameter: lines (number)');
+                    // Handle both object format and array format parameters
+                    let linesValue;
+                    
+                    if (Array.isArray(parsedParams)) {
+                        const linesParam = parsedParams.find(param => param.name === 'lines');
+                        if (!linesParam) {
+                            throw new Error('Missing required parameter: lines');
+                        }
+                        linesValue = linesParam.value;
+                    } else {
+                        linesValue = parsedParams.lines;
                     }
-                    return await this.tailLogs(parsedParams.lines);
+                    
+                    // Convert string to number if needed
+                    if (typeof linesValue === 'string') {
+                        linesValue = parseInt(linesValue, 10);
+                    }
+                    
+                    // Validate the number
+                    if (isNaN(linesValue) || typeof linesValue !== 'number') {
+                        throw new Error('Invalid parameter: lines must be a number');
+                    }
+                    
+                    return await this.tailLogs(linesValue);
                 
                 case 'listSrcFiles':
                     return await this.listSrcFiles();
                 
                 case 'readSrcFile':
-                    const filenameParam = parsedParams.find(param => param.name === 'filename');
-                    if (!filenameParam) {
-                        throw new Error('Missing required parameter: filename');
+                    // Handle both object format and array format parameters
+                    let filename;
+                    
+                    if (Array.isArray(parsedParams)) {
+                        const filenameParam = parsedParams.find(param => param.name === 'filename');
+                        if (!filenameParam) {
+                            throw new Error('Missing required parameter: filename');
+                        }
+                        filename = filenameParam.value;
+                    } else {
+                        filename = parsedParams.filename;
+                        if (!filename) {
+                            throw new Error('Missing required parameter: filename');
+                        }
                     }
-                    return await this.readSrcFile(filenameParam.value);
+                    
+                    return await this.readSrcFile(filename);
                 
                 default:
                     throw new Error(`Unknown action: ${action}`);
             }
         } catch (error) {
+            // Emit system error message
+            sharedEventEmitter.emit('systemError', {
+                module: 'subSystemTool',
+                content: {
+                    type: 'system_error',
+                    error: error.message,
+                    stack: error.stack,
+                    location: `execute.${action}`,
+                    status: 'error'
+                }
+            });
+            
             return {
                 status: 'error',
                 error: error.message,
@@ -64,17 +109,65 @@ class SubsystemTool {
 
     async tailLogs(lines) {
         try {
-            const logPath = path.join(this.basePath, '../data/logs/current.log');
-            const logContent = await fs.readFile(logPath, 'utf-8');
+            // Update the path to look for logs in the data/temp directory instead
+            const logPath = path.join(this.basePath, '../../data/temp');
+            
+            // Check if directory exists
+            try {
+                await fs.access(logPath);
+            } catch (error) {
+                throw new Error(`Logs directory does not exist: ${logPath}`);
+            }
+            
+            // List files in the directory
+            const files = await fs.readdir(logPath);
+            
+            // Filter for log files (assuming they have a .log or .json extension)
+            const logFiles = files.filter(file => file.endsWith('.log') || file.endsWith('.json'));
+            
+            if (logFiles.length === 0) {
+                throw new Error(`No log files found in ${logPath}`);
+            }
+            
+            // Sort by modification time (newest first)
+            const fileStats = await Promise.all(
+                logFiles.map(async file => {
+                    const filePath = path.join(logPath, file);
+                    const stats = await fs.stat(filePath);
+                    return { file, stats };
+                })
+            );
+            
+            fileStats.sort((a, b) => b.stats.mtime.getTime() - a.stats.mtime.getTime());
+            
+            // Read the most recent log file
+            const mostRecentLog = fileStats[0].file;
+            const mostRecentLogPath = path.join(logPath, mostRecentLog);
+            const logContent = await fs.readFile(mostRecentLogPath, 'utf-8');
+            
+            // Split by lines and get the last 'lines' number of lines
             const logLines = logContent.split('\n');
             const lastLines = logLines.slice(-lines);
 
             return {
                 status: 'success',
+                file: mostRecentLog,
                 lines: lastLines,
                 count: lastLines.length
             };
         } catch (error) {
+            // Emit system error message
+            sharedEventEmitter.emit('systemError', {
+                module: 'subSystemTool',
+                content: {
+                    type: 'system_error',
+                    error: error.message,
+                    stack: error.stack,
+                    location: 'tailLogs',
+                    status: 'error'
+                }
+            });
+            
             throw new Error(`Failed to read logs: ${error.message}`);
         }
     }
@@ -103,6 +196,18 @@ class SubsystemTool {
                 files: fileDetails
             };
         } catch (error) {
+            // Emit system error message
+            sharedEventEmitter.emit('systemError', {
+                module: 'subSystemTool',
+                content: {
+                    type: 'system_error',
+                    error: error.message,
+                    stack: error.stack,
+                    location: 'listSrcFiles',
+                    status: 'error'
+                }
+            });
+            
             throw new Error(`Failed to list src files: ${error.message}`);
         }
     }
@@ -123,6 +228,18 @@ class SubsystemTool {
                 content
             };
         } catch (error) {
+            // Emit system error message
+            sharedEventEmitter.emit('systemError', {
+                module: 'subSystemTool',
+                content: {
+                    type: 'system_error',
+                    error: error.message,
+                    stack: error.stack,
+                    location: `readSrcFile.${filename}`,
+                    status: 'error'
+                }
+            });
+            
             throw new Error(`Failed to read file ${filename}: ${error.message}`);
         }
     }

@@ -21,6 +21,9 @@
                 <button onclick="toggleSubsystem('ego')" class="subsystem-toggle ego-toggle">
                     Ego <span class="message-count ego-count">0</span> ▼
                 </button>
+                <button onclick="toggleSystemErrors()" class="subsystem-toggle system-error-toggle">
+                    System Errors <span class="message-count system-error-count">0</span> ▼
+                </button>
             </div>
         </header>
 
@@ -74,6 +77,17 @@
                 <button onclick="toggleSubsystem('ego')" class="close-button">&times;</button>
             </div>
             <pre id="ego-output"></pre>
+        </div>
+    </div>
+
+    <!-- System Errors Modal -->
+    <div id="system-error-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>System Errors</h3>
+                <button onclick="toggleSystemErrors()" class="close-button">&times;</button>
+            </div>
+            <pre id="system-error-output"></pre>
         </div>
     </div>
 

@@ -34,6 +34,18 @@ async function evaluator({ originalRequest, executionResult, plan }) {
     } catch (error) {
         logger.debug('Evaluation failed', error);
 
+        // Emit system error message
+        await sharedEventEmitter.emit('systemError', {
+            module: 'evaluator',
+            content: {
+                type: 'system_error',
+                error: error.message,
+                stack: error.stack,
+                location: 'evaluator',
+                status: 'error'
+            }
+        });
+
         return {
             score: 0,
             analysis: `Error evaluating: ${error.message}`,

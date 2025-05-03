@@ -126,6 +126,19 @@ Remember:
                 content: planningResponse.content,
                 error: parseError.message
             });
+            
+            // Emit system error message
+            await sharedEventEmitter.emit('systemError', {
+                module: 'planner',
+                content: {
+                    type: 'system_error',
+                    error: parseError.message,
+                    stack: parseError.stack,
+                    location: 'planner.parsePlan',
+                    status: 'error'
+                }
+            });
+            
             return {
                 status: 'error',
                 error: 'Failed to create a valid plan'
@@ -161,6 +174,18 @@ Remember:
             error: {
                 message: error.message,
                 stack: error.stack
+            }
+        });
+
+        // Emit system error message
+        await sharedEventEmitter.emit('systemError', {
+            module: 'planner',
+            content: {
+                type: 'system_error',
+                error: error.message,
+                stack: error.stack,
+                location: 'planner',
+                status: 'error'
             }
         });
 

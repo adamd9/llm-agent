@@ -6,7 +6,8 @@ let currentResult = null;
 let subsystemMessages = {
     planner: [],
     coordinator: [],
-    ego: []
+    ego: [],
+    systemError: []
 };
 let connectionError = false; // Track connection error state
 
@@ -58,6 +59,30 @@ function toggleSubsystem(module) {
     }
 }
 
+function toggleSystemErrors() {
+    const modal = document.getElementById('system-error-modal');
+    const button = document.querySelector('.system-error-toggle');
+    const isHidden = modal.classList.contains('hidden');
+    
+    modal.classList.toggle('hidden');
+    
+    // Update button text while preserving the message count
+    const countElement = button.querySelector('.system-error-count');
+    const countHtml = countElement ? countElement.outerHTML : '';
+    
+    button.innerHTML = isHidden ? 
+        `System Errors ${countHtml} ▲` : 
+        `System Errors ${countHtml} ▼`;
+    
+    // Prevent body scroll when modal is open
+    document.body.style.overflow = isHidden ? 'hidden' : '';
+    
+    // Update content if opening
+    if (isHidden) {
+        updateSubsystemOutput('systemError');
+    }
+}
+
 function capitalizeFirstLetter(string) {
     return string.charAt(0).toUpperCase() + string.slice(1);
 }
@@ -84,6 +109,11 @@ function toggleResults() {
 
 function updateSubsystemOutput(module) {
     const output = document.getElementById(`${module}-output`);
+    if (!output) {
+        console.error(`Element with id '${module}-output' not found`);
+        return;
+    }
+    
     if (subsystemMessages[module] && subsystemMessages[module].length > 0) {
         output.innerHTML = subsystemMessages[module].map(msg => {
             return `<div class="subsystem-message">
@@ -98,6 +128,12 @@ function updateSubsystemOutput(module) {
 
 function formatSubsystemContent(msg) {
     if (typeof msg.content === 'object') {
+        if (msg.content.type === 'system_error') {
+            return `<strong>${msg.content.module || 'Unknown'}: ${msg.content.type}</strong><br>
+                    <div class="error-message">${msg.content.error || 'Unknown error'}</div>
+                    <div class="error-location">${msg.content.location || ''}</div>
+                    <pre class="error-stack">${msg.content.stack || ''}</pre>`;
+        }
         return `<strong>${msg.content.type || 'Message'}</strong><br>
                 <pre>${JSON.stringify(msg.content, null, 2)}</pre>`;
     } else {
@@ -258,15 +294,47 @@ function connect() {
                     
                     // Update the output if the modal is open
                     const modal = document.getElementById(`${module}-modal`);
-                    if (!modal.classList.contains('hidden')) {
+                    if (modal && !modal.classList.contains('hidden')) {
                         updateSubsystemOutput(module);
                     }
                     
                     // Highlight the button to indicate new message
                     const button = document.querySelector(`.${module}-toggle`);
-                    button.classList.add('has-new');
+                    if (button) {
+                        button.classList.add('has-new');
+                        setTimeout(() => {
+                            button.classList.remove('has-new');
+                        }, 3000);
+                    }
+                }
+                break;
+                
+            case 'systemError':
+                console.log('System Error:', data.data);
+                const errorModule = data.data.module || 'unknown';
+                const errorContent = data.data.content;
+                
+                // Store the error with timestamp
+                if (subsystemMessages.systemError) {
+                    subsystemMessages.systemError.push({
+                        content: errorContent,
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    // Update the message count
+                    updateMessageCounts();
+                    
+                    // Update the output if the modal is open
+                    const errorModal = document.getElementById('system-error-modal');
+                    if (!errorModal.classList.contains('hidden')) {
+                        updateSubsystemOutput('systemError');
+                    }
+                    
+                    // Highlight the button to indicate new error
+                    const errorButton = document.querySelector('.system-error-toggle');
+                    errorButton.classList.add('has-new');
                     setTimeout(() => {
-                        button.classList.remove('has-new');
+                        errorButton.classList.remove('has-new');
                     }, 3000);
                 }
                 break;
@@ -282,7 +350,34 @@ function connect() {
                 
             case 'error':
                 console.error('Server error:', data.error);
-                addMessage('error', `Error: ${data.error}`);
+                
+                // Also add the error to the system errors
+                if (subsystemMessages.systemError) {
+                    subsystemMessages.systemError.push({
+                        content: {
+                            type: 'system_error',
+                            error: typeof data.error === 'string' ? data.error : data.error?.message || 'Unknown error',
+                            stack: data.error?.stack || '',
+                            location: 'server',
+                            status: 'error'
+                        },
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    // Update the message count
+                    updateMessageCounts();
+                    
+                    // Highlight the button to indicate new error
+                    const errorButton = document.querySelector('.system-error-toggle');
+                    if (errorButton) {
+                        errorButton.classList.add('has-new');
+                        setTimeout(() => {
+                            errorButton.classList.remove('has-new');
+                        }, 3000);
+                    }
+                }
+                
+                addMessage('error', `Error: ${typeof data.error === 'string' ? data.error : JSON.stringify(data.error)}`);
                 clearStatus();
                 break;
 
@@ -352,6 +447,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('results-modal').addEventListener('click', (e) => {
         if (e.target.id === 'results-modal') {
             toggleResults();
+        }
+    });
+    
+    document.getElementById('system-error-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'system-error-modal') {
+            toggleSystemErrors();
         }
     });
 });

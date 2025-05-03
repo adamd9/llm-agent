@@ -6,6 +6,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const logger = require('../utils/logger');
 const MCPClient = require('./client');
+const sharedEventEmitter = require('../utils/eventEmitter');
 
 class MCPToolManager {
   constructor() {
@@ -37,6 +38,18 @@ class MCPToolManager {
       await this.loadToolsFromDirectory(this.dataToolsDir, 'data');
     } catch (error) {
       logger.debug('mcpToolManager', 'No custom tools found in data directory');
+      
+      // Emit system error message
+      await sharedEventEmitter.emit('systemError', {
+        module: 'toolManager',
+        content: {
+          type: 'system_error',
+          error: error.message,
+          stack: error.stack,
+          location: 'loadTools.loadDataTools',
+          status: 'error'
+        }
+      });
     }
     
     // Load MCP servers
@@ -46,6 +59,18 @@ class MCPToolManager {
       logger.debug('mcpToolManager', 'Error loading MCP servers', { 
         error: error.message,
         stack: error.stack
+      });
+      
+      // Emit system error message
+      await sharedEventEmitter.emit('systemError', {
+        module: 'toolManager',
+        content: {
+          type: 'system_error',
+          error: error.message,
+          stack: error.stack,
+          location: 'loadTools.loadMCPServers',
+          status: 'error'
+        }
       });
     }
     
@@ -103,6 +128,18 @@ class MCPToolManager {
               code: error.code,
               details: error
             });
+            
+            // Emit system error message
+            await sharedEventEmitter.emit('systemError', {
+              module: 'toolManager',
+              content: {
+                type: 'system_error',
+                error: error.message,
+                stack: error.stack,
+                location: `loadToolsFromDirectory.${file}`,
+                status: 'error'
+              }
+            });
           }
         }
       }
@@ -113,6 +150,19 @@ class MCPToolManager {
         code: error.code,
         details: error
       });
+      
+      // Emit system error message
+      await sharedEventEmitter.emit('systemError', {
+        module: 'toolManager',
+        content: {
+          type: 'system_error',
+          error: error.message,
+          stack: error.stack,
+          location: `loadToolsFromDirectory.readDir.${directory}`,
+          status: 'error'
+        }
+      });
+      
       throw error;
     }
   }
@@ -168,6 +218,19 @@ class MCPToolManager {
         error: error.message,
         stack: error.stack
       });
+      
+      // Emit system error message
+      await sharedEventEmitter.emit('systemError', {
+        module: 'toolManager',
+        content: {
+          type: 'system_error',
+          error: error.message,
+          stack: error.stack,
+          location: 'loadMCPServers',
+          status: 'error'
+        }
+      });
+      
       throw error;
     }
   }
@@ -207,6 +270,18 @@ class MCPToolManager {
       logger.error('mcpToolManager', `Error registering tools from server ${serverId}:`, {
         error: error.message,
         stack: error.stack
+      });
+      
+      // Emit system error message
+      await sharedEventEmitter.emit('systemError', {
+        module: 'toolManager',
+        content: {
+          type: 'system_error',
+          error: error.message,
+          stack: error.stack,
+          location: `registerMCPServerTools.${serverId}`,
+          status: 'error'
+        }
       });
     }
   }
@@ -269,6 +344,18 @@ class MCPToolManager {
           logger.error('mcpToolManager', `Error executing MCP tool ${mcpTool.name}:`, {
             error: error.message,
             stack: error.stack
+          });
+          
+          // Emit system error message
+          await sharedEventEmitter.emit('systemError', {
+            module: 'toolManager',
+            content: {
+              type: 'system_error',
+              error: error.message,
+              stack: error.stack,
+              location: `createMCPToolAdapter.execute.${mcpTool.name}`,
+              status: 'error'
+            }
           });
           
           return {
@@ -352,6 +439,19 @@ class MCPToolManager {
         error: error.message,
         stack: error.stack
       });
+      
+      // Emit system error message
+      sharedEventEmitter.emit('systemError', {
+        module: 'toolManager',
+        content: {
+          type: 'system_error',
+          error: error.message,
+          stack: error.stack,
+          location: `isValidTool.${tool?.name}`,
+          status: 'error'
+        }
+      });
+      
       return false;
     }
   }
@@ -397,12 +497,24 @@ class MCPToolManager {
    */
   async cleanup() {
     try {
-      logger.debug('mcpToolManager', 'Cleaning up MCP tool manager');
+      logger.debug('mcpToolManager', 'Cleaning up resources');
       await this.mcpClient.cleanup();
     } catch (error) {
-      logger.error('mcpToolManager', 'Error cleaning up MCP client:', {
+      logger.error('mcpToolManager', 'Error during cleanup', {
         error: error.message,
         stack: error.stack
+      });
+      
+      // Emit system error message
+      sharedEventEmitter.emit('systemError', {
+        module: 'toolManager',
+        content: {
+          type: 'system_error',
+          error: error.message,
+          stack: error.stack,
+          location: 'cleanup',
+          status: 'error'
+        }
       });
     }
   }
