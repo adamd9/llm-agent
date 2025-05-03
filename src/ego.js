@@ -135,7 +135,17 @@ Remember to maintain conversation continuity with the original request.`);
         });
 
         if (attempt === 1) {
-            await sharedEventEmitter.emit('assistantWorking', 'Starting to work on your request...');
+            await sharedEventEmitter.emit('systemStatusMessage', 'Starting to work on your request...');
+            
+            // Emit subsystem message for starting execution
+            await sharedEventEmitter.emit('subsystemMessage', {
+                module: 'ego',
+                content: {
+                    type: 'execution_start',
+                    message: enrichedMessage.original_message,
+                    attempt: attempt
+                }
+            });
         }
 
         // Get plan from planner
@@ -152,7 +162,7 @@ Remember to maintain conversation continuity with the original request.`);
             };
         }
 
-        await sharedEventEmitter.emit('assistantWorking', 'Starting execution of the plan...');
+        await sharedEventEmitter.emit('systemStatusMessage', 'Starting execution of the plan...');
 
         // Execute the plan
         enrichedMessage.plan = planResult.plan;
@@ -160,7 +170,7 @@ Remember to maintain conversation continuity with the original request.`);
         //this appears to bubble up interim results
         // this.handleBubble(executionResult);
         await memory.storeShortTerm('Plan execution result', executionResult);
-        await sharedEventEmitter.emit('assistantWorking', 'Execution complete. Evaluating results...');
+        await sharedEventEmitter.emit('systemStatusMessage', 'Execution complete. Evaluating results...');
 
         // Evaluate the results
         const evaluation = await evaluator({
@@ -176,10 +186,21 @@ Remember to maintain conversation continuity with the original request.`);
         });
 
         await memory.storeShortTerm('Evaluator result', evaluation);
+        
+        // Emit subsystem message with evaluation results
+        await sharedEventEmitter.emit('subsystemMessage', {
+            module: 'ego',
+            content: {
+                type: 'evaluation_results',
+                score: evaluation.score,
+                recommendations: evaluation.recommendations,
+                attempt: attempt
+            }
+        });
 
         // Check if we need to retry
         if (evaluation.score < EVALUATION_THRESHOLD && attempt < MAX_RETRIES) {
-            await sharedEventEmitter.emit('assistantWorking', `Attempt ${attempt} scored ${evaluation.score}%. Making adjustments...`);
+            await sharedEventEmitter.emit('systemStatusMessage', `Attempt ${attempt} scored ${evaluation.score}%. Making adjustments...`);
 
             // Prepare retry message
             const retryResponse = {

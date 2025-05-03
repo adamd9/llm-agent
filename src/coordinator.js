@@ -71,7 +71,7 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
 
         for (step of plan) {
             logger.debug('Executing step:', step);
-            await sharedEventEmitter.emit('assistantWorking', {
+            await sharedEventEmitter.emit('systemStatusMessage', {
                 message: `${step.action}`,
                 persistent: false
             });
@@ -97,7 +97,7 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
                 const result = await tool.execute(step.action, step.parameters, plan);
                 logger.debug('Tool execution result:', result);
                 memory.storeShortTerm('toolExecutionResult for' + step.action, JSON.stringify(result), 'ego');
-                await sharedEventEmitter.emit('assistantWorking', {
+                await sharedEventEmitter.emit('systemStatusMessage', {
                     message: `Completed ${step.action}`,
                     persistent: false
                 });
@@ -157,6 +157,16 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
         // Generate markdown summary using LLM
         logger.debug('Plan execution results:', results);
 
+        // Emit subsystem message with execution results
+        await sharedEventEmitter.emit('subsystemMessage', {
+            module: 'coordinator',
+            content: {
+                type: 'execution_results',
+                results: results,
+                status: 'success'
+            }
+        });
+
         return {
             status: 'success',
             response: results
@@ -164,6 +174,18 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
 
     } catch (error) {
         logger.debug('Plan execution failed:', error);
+        
+        // Emit subsystem message with execution error
+        await sharedEventEmitter.emit('subsystemMessage', {
+            module: 'coordinator',
+            content: {
+                type: 'execution_error',
+                error: error.message,
+                stack: error.stack,
+                status: 'error'
+            }
+        });
+        
         return {
             status: 'error',
             error: error.message,

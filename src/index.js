@@ -209,7 +209,7 @@ async function startServer() {
             await logger.debug("response", "Assistant response", { response: data });
         });
 
-        sharedEventEmitter.on("assistantWorking", async (data) => {
+        sharedEventEmitter.on("systemStatusMessage", async (data) => {
             const queue = messageQueue.get(ws.sessionId);
             if (queue) {
                 queue.push({ 
@@ -221,6 +221,26 @@ async function startServer() {
 
             // Log working status to file
             await logger.debug("working", "Assistant working", { status: data });
+        });
+
+        sharedEventEmitter.on("subsystemMessage", async (data) => {
+            const queue = messageQueue.get(ws.sessionId);
+            if (queue) {
+                queue.push({ 
+                    type: "subsystem", 
+                    data: { 
+                        module: data.module,
+                        content: data.content 
+                    }  
+                });
+                processQueue(ws);
+            }
+
+            // Log subsystem message to file
+            await logger.debug("subsystem", `${data.module} subsystem message`, { 
+                module: data.module,
+                content: data.content 
+            });
         });
 
         sharedEventEmitter.on("debugResponse", async (data) => {

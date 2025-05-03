@@ -3,6 +3,23 @@ let currentMessagePersistent = false;
 let isProcessing = false;
 let systemMessageDiv = null;
 let currentResult = null;
+let subsystemMessages = {
+    planner: [],
+    coordinator: [],
+    ego: []
+};
+
+// Function to update message counts on buttons
+function updateMessageCounts() {
+    Object.keys(subsystemMessages).forEach(module => {
+        const count = subsystemMessages[module].length;
+        const countElement = document.querySelector(`.${module}-count`);
+        if (countElement) {
+            countElement.textContent = count;
+            countElement.style.display = count > 0 ? 'inline-flex' : 'none';
+        }
+    });
+}
 
 function toggleDebug() {
     const modal = document.getElementById('debug-modal');
@@ -14,6 +31,34 @@ function toggleDebug() {
     
     // Prevent body scroll when modal is open
     document.body.style.overflow = isHidden ? 'hidden' : '';
+}
+
+function toggleSubsystem(module) {
+    const modal = document.getElementById(`${module}-modal`);
+    const button = document.querySelector(`.${module}-toggle`);
+    const isHidden = modal.classList.contains('hidden');
+    
+    modal.classList.toggle('hidden');
+    
+    // Update button text while preserving the message count
+    const countElement = button.querySelector(`.${module}-count`);
+    const countHtml = countElement ? countElement.outerHTML : '';
+    
+    button.innerHTML = isHidden ? 
+        `${capitalizeFirstLetter(module)} ${countHtml} ▲` : 
+        `${capitalizeFirstLetter(module)} ${countHtml} ▼`;
+    
+    // Prevent body scroll when modal is open
+    document.body.style.overflow = isHidden ? 'hidden' : '';
+    
+    // Update content if opening
+    if (isHidden) {
+        updateSubsystemOutput(module);
+    }
+}
+
+function capitalizeFirstLetter(string) {
+    return string.charAt(0).toUpperCase() + string.slice(1);
 }
 
 function toggleResults() {
@@ -33,6 +78,29 @@ function toggleResults() {
     if (isHidden && currentResult) {
         const output = document.getElementById('results-output');
         output.textContent = currentResult;
+    }
+}
+
+function updateSubsystemOutput(module) {
+    const output = document.getElementById(`${module}-output`);
+    if (subsystemMessages[module] && subsystemMessages[module].length > 0) {
+        output.innerHTML = subsystemMessages[module].map(msg => {
+            return `<div class="subsystem-message">
+                <div class="subsystem-timestamp">${new Date(msg.timestamp).toLocaleTimeString()}</div>
+                <div class="subsystem-content">${formatSubsystemContent(msg)}</div>
+            </div>`;
+        }).join('<hr>');
+    } else {
+        output.innerHTML = `<div class="no-messages">No ${module} messages yet</div>`;
+    }
+}
+
+function formatSubsystemContent(msg) {
+    if (typeof msg.content === 'object') {
+        return `<strong>${msg.content.type || 'Message'}</strong><br>
+                <pre>${JSON.stringify(msg.content, null, 2)}</pre>`;
+    } else {
+        return `<pre>${msg.content}</pre>`;
     }
 }
 
@@ -171,6 +239,36 @@ function connect() {
                 showStatus(data.data.status);
                 break;
                 
+            case 'subsystem':
+                console.log('Subsystem message:', data.data);
+                const module = data.data.module;
+                const content = data.data.content;
+                
+                // Store the message with timestamp
+                if (subsystemMessages[module]) {
+                    subsystemMessages[module].push({
+                        content: content,
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    // Update the message count
+                    updateMessageCounts();
+                    
+                    // Update the output if the modal is open
+                    const modal = document.getElementById(`${module}-modal`);
+                    if (!modal.classList.contains('hidden')) {
+                        updateSubsystemOutput(module);
+                    }
+                    
+                    // Highlight the button to indicate new message
+                    const button = document.querySelector(`.${module}-toggle`);
+                    button.classList.add('has-new');
+                    setTimeout(() => {
+                        button.classList.remove('has-new');
+                    }, 3000);
+                }
+                break;
+                
             case 'debug':
                 const debugOutput = document.getElementById('debug-output');
                 const debugMessage = typeof data.data === 'object' ? 
@@ -221,8 +319,11 @@ function sendMessage() {
 document.addEventListener('DOMContentLoaded', () => {
     connect();
     
-    // Add event listeners
-    document.getElementById('user-input').addEventListener('keypress', (e) => {
+    // Initialize message counts
+    updateMessageCounts();
+    
+    const userInput = document.getElementById('user-input');
+    userInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             sendMessage();
         }

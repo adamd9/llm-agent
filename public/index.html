@@ -10,7 +10,18 @@
 <body>
     <div id="app-container">
         <header>
-            <button onclick="toggleDebug()" class="debug-toggle">Debug ▼</button>
+            <div class="header-buttons">
+                <button onclick="toggleDebug()" class="debug-toggle">Debug ▼</button>
+                <button onclick="toggleSubsystem('planner')" class="subsystem-toggle planner-toggle">
+                    Planner <span class="message-count planner-count">0</span> ▼
+                </button>
+                <button onclick="toggleSubsystem('coordinator')" class="subsystem-toggle coordinator-toggle">
+                    Coordinator <span class="message-count coordinator-count">0</span> ▼
+                </button>
+                <button onclick="toggleSubsystem('ego')" class="subsystem-toggle ego-toggle">
+                    Ego <span class="message-count ego-count">0</span> ▼
+                </button>
+            </div>
         </header>
 
         <div id="chat-container">
@@ -30,6 +41,39 @@
                 <button onclick="toggleDebug()" class="close-button">&times;</button>
             </div>
             <pre id="debug-output"></pre>
+        </div>
+    </div>
+
+    <!-- Planner Modal -->
+    <div id="planner-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Planner Output</h3>
+                <button onclick="toggleSubsystem('planner')" class="close-button">&times;</button>
+            </div>
+            <pre id="planner-output"></pre>
+        </div>
+    </div>
+
+    <!-- Coordinator Modal -->
+    <div id="coordinator-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Coordinator Output</h3>
+                <button onclick="toggleSubsystem('coordinator')" class="close-button">&times;</button>
+            </div>
+            <pre id="coordinator-output"></pre>
+        </div>
+    </div>
+
+    <!-- Ego Modal -->
+    <div id="ego-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Ego Output</h3>
+                <button onclick="toggleSubsystem('ego')" class="close-button">&times;</button>
+            </div>
+            <pre id="ego-output"></pre>
         </div>
     </div>
 

@@ -3,6 +3,7 @@ require('dotenv').config();
 const toolManager = require('./mcp');
 const logger = require('./utils/logger.js');
 const memory = require('./memory');
+const sharedEventEmitter = require('./utils/eventEmitter');
 
 const openai = getOpenAIClient();
 async function planner(enrichedMessage, client = null) {
@@ -109,6 +110,16 @@ Remember:
             plan = JSON.parse(planningResponse.content).steps;
             logger.debug('parsed', 'Successfully parsed plan', {
                 plan
+            });
+            
+            // Emit subsystem message with the generated plan
+            await sharedEventEmitter.emit('subsystemMessage', {
+                module: 'planner',
+                content: {
+                    type: 'plan',
+                    plan: plan,
+                    message: enrichedMessage.original_message
+                }
             });
         } catch (parseError) {
             logger.debug('error', 'Failed to parse plan', {
