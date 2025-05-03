@@ -151,7 +151,7 @@ function showStatus(message, options = {}) {
     } else {
         // Show non-persistent messages in the system message area
         const spinner = options.noSpinner ? '' : '<span class="spinner"></span>';
-        systemMessageDiv.innerHTML = `${spinner}${messageText}`;
+        systemMessageDiv.innerHTML = `${spinner}${messageText.replace(/\n/g, '<br>')}`;
     }
     
     currentMessagePersistent = isPersistent;
@@ -195,9 +195,9 @@ function addMessage(type, content, format = 'basic') {
     
     if (format === 'markdown') {
         // Add markdown formatting if needed
-        messageDiv.textContent = content;
+        messageDiv.innerHTML = content.replace(/\n/g, '<br>');
     } else {
-        messageDiv.textContent = content;
+        messageDiv.innerHTML = content.replace(/\n/g, '<br>');
     }
     
     // For system messages, insert after the system status if it exists
