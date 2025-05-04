@@ -19,7 +19,7 @@ async function planner(enrichedMessage, client = null) {
         logger.debug('start', 'Planning for message:', enrichedMessage);
         logger.debug('start', 'Starting planning process', {
             message: enrichedMessage.original_message,
-            short_term_memory: enrichedMessage.short_term_memory
+            short_term_memory: enrichedMessage.context?.short_term_memory
         });
 
         // Use cached tools instead of reloading them
@@ -32,12 +32,30 @@ async function planner(enrichedMessage, client = null) {
         // Create a plan
         const toolsDescription = formatToolsDescription(tools);
 
+        // Get the short-term memory directly if not provided in the context
+        let shortTermMemory = enrichedMessage.context?.short_term_memory;
+        if (!shortTermMemory) {
+            shortTermMemory = await memory.retrieveShortTerm() || '';
+            logger.debug('memory', 'Retrieved short-term memory directly:', {
+                length: shortTermMemory.length
+            });
+        }
+
+        // Get the long-term memory directly if not provided in the context
+        let longTermMemory = enrichedMessage.context?.long_term_relevant_memory;
+        if (!longTermMemory) {
+            longTermMemory = (await memory.retrieveLongTerm('ego', 'retrieve anything relevant to carrying out a users request')) || '';
+            logger.debug('memory', 'Retrieved long-term memory directly:', {
+                length: longTermMemory.length
+            });
+        }
+
         // Prepare prompts with actual data
         const systemPrompt = prompts.PLANNER_SYSTEM.replace('{{toolsDescription}}', toolsDescription);
         const userPrompt = prompts.PLANNER_USER
             .replace('{{original_message}}', enrichedMessage.original_message)
-            .replace('{{short_term_memory}}', enrichedMessage.short_term_memory || '')
-            .replace('{{long_term_memory}}', enrichedMessage.long_term_memory || '');
+            .replace('{{short_term_memory}}', shortTermMemory)
+            .replace('{{long_term_memory}}', longTermMemory);
 
         const planningPrompts = [
             { role: 'system', content: systemPrompt },
