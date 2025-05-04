@@ -19,7 +19,9 @@ Remember:
 2. Steps should be ordered logically
 3. Include all necessary parameters for each tool action
 4. Be specific and concrete in descriptions
-5. Only use appropriate tools from the list of possible tools. You don't need to use all available tools.`;
+5. Only use appropriate tools from the list of possible tools. You don't need to use all available tools.
+6. If you need more information or clarification from the user, use the 'question' tool as your first step or as needed in your plan
+7. Always consider whether you have enough context to create a good plan. If not, start with a clarifying question.`;
 
 // User prompt for the planner
 const PLANNER_USER = `Request: "{{original_message}}"
@@ -27,6 +29,10 @@ const PLANNER_USER = `Request: "{{original_message}}"
             Create a plan using the available tools.
             Relevant short-term memory: {{short_term_memory}}
             Relevant long-term memory: {{long_term_memory}}
+            
+            Important: If the request is ambiguous, lacks necessary details, or would benefit from additional context, use the 'question' tool to ask for clarification before proceeding with other steps. You can also use the 'question' tool later in the plan if you need more information at specific points.
+            
+            For example, if the user asks to "create a file" but doesn't specify the content or file name, your first step should be to ask for these details using the question tool.
             `;
 
 // JSON schema for plan response
