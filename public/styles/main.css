@@ -411,22 +411,58 @@ header {
 
 .subsystem-message {
     margin-bottom: 15px;
-    padding: 15px;
+    padding: 0;
     border-radius: 6px;
     background-color: #fff;
     border: 1px solid #e0e0e0;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
+.subsystem-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+}
+
+.subsystem-header:hover {
+    background-color: #f5f5f5;
+}
+
 .subsystem-timestamp {
     font-size: 12px;
     color: #666;
-    margin-bottom: 8px;
     font-weight: bold;
+    margin-right: 10px;
+}
+
+.subsystem-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: #333;
+    flex-grow: 1;
+}
+
+.expand-icon {
+    font-size: 12px;
+    color: #666;
+    transition: transform 0.2s ease;
+}
+
+.subsystem-message.expanded .expand-icon {
+    transform: rotate(180deg);
 }
 
 .subsystem-content {
     font-size: 14px;
+    padding: 15px;
+    border-top: 1px solid #e0e0e0;
+}
+
+.subsystem-content.hidden {
+    display: none;
 }
 
 .subsystem-content pre {
@@ -440,6 +476,31 @@ header {
 
 .subsystem-content strong {
     color: #1565c0;
+}
+
+.expand-all-container {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 10px;
+    padding: 0 10px;
+    gap: 8px;
+}
+
+.expand-all-button,
+.collapse-all-button {
+    background: #f5f5f5;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    color: #666;
+    transition: all 0.2s ease;
+}
+
+.expand-all-button:hover,
+.collapse-all-button:hover {
+    background: #e0e0e0;
 }
 
 #planner-output .subsystem-message {

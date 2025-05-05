@@ -77,7 +77,7 @@ async function getEvaluation(prompt) {
         content: prompt
     }];
     const response = await openai.chat(messages, {
-        model: 'gpt-4o-mini',
+        model: 'gpt-4.1-mini',
         response_format: prompts.EVALUATION_SCHEMA,
         temperature: 0.7,
         max_tokens: 1000

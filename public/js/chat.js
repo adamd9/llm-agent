@@ -129,15 +129,89 @@ function updateSubsystemOutput(module) {
     }
     
     if (subsystemMessages[module] && subsystemMessages[module].length > 0) {
-        output.innerHTML = subsystemMessages[module].map(msg => {
-            return `<div class="subsystem-message">
-                <div class="subsystem-timestamp">${new Date(msg.timestamp).toLocaleTimeString()}</div>
-                <div class="subsystem-content">${formatSubsystemContent(msg)}</div>
+        // Add "Expand All" and "Collapse All" buttons at the top
+        output.innerHTML = `<div class="expand-all-container">
+            <button class="expand-all-button" onclick="expandAllMessages('${module}')">Expand All</button>
+            <button class="collapse-all-button" onclick="collapseAllMessages('${module}')">Collapse All</button>
+        </div>`;
+        
+        // Append all messages in collapsed state
+        output.innerHTML += subsystemMessages[module].map((msg, index) => {
+            const messageId = `${module}-message-${index}`;
+            const timestamp = new Date(msg.timestamp).toLocaleTimeString();
+            const messageTitle = typeof msg.content === 'object' ? (msg.content.type || 'Message') : 'Message';
+            
+            return `<div class="subsystem-message collapsed" id="${messageId}">
+                <div class="subsystem-header" onclick="toggleMessage('${messageId}')">
+                    <span class="subsystem-timestamp">${timestamp}</span>
+                    <span class="subsystem-title">${messageTitle}</span>
+                    <span class="expand-icon">▼</span>
+                </div>
+                <div class="subsystem-content hidden">
+                    ${formatSubsystemContent(msg)}
+                </div>
             </div>`;
-        }).join('<hr>');
+        }).join('');
     } else {
         output.innerHTML = `<div class="no-messages">No ${module} messages yet</div>`;
     }
+}
+
+// Function to toggle a single message
+function toggleMessage(messageId) {
+    const messageDiv = document.getElementById(messageId);
+    if (messageDiv) {
+        messageDiv.classList.toggle('collapsed');
+        messageDiv.classList.toggle('expanded');
+        
+        const contentDiv = messageDiv.querySelector('.subsystem-content');
+        contentDiv.classList.toggle('hidden');
+        
+        const expandIcon = messageDiv.querySelector('.expand-icon');
+        if (expandIcon) {
+            expandIcon.textContent = contentDiv.classList.contains('hidden') ? '▼' : '▲';
+        }
+    }
+}
+
+// Function to expand all messages in a module
+function expandAllMessages(module) {
+    const output = document.getElementById(`${module}-output`);
+    if (!output) return;
+    
+    const messages = output.querySelectorAll('.subsystem-message');
+    messages.forEach(msg => {
+        msg.classList.remove('collapsed');
+        msg.classList.add('expanded');
+        
+        const contentDiv = msg.querySelector('.subsystem-content');
+        contentDiv.classList.remove('hidden');
+        
+        const expandIcon = msg.querySelector('.expand-icon');
+        if (expandIcon) {
+            expandIcon.textContent = '▲';
+        }
+    });
+}
+
+// Function to collapse all messages in a module
+function collapseAllMessages(module) {
+    const output = document.getElementById(`${module}-output`);
+    if (!output) return;
+    
+    const messages = output.querySelectorAll('.subsystem-message');
+    messages.forEach(msg => {
+        msg.classList.add('collapsed');
+        msg.classList.remove('expanded');
+        
+        const contentDiv = msg.querySelector('.subsystem-content');
+        contentDiv.classList.add('hidden');
+        
+        const expandIcon = msg.querySelector('.expand-icon');
+        if (expandIcon) {
+            expandIcon.textContent = '▼';
+        }
+    });
 }
 
 function formatSubsystemContent(msg) {

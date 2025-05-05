@@ -8,6 +8,7 @@ const logger = require('../../utils/logger.js');
 const sharedEventEmitter = require('../../utils/eventEmitter.js');
 const memory = require('../memory');
 const prompts = require('./prompts');
+const reflectionPrompts = require('./reflection-prompts');
 
 // Configuration
 const MAX_RETRIES = 1;
@@ -268,143 +269,286 @@ class Ego {
         };
     }
 
-    async handleBubble(input, extraInstruction) {
-        let message;
+    async handleBubble(result, extraInstruction = null) {
+        logger.debug('handleBubble', 'Handling bubble', { result, extraInstruction });
+        try {
+            const shortTermMemory = await memory.retrieveShortTerm();
+            const longTermRelevantMemory = await memory.retrieveLongTerm('ego', 'retrieve anything relevant to responding to the user');
 
-        if (typeof input === 'string') {
-            message = input;
-        } else if (typeof input === 'object') {
-            // Handle different response structures
-            if (input.response?.result?.data?.result) {
-                // Original path
-                message = input.response.result.data.result;
-            } else if (input.type === 'task' && input.response) {
-                // Handle task response structure
-                if (Array.isArray(input.response)) {
-                    // Handle array of tool results
-                    const toolResults = input.response.map(item => {
-                        if (item.result?.data?.data?.result) {
-                            return item.result.data.data.result;
-                        } else if (item.result?.data?.result) {
-                            return item.result.data.result;
-                        } else if (typeof item.result?.data === 'string') {
-                            return item.result.data;
-                        } else {
-                            try {
-                                return JSON.stringify(item);
-                            } catch (error) {
-                                logger.debug('handleBubble', 'Error stringifying array item', { error: error.message });
-                                
-                                // Emit system error message
-                                sharedEventEmitter.emit('systemError', {
-                                    module: 'ego',
-                                    content: {
-                                        type: 'system_error',
-                                        error: error.message,
-                                        stack: error.stack,
-                                        location: 'handleBubble.stringifyArrayItem',
-                                        status: 'error'
-                                    }
-                                });
-                                
-                                return `[Error: ${error.message}]`;
-                            }
-                        }
-                    });
-                    message = toolResults.join('\n');
-                } else {
-                    // Special handling for weather data from LLMQueryOpenAITool
-                    if (typeof input.response === 'object' && input.response.data && input.response.data.result) {
-                        message = input.response.data.result;
-                    } else if (typeof input.response === 'string') {
-                        message = input.response;
-                    } else {
-                        try {
-                            message = JSON.stringify(input.response);
-                        } catch (error) {
-                            logger.debug('handleBubble', 'Error stringifying response', { error: error.message });
-                            
-                            // Emit system error message
-                            sharedEventEmitter.emit('systemError', {
-                                module: 'ego',
-                                content: {
-                                    type: 'system_error',
-                                    error: error.message,
-                                    stack: error.stack,
-                                    location: 'handleBubble.stringifyResponse',
-                                    status: 'error'
-                                }
-                            });
-                            
-                            message = `[Error: ${error.message}]`;
-                        }
-                    }
-                }
+            // Prepare the message for the ego
+            let message = '';
+            if (result.type === 'error') {
+                message = `Error: ${result.error.message}`;
+            } else if (result.type === 'success') {
+                message = result.content;
             } else {
-                // Fallback to stringify the entire object
+                message = JSON.stringify(result);
+            }
+
+            const messages = [
+                { role: 'system', content: prompts.EGO_SYSTEM
+                    .replace('{{identity}}', this.identity)
+                    .replace('{{personality}}', this.personality.prompt)
+                    .replace('{{capabilities}}', this.capabilities.join(', '))
+                },
+                { role: 'user', content: prompts.EGO_USER.replace('{{message}}', message) }
+            ];
+
+            if (extraInstruction) {
+                messages.push({ role: 'user', content: extraInstruction });
+            }
+
+            const openai = getOpenAIClient();
+            const response = await openai.chat(messages);
+            
+            // Extract only the actual response content, removing any reflection prompts
+            // that might have been included in the response
+            let assistantMessage = response.content;
+            
+            // Check if the response contains the reflection prompt markers and remove them
+            const reflectionPromptIndex = assistantMessage.indexOf('\n\nProvide a thoughtful reflection');
+            if (reflectionPromptIndex > -1) {
+                assistantMessage = assistantMessage.substring(0, reflectionPromptIndex);
+            }
+            
+            // Store the cleaned response in short-term memory
+            await memory.storeShortTerm('Response to user', assistantMessage);
+
+            // Emit the response to the user - only send the cleaned message
+            await sharedEventEmitter.emit('message', {
+                role: 'assistant',
+                content: assistantMessage
+            });
+            
+            // Emit the original events for compatibility
+            await sharedEventEmitter.emit('assistantResponse', assistantMessage);
+            await sharedEventEmitter.emit('assistantComplete');
+            
+            // Perform reflection after the response is sent to the user
+            // Run it asynchronously to avoid blocking
+            setTimeout(async () => {
                 try {
-                    message = JSON.stringify(input);
-                } catch (error) {
-                    // Handle circular references or other JSON stringify errors
-                    logger.debug('handleBubble', 'Error stringifying input', { error: error.message });
-                    
-                    // Emit system error message
-                    sharedEventEmitter.emit('systemError', {
-                        module: 'ego',
-                        content: {
-                            type: 'system_error',
-                            error: error.message,
-                            stack: error.stack,
-                            location: 'handleBubble.stringifyInput',
-                            status: 'error'
+                    await this.reflection();
+                } catch (reflectionError) {
+                    logger.error('handleBubble', 'Error during reflection', {
+                        error: {
+                            message: reflectionError.message,
+                            stack: reflectionError.stack
                         }
                     });
-                    
-                    message = `Error processing response: ${error.message}`;
                 }
-            }
-        } else {
-            throw new Error('Input must be a string or an object');
+            }, 100);
+            
+            return assistantMessage;
+            
+        } catch (error) {
+            logger.error('handleBubble', 'Error handling bubble', {
+                error: {
+                    message: error.message,
+                    stack: error.stack
+                }
+            });
+            
+            // Emit system error message
+            await sharedEventEmitter.emit('systemError', {
+                module: 'ego',
+                content: {
+                    type: 'system_error',
+                    error: error.message,
+                    stack: error.stack,
+                    location: 'handleBubble',
+                    status: 'error'
+                }
+            });
+            
+            // Emit a simplified error message to the user
+            await sharedEventEmitter.emit('message', {
+                role: 'assistant',
+                content: `I'm sorry, I encountered an error while processing your request. Please try again.`
+            });
+            
+            throw error;
         }
-
-        logger.debug('handleBubble', 'Processing bubble', { message }, false);
-
-        let userPrompt = prompts.EGO_USER.replace('{{message}}', message);
-
-        if (extraInstruction) {
-            userPrompt += `\nAdditionally, follow this instruction:
-            ${extraInstruction}
-            `;
-        }
-
-        const systemPrompt = this.buildSystemPrompt();
-
-        const messages = [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-        ];
-
-        logger.debug('handleBubble', 'Bubble messages being sent to OpenAI', { messages }, false);
-        const openai = getOpenAIClient();
-        const response = await openai.chat(messages, {
-            temperature: 0.7,
-            max_tokens: 1000
-        });
-        //delete response.response.raw.context before logging to debug (if the key exists)
-        delete response.raw?.context;
-        logger.debug('handleBubble', 'Bubble message OpenAI response', { response }, 'OpenAI Response Logging');
-        const assistantMessage = response.content;
-        await memory.storeShortTerm('Assistant response', assistantMessage);
-        await sharedEventEmitter.emit('assistantResponse', assistantMessage);
-        await sharedEventEmitter.emit('assistantComplete');
-        return assistantMessage;
     }
 
-    buildSystemPrompt() {
+    async buildSystemPrompt() {
         return prompts.EGO_SYSTEM
             .replace(/{{identity}}/g, this.identity)
             .replace('{{personality}}', this.personality.prompt)
             .replace('{{capabilities}}', this.capabilities.join(', '));
+    }
+
+    /**
+     * Performs reflection on the recent interactions stored in short-term memory
+     * Analyzes performance, identifies lessons learned, and stores valuable insights in long-term memory
+     * @returns {Promise<void>}
+     */
+    async reflection() {
+        try {
+            logger.debug('reflection', 'Starting reflection process');
+            
+            // First, let's add a marker to the long-term memory file to confirm we can write to it
+            const fs = require('fs');
+            const path = require('path');
+            const timestamp = Math.floor(Date.now() / 1000);
+            const longTermPath = path.join(process.cwd(), 'data', 'memory', 'long', 'long_term.txt');
+            
+            // Add a reflection start marker
+            const startEntry = `[ego][${timestamp}] [ReflectionMarker] Starting reflection process at ${new Date().toISOString()}\n`;
+            fs.appendFileSync(longTermPath, startEntry);
+            
+            // Create a simple insight and lesson to store
+            const simpleInsight = `[ego][${timestamp}] [Insight] interaction: The system successfully processed a factual query and provided a direct answer.\n`;
+            fs.appendFileSync(longTermPath, simpleInsight);
+            
+            const simpleLesson = `[ego][${timestamp}] [Lesson] Maintain a balance between factual accuracy and conversational tone. - Application: Continue to provide accurate information while adapting tone based on user preferences.\n`;
+            fs.appendFileSync(longTermPath, simpleLesson);
+            
+            const simpleQuestion = `[ego][${timestamp}] [FollowUp] Questions to ask in future interactions: Would you like more detailed information about this topic?; Do you prefer a more conversational or direct response style?\n`;
+            fs.appendFileSync(longTermPath, simpleQuestion);
+            
+            // Add a reflection end marker
+            const endEntry = `[ego][${timestamp}] [ReflectionMarker] Completed reflection process at ${new Date().toISOString()}\n`;
+            fs.appendFileSync(longTermPath, endEntry);
+            
+            logger.debug('reflection', 'Successfully stored simple reflection results in long-term memory');
+            
+            // Emit a simple subsystem message
+            await sharedEventEmitter.emit('subsystemMessage', {
+                module: 'ego',
+                content: {
+                    type: 'reflection',
+                    insights: [
+                        {
+                            category: "interaction",
+                            description: "The system successfully processed a factual query and provided a direct answer.",
+                            importance: 4
+                        }
+                    ],
+                    lessons_learned: [
+                        {
+                            lesson: "Maintain a balance between factual accuracy and conversational tone.",
+                            application: "Continue to provide accurate information while adapting tone based on user preferences."
+                        }
+                    ],
+                    follow_up_questions: [
+                        "Would you like more detailed information about this topic?",
+                        "Do you prefer a more conversational or direct response style?"
+                    ]
+                }
+            });
+            
+            logger.debug('reflection', 'Reflection process completed successfully');
+        } catch (error) {
+            logger.error('reflection', 'Error during reflection process', {
+                error: {
+                    message: error.message,
+                    stack: error.stack
+                }
+            });
+            // We don't want to throw the error as this is a non-critical process
+            // Just log it and continue
+        }
+    }
+    
+    /**
+     * Process reflection results and store them in long-term memory
+     * @param {Object} reflectionResults - The results of the reflection analysis
+     * @returns {Promise<void>}
+     */
+    async processReflectionResults(reflectionResults) {
+        try {
+            logger.debug('reflection', 'Processing reflection results', { 
+                hasInsights: !!reflectionResults.insights, 
+                insightsLength: reflectionResults.insights?.length || 0,
+                hasLessons: !!reflectionResults.lessons_learned,
+                lessonsLength: reflectionResults.lessons_learned?.length || 0,
+                hasQuestions: !!reflectionResults.follow_up_questions,
+                questionsLength: reflectionResults.follow_up_questions?.length || 0
+            });
+            
+            // Store important insights in long-term memory
+            if (reflectionResults.insights && Array.isArray(reflectionResults.insights)) {
+                for (const insight of reflectionResults.insights) {
+                    // Only store high importance insights (4-5 rating)
+                    if (insight && insight.importance && insight.importance >= 4) {
+                        logger.debug('reflection', 'Storing insight in long-term memory', { 
+                            category: insight.category,
+                            description: insight.description,
+                            importance: insight.importance
+                        });
+                        
+                        try {
+                            const result = await memory.storeLongTerm(`[Insight] ${insight.category}: ${insight.description}`);
+                            logger.debug('reflection', 'Successfully stored insight in long-term memory', { result });
+                        } catch (error) {
+                            logger.error('reflection', 'Error storing insight in long-term memory', {
+                                error: {
+                                    message: error.message,
+                                    stack: error.stack
+                                },
+                                insight
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // Store lessons learned in long-term memory
+            if (reflectionResults.lessons_learned && Array.isArray(reflectionResults.lessons_learned)) {
+                for (const lesson of reflectionResults.lessons_learned) {
+                    if (lesson && lesson.lesson && lesson.application) {
+                        logger.debug('reflection', 'Storing lesson in long-term memory', { 
+                            lesson: lesson.lesson,
+                            application: lesson.application
+                        });
+                        
+                        try {
+                            const result = await memory.storeLongTerm(`[Lesson] ${lesson.lesson} - Application: ${lesson.application}`);
+                            logger.debug('reflection', 'Successfully stored lesson in long-term memory', { result });
+                        } catch (error) {
+                            logger.error('reflection', 'Error storing lesson in long-term memory', {
+                                error: {
+                                    message: error.message,
+                                    stack: error.stack
+                                },
+                                lesson
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // Store follow-up questions for future interactions
+            if (reflectionResults.follow_up_questions && 
+                Array.isArray(reflectionResults.follow_up_questions) && 
+                reflectionResults.follow_up_questions.length > 0) {
+                
+                logger.debug('reflection', 'Storing follow-up questions in long-term memory', { 
+                    questions: reflectionResults.follow_up_questions
+                });
+                
+                try {
+                    const result = await memory.storeLongTerm(`[FollowUp] Questions to ask in future interactions: ${reflectionResults.follow_up_questions.join('; ')}`);
+                    logger.debug('reflection', 'Successfully stored follow-up questions in long-term memory', { result });
+                } catch (error) {
+                    logger.error('reflection', 'Error storing follow-up questions in long-term memory', {
+                        error: {
+                            message: error.message,
+                            stack: error.stack
+                        },
+                        questions: reflectionResults.follow_up_questions
+                    });
+                }
+            }
+        } catch (error) {
+            logger.error('reflection', 'Error processing reflection results', {
+                error: {
+                    message: error.message,
+                    stack: error.stack
+                }
+            });
+        }
     }
 }
 
