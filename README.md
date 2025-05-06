@@ -771,6 +771,36 @@ The system provides comprehensive error handling at multiple levels:
 
 ## Memory Management
 
+### Memory Format with Consolidated Tags
+
+The memory system now uses a clean, consolidated tag format to handle multi-line memory content. This enhancement improves readability and parsing reliability for both humans and LLMs.
+
+- All memory content is now enclosed within `<MEMORY>` and `</MEMORY>` tags
+- Metadata is included as attributes in the opening tag
+- Memory entries follow this format:
+  ```
+  <MEMORY module="category" timestamp="1234567890" [context="optional_context"]>
+  Multi-line memory content goes here.
+  It can span multiple lines without breaking the structure.
+  Code blocks and other formatted content are preserved intact.
+  </MEMORY>
+  ```
+
+This consolidated format replaces the previous mixed format that used both brackets and XML-like tags:
+```
+[category][timestamp]
+<MEMORY_CONTENT>
+Content here
+</MEMORY_CONTENT>
+```
+
+### Memory Storage and Retrieval
+
+- The `storeLongTerm` and `storeShortTerm` methods automatically format content with the consolidated tags
+- The `parseMemoryContent` method uses regex pattern matching to extract memory content and attributes
+- The system maintains backward compatibility with legacy memory formats
+- The `retrieveLongTerm` method formats memories with the consolidated tags when sending them to the LLM for relevance analysis
+
 #### Reset Memory Functionality
 
 The `resetMemory` function allows the user to reset the current memory by transferring all contents from `current.txt` to `for_long_term.txt`. After the transfer, `current.txt` will be cleared to start fresh. This function is essential for managing long-term memory and ensuring that the current memory reflects only the most relevant information.
@@ -782,6 +812,8 @@ The `resetMemory` function allows the user to reset the current memory by transf
 
 - Removed extraneous properties from the `response_format` in `memory.js`, retaining only the `category` property for a more streamlined response schema.
 - **Corrected the category assignment in `memory.js` to correctly extract the `name` from the `category` object in the response format.**
+- **Added clear memory content delimiters to improve parsing and readability of multi-line memory content.**
+- **Enhanced the memory format with consolidated tags that include metadata as attributes, simplifying the structure and improving readability.**
 
 ## Shared Event System
 

@@ -18,14 +18,23 @@ const CATEGORIZE_MEMORY_USER = `Categorize the following data into a one-word de
         If it doesn't fit, suggest a unique, single word category: {{data}}`;
 
 // Prompt for retrieving relevant memories
-const RETRIEVE_MEMORY_SYSTEM = "You are a memory retrieval assistant. Find the most relevant memories to answer the question.";
+const RETRIEVE_MEMORY_SYSTEM = `You are a memory retrieval assistant. Find the most relevant memories to answer the question.
+
+Memory format explanation:
+- Each memory is enclosed within <MEMORY> and </MEMORY> tags
+- The opening tag contains attributes like module, timestamp, and sometimes context
+- Example: <MEMORY module="ego" timestamp="1234567890">
+- The content between the tags may contain multiple lines
+- Always preserve the memory tags when referencing memories`;
 
 const RETRIEVE_MEMORY_USER = `Given the following memories and a question, determine which memories are most relevant to answering the question.
     
-    Question: "{{question}}"
+Question: "{{question}}"
     
-    Memories:
-    {{memories}}`;
+Memories:
+{{memories}}
+
+When referencing memories in your response, always preserve the <MEMORY> and </MEMORY> tags to clearly indicate the boundaries of memory content.`;
 
 // JSON schema for categorization response
 const CATEGORIZE_SCHEMA = {

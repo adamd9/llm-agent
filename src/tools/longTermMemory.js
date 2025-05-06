@@ -19,7 +19,7 @@ class LongTermMemoryTool {
                     parameters: [
                         {
                             name: 'data',
-                            description: 'Data to store in long-term memory',
+                            description: 'Data to store in long-term memory. Multi-line content will be automatically enclosed in <MEMORY> and </MEMORY> tags with appropriate attributes.',
                             type: 'string',
                             required: true
                         }

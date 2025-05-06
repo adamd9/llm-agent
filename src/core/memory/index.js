@@ -14,6 +14,10 @@ const maxLines = 200; // Adjust this as necessary
 const SHORT_TERM_FILE = 'short_term.txt';
 const LONG_TERM_FILE = 'long_term.txt';
 
+// Define memory delimiters for multi-line content
+const MEMORY_START_TAG = '<MEMORY';
+const MEMORY_END_TAG = '</MEMORY>';
+
 // Ensure all memory directories exist
 if (!fs.existsSync(baseMemoryPath)) fs.mkdirSync(baseMemoryPath);
 if (!fs.existsSync(shortTermPath)) fs.mkdirSync(shortTermPath);
@@ -60,8 +64,11 @@ class Memory {
       }
     }
 
-    // Format and append the memory entry
-    const memoryEntry = `[${module}][${context}][${timestamp}] ${dataString}\n`;
+    // Format and append the memory entry with consolidated tags
+    const memoryEntry = `<MEMORY module="${module}" context="${context}" timestamp="${timestamp}">
+${dataString}
+</MEMORY>
+`;
     try {
       fs.appendFileSync(filePath, memoryEntry);
       logger.debug('Memory', 'Stored short-term memory successfully');
@@ -79,6 +86,110 @@ class Memory {
       return memContent;
     } else {
       return null;
+    }
+  }
+
+  // Parse memory content with consolidated tags
+  parseMemoryContent(content) {
+    const memories = [];
+    
+    // New consolidated tag format
+    const memoryRegex = /<MEMORY\s+([^>]+)>\n([\s\S]*?)\n<\/MEMORY>/g;
+    
+    let match;
+    while ((match = memoryRegex.exec(content)) !== null) {
+      try {
+        // Parse attributes from the tag
+        const attributesStr = match[1];
+        const attributes = {};
+        
+        // Extract attributes using regex
+        const attrRegex = /(\w+)="([^"]*)"/g;
+        let attrMatch;
+        while ((attrMatch = attrRegex.exec(attributesStr)) !== null) {
+          attributes[attrMatch[1]] = attrMatch[2];
+        }
+        
+        // Create memory object with parsed attributes
+        memories.push({
+          ...attributes,
+          content: match[2],
+          format: 'consolidated'
+        });
+      } catch (error) {
+        logger.error('Memory', 'Error parsing memory content', { error: error.message });
+      }
+    }
+    
+    // Also handle legacy format for backward compatibility
+    // This can be removed once all memory files are migrated
+    this.parseLegacyMemoryContent(content, memories);
+    
+    return memories;
+  }
+  
+  // Parse legacy memory content for backward compatibility
+  parseLegacyMemoryContent(content, memories) {
+    // Legacy format with old delimiters
+    const legacyShortTermRegex = /\[(.*?)\]\[(.*?)\]\[(.*?)\]\n<MEMORY_CONTENT>\n([\s\S]*?)\n<\/MEMORY_CONTENT>/g;
+    const legacyLongTermRegex = /\[(.*?)\]\[(.*?)\]\n<MEMORY_CONTENT>\n([\s\S]*?)\n<\/MEMORY_CONTENT>/g;
+    
+    // Process short-term legacy format
+    let match;
+    while ((match = legacyShortTermRegex.exec(content)) !== null) {
+      memories.push({
+        module: match[1],
+        context: match[2],
+        timestamp: match[3],
+        content: match[4],
+        format: 'legacy_delimited'
+      });
+    }
+    
+    // Process long-term legacy format
+    const processedRanges = [];
+    while ((match = legacyLongTermRegex.exec(content)) !== null) {
+      const matchStart = match.index;
+      const matchEnd = match.index + match[0].length;
+      
+      // Skip if this range overlaps with a previously processed range
+      const overlaps = processedRanges.some(range => 
+        (matchStart >= range.start && matchStart <= range.end) || 
+        (matchEnd >= range.start && matchEnd <= range.end)
+      );
+      
+      if (!overlaps && match[0].indexOf('][') === match[0].lastIndexOf('][')) {
+        memories.push({
+          module: match[1],
+          timestamp: match[2],
+          content: match[3],
+          format: 'legacy_delimited'
+        });
+        
+        processedRanges.push({
+          start: matchStart,
+          end: matchEnd
+        });
+      }
+    }
+    
+    // Legacy format without delimiters (oldest format)
+    const legacyOldestRegex = /\[(.*?)\]\[(.*?)\]\[(.*?)\]\s([\s\S]*?)(?=\n\[|\n$)/g;
+    while ((match = legacyOldestRegex.exec(content)) !== null) {
+      // Skip if this is already captured by other formats
+      const isDuplicate = memories.some(m => 
+        m.timestamp === match[3] && m.content.includes(match[4].trim())
+      );
+      
+      if (!isDuplicate) {
+        memories.push({
+          module: match[1],
+          context: match[2],
+          timestamp: match[3],
+          content: match[4].trim(),
+          format: 'legacy_oldest'
+        });
+      }
     }
   }
 
@@ -105,7 +216,13 @@ class Memory {
 
       const filePath = path.join(longTermPath, LONG_TERM_FILE);
       const timestamp = Math.floor(Date.now() / 1000);
-      fs.appendFileSync(filePath, `[${category}][${timestamp}] ${dataString}\n`);
+      
+      // Use consolidated tag format
+      fs.appendFileSync(filePath, `<MEMORY module="${category}" timestamp="${timestamp}">
+${dataString}
+</MEMORY>
+`);
+      
       return {
         status: "success",
         data: dataString,
@@ -135,19 +252,35 @@ class Memory {
     }
 
     const memoryContent = fs.readFileSync(filePath, 'utf-8');
-    const memories = memoryContent.split('\n').filter(line => line.trim() !== '');
-
-    // Filter memories based on context and use LLM to find relevant ones
-    const relevantMemories = memories.filter(memory => memory.includes(`[${context}]`));
+    
+    // Parse memories using the consolidated tag approach
+    const memories = this.parseMemoryContent(memoryContent);
+    
+    // Filter memories based on context
+    const relevantMemories = memories.filter(memory => memory.module === context);
     
     if (relevantMemories.length === 0) {
       return null;
     }
 
+    // Format memories for the LLM prompt
+    const formattedMemories = relevantMemories.map(memory => {
+      if (memory.format === 'consolidated') {
+        return `<MEMORY module="${memory.module}" timestamp="${memory.timestamp}">
+${memory.content}
+</MEMORY>`;
+      } else {
+        // Handle legacy formats for backward compatibility
+        return `<MEMORY module="${memory.module}" timestamp="${memory.timestamp}">
+${memory.content}
+</MEMORY>`;
+      }
+    });
+
     // Use LLM to find the most relevant memories for the question
     const prompt = prompts.RETRIEVE_MEMORY_USER
       .replace('{{question}}', question)
-      .replace('{{memories}}', relevantMemories.join('\n'));
+      .replace('{{memories}}', formattedMemories.join('\n\n'));
 
     try {
       const messages = [
