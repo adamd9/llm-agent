@@ -794,8 +794,32 @@ Content here
 </MEMORY_CONTENT>
 ```
 
-### Memory Storage and Retrieval
+### Reflection Process
 
+The reflection process now stores the entire reflection as a single memory entry, rather than multiple separate entries. This approach treats reflection as a singular operation and improves readability of the memory file. A reflection entry includes:
+
+- Start marker
+- Insights from the interaction
+- Lessons learned
+- Follow-up questions
+- Completion marker
+
+Example of a reflection entry:
+```
+<MEMORY module="ego" timestamp="1234567890">
+[ReflectionMarker] Starting reflection process at 2023-01-01T00:00:00.000Z
+
+[Insight] interaction: The system successfully processed a factual query and provided a direct answer.
+
+[Lesson] Maintain a balance between factual accuracy and conversational tone. - Application: Continue to provide accurate information while adapting tone based on user preferences.
+
+[FollowUp] Questions to ask in future interactions: Would you like more detailed information about this topic?; Do you prefer a more conversational or direct response style?
+
+[ReflectionMarker] Completed reflection process at 2023-01-01T00:00:00.100Z
+</MEMORY>
+```
+
+### Memory Storage and Retrieval
 - The `storeLongTerm` and `storeShortTerm` methods automatically format content with the consolidated tags
 - The `parseMemoryContent` method uses regex pattern matching to extract memory content and attributes
 - The system maintains backward compatibility with legacy memory formats

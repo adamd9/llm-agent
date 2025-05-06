@@ -387,29 +387,26 @@ class Ego {
         try {
             logger.debug('reflection', 'Starting reflection process');
             
-            // First, let's add a marker to the long-term memory file to confirm we can write to it
+            // Use direct file operations with the new consolidated tag format
             const fs = require('fs');
             const path = require('path');
             const timestamp = Math.floor(Date.now() / 1000);
             const longTermPath = path.join(process.cwd(), 'data', 'memory', 'long', 'long_term.txt');
             
-            // Add a reflection start marker
-            const startEntry = `[ego][${timestamp}] [ReflectionMarker] Starting reflection process at ${new Date().toISOString()}\n`;
-            fs.appendFileSync(longTermPath, startEntry);
-            
-            // Create a simple insight and lesson to store
-            const simpleInsight = `[ego][${timestamp}] [Insight] interaction: The system successfully processed a factual query and provided a direct answer.\n`;
-            fs.appendFileSync(longTermPath, simpleInsight);
-            
-            const simpleLesson = `[ego][${timestamp}] [Lesson] Maintain a balance between factual accuracy and conversational tone. - Application: Continue to provide accurate information while adapting tone based on user preferences.\n`;
-            fs.appendFileSync(longTermPath, simpleLesson);
-            
-            const simpleQuestion = `[ego][${timestamp}] [FollowUp] Questions to ask in future interactions: Would you like more detailed information about this topic?; Do you prefer a more conversational or direct response style?\n`;
-            fs.appendFileSync(longTermPath, simpleQuestion);
-            
-            // Add a reflection end marker
-            const endEntry = `[ego][${timestamp}] [ReflectionMarker] Completed reflection process at ${new Date().toISOString()}\n`;
-            fs.appendFileSync(longTermPath, endEntry);
+            // Create a single reflection entry with all components
+            const reflectionEntry = `<MEMORY module="ego" timestamp="${timestamp}">
+[ReflectionMarker] Starting reflection process at ${new Date().toISOString()}
+
+[Insight] interaction: The system successfully processed a factual query and provided a direct answer.
+
+[Lesson] Maintain a balance between factual accuracy and conversational tone. - Application: Continue to provide accurate information while adapting tone based on user preferences.
+
+[FollowUp] Questions to ask in future interactions: Would you like more detailed information about this topic?; Do you prefer a more conversational or direct response style?
+
+[ReflectionMarker] Completed reflection process at ${new Date().toISOString()}
+</MEMORY>
+`;
+            fs.appendFileSync(longTermPath, reflectionEntry);
             
             logger.debug('reflection', 'Successfully stored simple reflection results in long-term memory');
             
