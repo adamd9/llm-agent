@@ -23,10 +23,12 @@ const RETRIEVE_MEMORY_SYSTEM = `You are a memory retrieval assistant. Find the m
 You will be provided with the entire memory database content. Your job is to scan through it and identify any information that would be relevant to answering the user's question.
 
 Pay special attention to:
-1. User preferences and default behaviors
+1. User preferences and default behaviors - these are CRITICAL to include
 2. Content with context attributes that match the query topic
 3. Any information that directly relates to the query keywords
-4. Location preferences or other user-specific settings`;
+4. Location preferences, formatting preferences, or other user-specific settings
+5. Tags in the memory entries that relate to the query topic (e.g., 'weather', 'temperature', etc.)
+6. Implicit relationships between the query and stored memories (e.g., if query is about weather, look for location preferences)`;
 
 const RETRIEVE_MEMORY_USER = `Given the following memory database content and a question, extract and return only the information that is most relevant to answering the question.
     
@@ -39,9 +41,12 @@ Important guidelines:
 1. Search for keywords related to the question throughout the entire memory content
 2. User preferences and default behaviors are CRITICAL to include
 3. Pay special attention to memory entries with context attributes that match the query topic
-4. Return the exact relevant text from the memory database - be precise and complete
-5. If you find multiple relevant pieces of information, include all of them
-6. Always check for default preferences related to the query topic`;
+4. Examine memory tags for relevance to the query (e.g., tags like 'weather', 'temperature', 'location')
+5. Return the exact relevant text from the memory database - be precise and complete
+6. If you find multiple relevant pieces of information, include all of them
+7. Always check for default preferences related to the query topic
+8. Consider implicit relationships (e.g., weather queries need location preferences)
+9. Be thorough - missing relevant information will impact the quality of responses`;
 
 // JSON schema for categorization response
 const CATEGORIZE_SCHEMA = {
