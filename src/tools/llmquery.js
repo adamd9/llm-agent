@@ -53,7 +53,7 @@ class LLMQueryTool {
         }
 
         const shortTermMemory = await memory.retrieveShortTerm();
-        const longTermRelevantMemory = await memory.retrieveLongTerm('ego', 'retrieve anything relevant to carrying out a users request');
+        const longTermRelevantMemory = await memory.retrieveLongTerm('ego', query);
 
         let userPrompt = `
         ${query}

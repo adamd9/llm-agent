@@ -73,13 +73,26 @@ class Ego {
         });
     }
 
-    async processMessage(message, sessionHistory = []) {
+    async processMessage(message, sessionId = null, sessionHistory = []) {
         try {
-            await this.initialize();
-            logger.debug('process', 'Processing message', {
-                message,
-                sessionHistoryLength: sessionHistory.length
+            if (!this._initialized) {
+                await this.initialize();
+            }
+
+            logger.debug('process', 'Processing message', { message, sessionId });
+            
+            // Emit subsystem message about the original user query
+            await sharedEventEmitter.emit('subsystemMessage', {
+                module: 'ego',
+                content: {
+                    type: 'original_user_query',
+                    message,
+                    timestamp: new Date().toISOString()
+                }
             });
+
+            // Store the message in short-term memory
+            await memory.storeShortTerm('User message', message);
 
             if (!message || typeof message !== 'string' || message.trim() === '') {
                 throw new Error('Invalid message format: message must be a non-empty string');
@@ -88,7 +101,7 @@ class Ego {
             await memory.storeShortTerm('User message', externalUserMessageToInternal);
 
             const shortTermMemory = await memory.retrieveShortTerm();
-            const longTermRelevantMemory = await memory.retrieveLongTerm('ego', 'retrieve anything relevant to carrying out a users request');
+            const longTermRelevantMemory = await memory.retrieveLongTerm('ego', message);
             const enrichedMessage = {
                 original_message: externalUserMessageToInternal,
                 context: {

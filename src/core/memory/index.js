@@ -470,7 +470,6 @@ ${memory.content}
         { role: "user", content: prompt }
       ];
 
-      // No subsystem event for analysis start - we only care about the final results
 
       const response = await this.openaiClient.chat(messages);
       
