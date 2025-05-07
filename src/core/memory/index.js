@@ -3,6 +3,7 @@ const path = require("path");
 const { getOpenAIClient } = require("../../utils/openaiClient.js");
 const logger = require("../../utils/logger.js");
 const prompts = require("./prompts");
+const sharedEventEmitter = require("../../utils/eventEmitter");
 
 // Define the path for storing memory files
 const baseMemoryPath = path.resolve(__dirname, "../../../data/memory");
@@ -64,29 +65,47 @@ class Memory {
       }
     }
 
-    // Format and append the memory entry with consolidated tags
-    const memoryEntry = `<MEMORY module="${module}" context="${context}" timestamp="${timestamp}">
-${dataString}
-</MEMORY>
-`;
     try {
+      // Use consolidated tag format
+      const memoryEntry = `<MEMORY module="${module}" context="${context}" timestamp="${timestamp}">\n${dataString}\n</MEMORY>\n`;
+      
+      // No subsystem events for storage operations - we only care about retrieval results
       fs.appendFileSync(filePath, memoryEntry);
+      
       logger.debug('Memory', 'Stored short-term memory successfully');
+      return { status: 'success' };
     } catch (error) {
-      logger.error('Memory', 'Error storing short-term memory', { error: error.message });
+      // No subsystem events for storage errors - we only care about retrieval results
+      logger.error('Memory', 'Error storing short-term memory', {
+        error: error.message,
+        stack: error.stack
+      });
       throw error;
     }
   }
 
   // Retrieve short term memory
-  retrieveShortTerm() {
+  async retrieveShortTerm() {
+    logger.debug('Memory', 'Retrieving short-term memory');
     const filePath = path.join(shortTermPath, SHORT_TERM_FILE);
-    if (fs.existsSync(filePath)) {
-      const memContent = fs.readFileSync(filePath, 'utf-8');
-      return memContent;
-    } else {
+    if (!fs.existsSync(filePath)) {
       return null;
     }
+
+    const memoryContent = fs.readFileSync(filePath, 'utf-8');
+    
+    // Emit subsystem message with the actual short-term memory content
+    await sharedEventEmitter.emit('subsystemMessage', {
+      module: 'ego',
+      content: {
+        type: 'memory_retrieval_result',
+        memoryType: 'short-term',
+        result: memoryContent,
+        timestamp: new Date().toISOString()
+      }
+    });
+    
+    return memoryContent;
   }
 
   // Parse memory content with consolidated tags
@@ -198,6 +217,8 @@ ${dataString}
     logger.debug("Memory", "Storing long term memory", { data });
     const dataString = typeof data === 'object' ? JSON.stringify(data, null, 2) : data;
     
+    // No subsystem events for storage operations - we only care about retrieval results
+    
     // Use LLM to categorize data
     const userPrompt = prompts.CATEGORIZE_MEMORY_USER.replace('{{data}}', dataString);
 
@@ -213,15 +234,20 @@ ${dataString}
       });
       const category = JSON.parse(response.content).category.name.trim();
       logger.debug("Memory", "Categorized long term memory", { dataString, category });
+      
+      // No subsystem events for categorization - we only care about retrieval results
 
       const filePath = path.join(longTermPath, LONG_TERM_FILE);
       const timestamp = Math.floor(Date.now() / 1000);
       
       // Use consolidated tag format
-      fs.appendFileSync(filePath, `<MEMORY module="${category}" timestamp="${timestamp}">
+      const memoryEntry = `<MEMORY module="${category}" timestamp="${timestamp}">
 ${dataString}
 </MEMORY>
-`);
+`;
+      fs.appendFileSync(filePath, memoryEntry);
+      
+      // No subsystem events for successful storage - we only care about retrieval results
       
       return {
         status: "success",
@@ -229,6 +255,7 @@ ${dataString}
         category: category
       }
     } catch (error) {
+      // No subsystem events for storage errors - we only care about retrieval results
       logger.debug("Memory", "Error categorizing long term memory", {
         error: {
           message: error.message,
@@ -288,7 +315,23 @@ ${memory.content}
         { role: "user", content: prompt }
       ];
 
+      // No subsystem event for analysis start - we only care about the final results
+
       const response = await this.openaiClient.chat(messages);
+      
+      // Emit subsystem message with the actual retrieval results
+      await sharedEventEmitter.emit('subsystemMessage', {
+        module: 'ego',
+        content: {
+          type: 'memory_retrieval_result',
+          memoryType: 'long-term',
+          result: response.content,
+          context,
+          question,
+          timestamp: new Date().toISOString()
+        }
+      });
+      
       return {
         status: "success",
         analysis: response.content

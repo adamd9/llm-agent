@@ -41,13 +41,56 @@ async function planner(enrichedMessage, client = null) {
             });
         }
 
+        // Ensure shortTermMemory is a string
+        if (typeof shortTermMemory === 'object' && shortTermMemory !== null) {
+            try {
+                // If it's an object, convert it to a formatted string
+                shortTermMemory = JSON.stringify(shortTermMemory, null, 2);
+                logger.debug('memory', 'Converted short-term memory object to string:', {
+                    length: shortTermMemory.length
+                });
+            } catch (error) {
+                logger.error('memory', 'Error converting short-term memory object to string:', {
+                    error: {
+                        message: error.message,
+                        stack: error.stack
+                    }
+                });
+                // Fallback to empty string if conversion fails
+                shortTermMemory = '';
+            }
+        }
+
         // Get the long-term memory directly if not provided in the context
         let longTermMemory = enrichedMessage.context?.long_term_relevant_memory;
         if (!longTermMemory) {
-            longTermMemory = (await memory.retrieveLongTerm('ego', 'retrieve anything relevant to carrying out a users request')) || '';
+            // Create a more specific query based on the user's message
+            const memoryQuery = `Retrieve any information relevant to: ${enrichedMessage.original_message}`;
+            longTermMemory = (await memory.retrieveLongTerm('ego', memoryQuery)) || '';
             logger.debug('memory', 'Retrieved long-term memory directly:', {
-                length: longTermMemory.length
+                length: longTermMemory.length,
+                query: memoryQuery
             });
+        }
+
+        // Ensure longTermMemory is a string
+        if (typeof longTermMemory === 'object' && longTermMemory !== null) {
+            try {
+                // If it's an object, convert it to a formatted string
+                longTermMemory = JSON.stringify(longTermMemory, null, 2);
+                logger.debug('memory', 'Converted long-term memory object to string:', {
+                    length: longTermMemory.length
+                });
+            } catch (error) {
+                logger.error('memory', 'Error converting long-term memory object to string:', {
+                    error: {
+                        message: error.message,
+                        stack: error.stack
+                    }
+                });
+                // Fallback to empty string if conversion fails
+                longTermMemory = '';
+            }
         }
 
         // Prepare prompts with actual data
