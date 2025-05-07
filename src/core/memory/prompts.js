@@ -20,21 +20,28 @@ const CATEGORIZE_MEMORY_USER = `Categorize the following data into a one-word de
 // Prompt for retrieving relevant memories
 const RETRIEVE_MEMORY_SYSTEM = `You are a memory retrieval assistant. Find the most relevant memories to answer the question.
 
-Memory format explanation:
-- Each memory is enclosed within <MEMORY> and </MEMORY> tags
-- The opening tag contains attributes like module, timestamp, and sometimes context
-- Example: <MEMORY module="ego" timestamp="1234567890">
-- The content between the tags may contain multiple lines
-- Always preserve the memory tags when referencing memories`;
+You will be provided with the entire memory database content. Your job is to scan through it and identify any information that would be relevant to answering the user's question.
 
-const RETRIEVE_MEMORY_USER = `Given the following memories and a question, determine which memories are most relevant to answering the question.
+Pay special attention to:
+1. User preferences and default behaviors
+2. Content with context attributes that match the query topic
+3. Any information that directly relates to the query keywords
+4. Location preferences or other user-specific settings`;
+
+const RETRIEVE_MEMORY_USER = `Given the following memory database content and a question, extract and return only the information that is most relevant to answering the question.
     
 Question: "{{question}}"
     
-Memories:
+Memory Database Content:
 {{memories}}
 
-When referencing memories in your response, always preserve the <MEMORY> and </MEMORY> tags to clearly indicate the boundaries of memory content.`;
+Important guidelines:
+1. Search for keywords related to the question throughout the entire memory content
+2. User preferences and default behaviors are CRITICAL to include
+3. Pay special attention to memory entries with context attributes that match the query topic
+4. Return the exact relevant text from the memory database - be precise and complete
+5. If you find multiple relevant pieces of information, include all of them
+6. Always check for default preferences related to the query topic`;
 
 // JSON schema for categorization response
 const CATEGORIZE_SCHEMA = {

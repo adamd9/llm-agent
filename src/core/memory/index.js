@@ -278,36 +278,20 @@ ${dataString}
       return null;
     }
 
+    // Read the entire memory content without parsing
     const memoryContent = fs.readFileSync(filePath, 'utf-8');
     
-    // Parse memories using the consolidated tag approach
-    const memories = this.parseMemoryContent(memoryContent);
-    
-    // Filter memories based on context
-    const relevantMemories = memories.filter(memory => memory.module === context);
-    
-    if (relevantMemories.length === 0) {
+    if (!memoryContent || memoryContent.trim() === '') {
       return null;
     }
-
-    // Format memories for the LLM prompt
-    const formattedMemories = relevantMemories.map(memory => {
-      if (memory.format === 'consolidated') {
-        return `<MEMORY module="${memory.module}" timestamp="${memory.timestamp}">
-${memory.content}
-</MEMORY>`;
-      } else {
-        // Handle legacy formats for backward compatibility
-        return `<MEMORY module="${memory.module}" timestamp="${memory.timestamp}">
-${memory.content}
-</MEMORY>`;
-      }
-    });
+    
+    // No parsing, no filtering - just use the raw memory content
+    const formattedMemories = memoryContent;
 
     // Use LLM to find the most relevant memories for the question
     const prompt = prompts.RETRIEVE_MEMORY_USER
       .replace('{{question}}', question)
-      .replace('{{memories}}', formattedMemories.join('\n\n'));
+      .replace('{{memories}}', formattedMemories);
 
     try {
       const messages = [
@@ -332,10 +316,8 @@ ${memory.content}
         }
       });
       
-      return {
-        status: "success",
-        analysis: response.content
-      };
+      // Return just the analysis content, not an object
+      return response.content;
     } catch (error) {
       logger.error("Memory", "Error retrieving long term memory", {
         error: error.message,
