@@ -130,6 +130,11 @@ class Memory {
         }
         
         // Create memory object with parsed attributes
+        // If tags attribute is missing, add an empty one for backward compatibility
+        if (!attributes.tags) {
+          attributes.tags = '';
+        }
+        
         memories.push({
           ...attributes,
           content: match[2],
@@ -261,6 +266,172 @@ ${dataString}
           message: error.message,
           stack: error.stack,
         },
+      });
+      throw error;
+    }
+  }
+
+  // Rotate long term memory file to create a backup before consolidation
+  async rotateLongTermFile() {
+    logger.debug("Memory", "Rotating long term memory file");
+    const filePath = path.join(longTermPath, LONG_TERM_FILE);
+    
+    if (!fs.existsSync(filePath)) {
+      logger.debug("Memory", "No long term memory file to rotate");
+      return false;
+    }
+    
+    try {
+      // Create a timestamp for the backup file
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const backupPath = path.join(longTermPath, `long_term_${timestamp}.bak`);
+      
+      // Copy the current file to the backup
+      fs.copyFileSync(filePath, backupPath);
+      logger.debug("Memory", "Created backup of long term memory", { backupPath });
+      
+      return backupPath;
+    } catch (error) {
+      logger.error("Memory", "Error rotating long term memory file", {
+        error: error.message,
+        stack: error.stack
+      });
+      throw error;
+    }
+  }
+
+  // Consolidate long term memory using LLM to remove duplicates, prune low-value content, and merge similar memories
+  async consolidateLongTerm() {
+    logger.debug("Memory", "Consolidating long term memory using LLM");
+    const filePath = path.join(longTermPath, LONG_TERM_FILE);
+    
+    if (!fs.existsSync(filePath)) {
+      logger.debug("Memory", "No long term memory file to consolidate");
+      return { status: "success", message: "No memory file to consolidate", consolidated: 0 };
+    }
+    
+    try {
+      // First, create a backup of the current file
+      const backupPath = await this.rotateLongTermFile();
+      
+      // Read the memory content
+      const memoryContent = fs.readFileSync(filePath, 'utf-8');
+      
+      if (!memoryContent || memoryContent.trim() === '') {
+        return { status: "success", message: "Memory file is empty", consolidated: 0 };
+      }
+      
+      // Parse the memory content to get individual memories
+      const memories = this.parseMemoryContent(memoryContent);
+      
+      if (memories.length === 0) {
+        return { status: "success", message: "No memories found to consolidate", consolidated: 0 };
+      }
+      
+      logger.debug("Memory", "Using LLM to intelligently consolidate memories", { memoryCount: memories.length });
+      
+      // Prepare the memories in a format that's easy for the LLM to analyze
+      const formattedMemories = memories.map(memory => {
+        return `<MEMORY module="${memory.module}" timestamp="${memory.timestamp}">
+${memory.content}
+</MEMORY>`;
+      }).join('\n\n');
+      
+      // Use LLM to consolidate memories
+      const userPrompt = prompts.CONSOLIDATE_MEMORY_USER.replace('{{memories}}', formattedMemories);
+      
+      // Emit subsystem message about starting the consolidation
+      await sharedEventEmitter.emit('subsystemMessage', {
+        module: 'ego',
+        content: {
+          type: 'memory_consolidation_start',
+          originalCount: memories.length,
+          timestamp: new Date().toISOString()
+        }
+      });
+      
+      const messages = [
+        { role: "system", content: prompts.CONSOLIDATE_MEMORY_SYSTEM },
+        { role: "user", content: userPrompt }
+      ];
+      
+      const response = await this.openaiClient.chat(messages, {
+        response_format: prompts.CONSOLIDATE_SCHEMA,
+        temperature: 0.2,
+        max_tokens: 4000
+      });
+      
+      // Parse the consolidated memories from the LLM response
+      let consolidatedMemories;
+      try {
+        const parsedResponse = JSON.parse(response.content);
+        if (!parsedResponse.memories || !Array.isArray(parsedResponse.memories)) {
+          throw new Error('Response does not contain a memories array');
+        }
+        consolidatedMemories = parsedResponse.memories;
+        logger.debug("Memory", "Successfully parsed consolidated memories", { count: consolidatedMemories.length });
+      } catch (parseError) {
+        logger.error("Memory", "Error parsing LLM response for memory consolidation", {
+          error: parseError.message,
+          response: response.content
+        });
+        throw new Error(`Failed to parse LLM response: ${parseError.message}`);
+      }
+      
+      // Convert the consolidated memories back to the proper format
+      let consolidatedContent = '';
+      for (const memory of consolidatedMemories) {
+        // Skip empty or invalid memories
+        if (!memory.content || memory.content.trim() === '') {
+          continue;
+        }
+        
+        // Use consolidated tag format with tags attribute
+        consolidatedContent += `<MEMORY module="${memory.module}" timestamp="${memory.timestamp}" tags="${memory.tags}">
+${memory.content}
+</MEMORY>
+
+`;
+      }
+      
+      // Write the consolidated content back to the file
+      fs.writeFileSync(filePath, consolidatedContent);
+      
+      // Calculate how many memories were consolidated
+      const consolidatedCount = consolidatedMemories.length;
+      const removedCount = memories.length - consolidatedCount;
+      
+      logger.debug("Memory", "Long term memory consolidated using LLM", {
+        original: memories.length,
+        consolidated: consolidatedCount,
+        removed: removedCount
+      });
+      
+      // Emit subsystem message about the consolidation
+      await sharedEventEmitter.emit('subsystemMessage', {
+        module: 'ego',
+        content: {
+          type: 'memory_consolidation_result',
+          originalCount: memories.length,
+          consolidatedCount: consolidatedCount,
+          removedCount: removedCount,
+          backupPath,
+          timestamp: new Date().toISOString()
+        }
+      });
+      
+      return {
+        status: "success",
+        message: "Long term memory consolidated successfully using LLM",
+        originalCount: memories.length,
+        consolidatedCount: consolidatedCount,
+        removedCount: removedCount,
+        backupPath
+      };
+    } catch (error) {
+      logger.error("Memory", "Error consolidating long term memory", {
+        error: error.message,
+        stack: error.stack
       });
       throw error;
     }

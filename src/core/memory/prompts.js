@@ -70,10 +70,95 @@ const CATEGORIZE_SCHEMA = {
   }
 };
 
+// Prompt for consolidating long-term memory
+const CONSOLIDATE_MEMORY_SYSTEM = `You are a memory optimization assistant. Your task is to carefully consolidate a set of memories by:
+1. Removing exact and near-duplicate memories (keeping the newest version based on timestamp)
+2. Pruning low-value content like process markers, debugging info, and metadata that won't be useful for future queries
+3. Merging memories that convey the same material facts or understanding about the SAME SPECIFIC TOPIC, even if the wording is different
+4. Being careful NOT to combine conceptually distinct memories, even if they're in the same general category
+5. NEVER combining different types of user preferences (e.g., preferences about response style should be separate from preferences about weather)
+6. Only consolidating multiple memories into a "model of understanding" when they are about the EXACT SAME TOPIC
+7. Adding relevant tags/categorizations to each consolidated memory to improve retrieval
+8. Preserving all substantive information that would be valuable for future retrieval
+
+You must respond with a JSON object containing an array of consolidated memory objects.`;
+
+const CONSOLIDATE_MEMORY_USER = `Analyze and consolidate the following memories:
+
+{{memories}}
+
+For each memory or group of related memories:
+1. Remove metadata like "[ReflectionMarker]", timestamps, and process indicators that don't provide substantive value
+2. Identify duplicates or near-duplicates and keep only the newest version (based on timestamp)
+3. Be aggressive in consolidation ONLY when memories are about the SAME SPECIFIC TOPIC - if two memories convey the same material facts or understanding about a specific topic, they should be combined
+4. Test memories or example memories with no practical value should be consolidated into a single entry
+5. If memories are just variations of the same concept (like "This is a test memory" and "Another test memory"), combine them into one
+6. DO NOT combine conceptually distinct memories even if they are in the same general category (e.g., do not combine user preferences for conciseness with user preferences for weather)
+7. Only consolidate multiple memories into a "model of understanding" when they are about the EXACT SAME TOPIC
+8. Add 3-5 relevant tags to each consolidated memory to improve retrieval (comma-separated)
+9. Preserve the module and timestamp attributes from the newest memory in each group
+
+Return a JSON object with a 'memories' array containing the consolidated memory objects:
+{
+  "memories": [
+    {
+      "module": "string", // Original module or category
+      "timestamp": number, // Unix timestamp from the newest memory in each group (no quotes)
+      "content": "string", // The consolidated, cleaned content
+      "tags": "string" // Comma-separated list of 3-5 relevant tags for this memory
+    }
+  ]
+}`;
+
+// JSON schema for consolidation response
+const CONSOLIDATE_SCHEMA = {
+  "type": "json_schema",
+  "json_schema": {
+    "name": "consolidation",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "memories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "module": {
+                "type": "string",
+                "description": "The module or category of the memory"
+              },
+              "timestamp": {
+                "type": "number",
+                "description": "The Unix timestamp of the memory (use the newest timestamp when consolidating)"
+              },
+              "content": {
+                "type": "string",
+                "description": "The consolidated memory content, cleaned of low-value metadata"
+              },
+              "tags": {
+                "type": "string",
+                "description": "Comma-separated list of 3-5 relevant tags for this memory"
+              }
+            },
+            "required": ["module", "timestamp", "content", "tags"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["memories"],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+};
+
 module.exports = {
   CATEGORIZE_MEMORY_SYSTEM,
   CATEGORIZE_MEMORY_USER,
   RETRIEVE_MEMORY_SYSTEM,
   RETRIEVE_MEMORY_USER,
-  CATEGORIZE_SCHEMA
+  CATEGORIZE_SCHEMA,
+  CONSOLIDATE_MEMORY_SYSTEM,
+  CONSOLIDATE_MEMORY_USER,
+  CONSOLIDATE_SCHEMA
 };

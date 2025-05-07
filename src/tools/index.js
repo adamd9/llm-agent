@@ -3,6 +3,9 @@ const path = require('path');
 const logger = require('../utils/logger');
 const mcpClient = require('./mcpClient');
 
+// Pre-load critical tools to ensure they're always available
+const memoryConsolidationTool = require('./memoryConsolidation');
+
 class ToolManager {
     constructor() {
         this.tools = new Map();
