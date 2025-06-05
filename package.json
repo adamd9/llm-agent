@@ -18,7 +18,8 @@
         "flatted": "^3.3.2",
         "openai": "^4.96.2",
         "uuid": "^9.0.1",
-        "ws": "^8.18.0"
+        "ws": "^8.18.0",
+        "@modelcontextprotocol/sdk": "^1.12.1"
     },
     "devDependencies": {
         "jest": "^29.7.0",

@@ -26,11 +26,35 @@ The index file exports the MCP Tool Manager for easy import in other modules.
 
 ## MCP Servers
 
-MCP servers are standalone processes that expose tools via the MCP protocol. They can be written in any language that supports the MCP protocol, but this implementation focuses on JavaScript/Node.js servers.
+MCP servers are processes or services that expose tools via the Model Context Protocol. They can be local scripts or remote HTTP services.
 
-MCP servers should be placed in the `data/mcp-servers` directory and can be:
+### Local MCP Servers
+Local MCP servers are scripts executed as child processes. They should be placed in the `data/mcp-servers` directory and can be:
 - JavaScript files (`.js`) - Will be executed with Node.js
 - Python files (`.py`) - Will be executed with Python
+
+### Remote HTTP MCP Servers
+Support has been added for connecting to remote MCP servers over HTTP. These servers are expected to expose a single HTTP endpoint that accepts JSON-RPC 2.0 messages via POST requests.
+
+Configuration for remote servers should be placed as individual `.json` files in the `data/remote-mcp-servers` directory. Each file should define a server, for example:
+
+```json
+{
+    "type": "streamable-http",
+    "url": "http://127.0.0.1:3001/mcp",
+    "name": "CalendarRetriever",
+    "description": "MCP Server for Calendar Retrieval via HTTP",
+    "note": "Calendar retriever (Remote HTTP)"
+}
+```
+
+- `type`: Must be `"streamable-http"` for this type of server.
+- `url`: The HTTP endpoint for the remote MCP server.
+- `name`: A unique name for this server instance.
+- `description` (optional): A brief description of the server.
+- `note` (optional): Any additional notes.
+
+Currently, "streamable-http" is implemented as a series of individual HTTP POST requests for each MCP command (e.g., initialize, getTools, execute). True streaming (e.g., Server-Sent Events) would require further modifications.
 
 ## Usage
 
@@ -69,7 +93,7 @@ An example MCP server (`calculator.js`) is provided in the `data/mcp-servers` di
 
 ## Future Enhancements
 
-- Support for remote MCP servers
-- Support for MCP resources and prompts
-- More comprehensive error handling and recovery
-- Improved logging and debugging
+- **Advanced Remote MCP Features**: Enhancements to remote MCP server support, such as true streaming capabilities (e.g., Server-Sent Events, WebSockets) for `streamable-http` type, and support for other remote protocols.
+- **MCP Resources and Prompts**: Full implementation for MCP resources and prompts.
+- **Error Handling and Recovery**: More comprehensive error handling, especially for remote connections, including retries and more detailed diagnostics.
+- **Logging and Debugging**: Improved logging and debugging capabilities for MCP interactions.

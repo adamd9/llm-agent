@@ -14,6 +14,7 @@ class MCPToolManager {
     this.coreToolsDir = path.join(__dirname, '../tools');
     this.dataToolsDir = path.join(__dirname, '../../data/tools');
     this.mcpServersDir = path.join(__dirname, '../../data/mcp-servers');
+    this.remoteMcpServersDir = path.join(__dirname, '../../data/remote-mcp-servers'); // Added for remote servers
     this.mcpClient = new MCPClient();
     this._initialized = false;
   }
@@ -197,8 +198,9 @@ class MCPToolManager {
    * Load MCP servers
    */
   async loadMCPServers() {
+    // Load local MCP servers (child processes)
     try {
-      logger.debug('mcpToolManager', `Loading MCP servers from ${this.mcpServersDir}`);
+      logger.debug('mcpToolManager', `Loading local MCP servers from ${this.mcpServersDir}`);
       
       // Check if directory exists
       try {
@@ -232,32 +234,122 @@ class MCPToolManager {
               logger.error('mcpToolManager', `Failed to connect to MCP server: ${file}`, result);
             }
           } catch (error) {
-            logger.error('mcpToolManager', `Error connecting to MCP server ${file}:`, {
-              error: error.message,
-              stack: error.stack
+            logger.error('mcpToolManager', `Error connecting to MCP server ${serverPath}:`, { error: connectionResult.error });
+          }
+        }
+      }
+    } catch (error) {
+      // Don't throw if the directory doesn't exist, just log it.
+      if (error.code === 'ENOENT') {
+        logger.debug('mcpToolManager', `Local MCP servers directory not found: ${this.mcpServersDir}`);
+      } else {
+        logger.error('mcpToolManager', `Error reading local MCP servers directory ${this.mcpServersDir}:`, { 
+          error: error.message,
+          stack: error.stack
+        });
+        // Emit system error message for other errors
+        await sharedEventEmitter.emit('systemError', {
+          module: 'toolManager',
+          content: {
+            type: 'system_error',
+            error: error.message,
+            stack: error.stack,
+            location: 'loadMCPServers.readLocalDir',
+            status: 'error'
+          }
+        });
+      }
+    }
+
+    // Load remote MCP servers (HTTP)
+    try {
+      logger.debug('mcpToolManager', `Loading remote MCP server configurations from ${this.remoteMcpServersDir}`);
+      const files = await fs.readdir(this.remoteMcpServersDir);
+      for (const file of files) {
+        if (file.endsWith('.json')) {
+          const configPath = path.join(this.remoteMcpServersDir, file);
+          logger.debug('mcpToolManager', `Found remote MCP server config: ${configPath}`);
+          try {
+            const configData = await fs.readFile(configPath, 'utf-8');
+            const serverConfig = JSON.parse(configData);
+
+            if (!serverConfig.type || serverConfig.type !== 'streamable-http' || !serverConfig.url || !serverConfig.name) {
+              logger.error('mcpToolManager', `Invalid remote MCP server config in ${file}: missing type, url, or name.`);
+              continue;
+            }
+
+            logger.debug('mcpToolManager', `Connecting to remote HTTP MCP server: ${serverConfig.name} at ${serverConfig.url}`);
+            // TODO: Implement connectRemoteHttpServer in MCPClient
+            const connectionResult = await this.mcpClient.connectRemoteHttpServer(serverConfig);
+
+            if (connectionResult && connectionResult.status === 'success' && connectionResult.tools) {
+              logger.debug('mcpToolManager', `Connected to remote HTTP MCP server ${serverConfig.name}, tools:`, connectionResult.tools);
+              for (const tool of connectionResult.tools) {
+                const adaptedTool = {
+                  name: tool.name,
+                  description: tool.description,
+                  source: `mcp-remote-${serverConfig.name}`,
+                  mcpServerId: connectionResult.serverId, // Store serverId for execution
+                  getCapabilities: () => {
+                    // Construct capabilities from the tool's actions
+                    // This assumes tool.actions is an array of action definitions
+                    // The 'tool.actions' is already the array of action objects in the desired format.
+                    return {
+                      name: tool.name,
+                      description: tool.description,
+                      actions: tool.actions // Use the actions array directly
+                    };
+                  },
+                  execute: async (actionName, params) => {
+                    logger.debug('mcpToolManager', `Executing remote MCP tool action: ${tool.name}.${actionName}`);
+                    return this.mcpClient.executeTool(tool.name, actionName, params, connectionResult.serverId);
+                  }
+                };
+                if (this.isValidTool(adaptedTool)) {
+                  this.tools.set(adaptedTool.name, adaptedTool);
+                  logger.debug('mcpToolManager', `Successfully loaded and registered remote MCP tool: ${adaptedTool.name}`);
+                } else {
+                  logger.error('mcpToolManager', `Invalid adapted remote MCP tool: ${tool.name}`);
+                }
+              }
+            } else {
+              logger.error('mcpToolManager', `Error connecting to remote HTTP MCP server ${serverConfig.name}:`, { error: connectionResult?.error });
+            }
+          } catch (err) {
+            logger.error('mcpToolManager', `Error processing remote MCP server config ${file}:`, { error: err.message, stack: err.stack });
+            await sharedEventEmitter.emit('systemError', {
+              module: 'toolManager',
+              content: {
+                type: 'system_error',
+                error: err.message,
+                stack: err.stack,
+                location: `loadMCPServers.processRemoteConfig.${file}`,
+                status: 'error'
+              }
             });
           }
         }
       }
     } catch (error) {
-      logger.error('mcpToolManager', 'Error loading MCP servers:', {
-        error: error.message,
-        stack: error.stack
-      });
-      
-      // Emit system error message
-      await sharedEventEmitter.emit('systemError', {
-        module: 'toolManager',
-        content: {
-          type: 'system_error',
+      // Don't throw if the directory doesn't exist, just log it.
+      if (error.code === 'ENOENT') {
+        logger.debug('mcpToolManager', `Remote MCP servers directory not found: ${this.remoteMcpServersDir}`);
+      } else {
+        logger.error('mcpToolManager', `Error reading remote MCP servers directory ${this.remoteMcpServersDir}:`, { 
           error: error.message,
-          stack: error.stack,
-          location: 'loadMCPServers',
-          status: 'error'
-        }
-      });
-      
-      throw error;
+          stack: error.stack
+        });
+        await sharedEventEmitter.emit('systemError', {
+          module: 'toolManager',
+          content: {
+            type: 'system_error',
+            error: error.message,
+            stack: error.stack,
+            location: 'loadMCPServers.readRemoteDir',
+            status: 'error'
+          }
+        });
+      }
     }
   }
 

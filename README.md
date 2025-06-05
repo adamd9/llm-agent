@@ -86,14 +86,20 @@ The system evaluates task outcomes to ensure quality:
 This feedback system allows for iterative improvement while maintaining user engagement and transparency throughout the process.
 
 ### 3. Tool Layer
-- Provides specific capabilities (file operations, etc.)
-- Each tool has a defined interface with name, description, and parameters
-- Tools are loaded dynamically from the tools directory
-- Tools should be forgiving with parameter formatting:
-  - Handle both stringified and object parameters
-  - Provide clear error messages for invalid parameters
-  - Use sensible defaults where possible
-  - Don't assume perfect parameter formatting from the executor
+- Provides specific capabilities (e.g., file operations, web searches) through a combination of:
+  - **Local Tools:** JavaScript modules loaded dynamically from the `src/tools/` (core) and `data/tools/` (custom) directories.
+  - **External MCP Servers:** Integration with Model Context Protocol (MCP) servers, allowing the agent to leverage a wider range of functionalities.
+- Each tool, whether local or exposed via MCP, has a defined interface including its name, description, and parameters.
+- **MCP Client Features:** The agent's MCP client (`src/mcp/client.js`) handles communication with MCP servers and includes:
+  - Support for both local stdio-based servers and remote HTTP-SDK based servers.
+  - Robust parameter parsing (accepting JSON strings, objects, or arrays).
+  - Handling of streaming responses from SDK-based tool calls.
+  - Consistent error reporting from tool invocations.
+- **Parameter Handling for Tools:**
+  - Tools (and the mechanisms invoking them) are designed to be flexible with parameter formatting, accepting both stringified JSON and direct JavaScript objects/arrays.
+  - Clear error messages are provided for invalid parameters.
+  - Sensible defaults are used where appropriate.
+  - The system does not assume perfect parameter formatting from the LLM or other callers.
 
 #### Tool Interface Validation
 The system uses a hybrid approach combining JSDoc type definitions and JSON Schema validation to ensure tool interface consistency without requiring full TypeScript adoption:
