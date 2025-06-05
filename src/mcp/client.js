@@ -348,36 +348,25 @@ class MCPClient {
 
     const server = this.servers.get(serverId);
     if (!server) {
-      return {
-        status: 'error',
-        error: `Server not found: ${serverId}`
-      };
+      return { status: 'error', error: `Server not found: ${serverId}` };
     }
-    
+
     const tool = server.tools.find(t => t.name === toolName);
     if (!tool) {
-      return {
-        status: 'error',
-        error: `Tool not found: ${toolName}`
-      };
+      return { status: 'error', error: `Tool not found: ${toolName}` };
     }
-    
+
     try {
-      // Parse parameters if they're a string
       let parsedParams = parameters;
       if (typeof parameters === 'string') {
         try {
           parsedParams = JSON.parse(parameters);
         } catch (error) {
           logger.error('mcpClient', 'Failed to parse parameters as JSON', { error });
-          return {
-            status: 'error',
-            error: `Invalid parameters: ${error.message}`
-          };
+          return { status: 'error', error: `Invalid parameters: ${error.message}` };
         }
       }
 
-      // Convert array parameters to object if needed, or use as is if already an object
       let mcpParams = {};
       if (Array.isArray(parsedParams)) {
         for (const param of parsedParams) {
@@ -386,29 +375,24 @@ class MCPClient {
       } else if (parsedParams && typeof parsedParams === 'object') {
         mcpParams = parsedParams;
       } else {
-        // This case might occur if parameters is neither a stringified JSON array/object, nor a direct object/array.
-        // For example, if it's a primitive or null/undefined directly.
         logger.warn('mcpClient', `Unexpected parameter format for tool ${toolName}. Parameters:`, parsedParams);
-        // Attempt to use as is, or default to empty object if null/undefined, to prevent errors in sdkClient.callTool
-        mcpParams = parsedParams || {}; 
+        mcpParams = parsedParams || {};
       }
 
-      // Call tool based on server type
       if (server.type === 'http-sdk' && server.sdkClient) {
         logger.debug('mcpClient', `Calling tool ${toolName} via SDK on server ${serverId}`, { parameters: mcpParams });
-        const sdkCallParams = { name: toolName, action: 'execute', input: mcpParams }; // Assuming 'execute' is the standard action name for SDK tools
+        const sdkCallParams = { name: toolName, action: 'execute', input: mcpParams };
         const sdkResponse = await server.sdkClient.callTool(sdkCallParams);
+        logger.debug('mcpClient', `Full SDK response from server ${serverId} for tool ${toolName}:`, sdkResponse);
 
-        // Check if the response is an async iterable (streaming)
         if (sdkResponse && typeof sdkResponse[Symbol.asyncIterator] === 'function') {
+          // Handle streaming response
           let accumulatedOutput = '';
           try {
             for await (const chunk of sdkResponse) {
               if (chunk.error) {
-                return { 
-                  status: 'error', 
-                  error: chunk.error.message || JSON.stringify(chunk.error) 
-                };
+                logger.error('mcpClient', `Streaming chunk error for tool ${toolName} on server ${serverId}:`, chunk.error);
+                return { status: 'error', error: chunk.error.message || JSON.stringify(chunk.error) };
               }
               if (typeof chunk.output === 'string') {
                 accumulatedOutput += chunk.output;
@@ -417,48 +401,65 @@ class MCPClient {
             }
             return { status: 'success', result: accumulatedOutput };
           } catch (streamError) {
-            logger.error('mcpClient', `Error processing streaming response for ${toolName}:`, {
-              error: streamError.message,
-              stack: streamError.stack
-            });
-            return { 
-              status: 'error', 
-              error: `Error processing streaming response: ${streamError.message}` 
-            };
+            logger.error('mcpClient', `Error processing streaming response for ${toolName} on server ${serverId}:`, { error: streamError.message, stack: streamError.stack });
+            return { status: 'error', error: `Error processing streaming response: ${streamError.message}` };
           }
         } else if (sdkResponse) {
           // Handle non-streaming response
           if (sdkResponse.error) {
-            return { 
-              status: 'error', 
-              error: sdkResponse.error.message || JSON.stringify(sdkResponse.error) 
-            };
+            logger.error('mcpClient', `SDK response for tool ${toolName} on server ${serverId} contained an error:`, sdkResponse.error);
+            return { status: 'error', error: sdkResponse.error.message || JSON.stringify(sdkResponse.error) };
           }
-          return { status: 'success', result: sdkResponse.output };
+
+          let finalResult;
+          if (sdkResponse.content && Array.isArray(sdkResponse.content) && sdkResponse.content.length > 0) {
+            const firstContent = sdkResponse.content[0];
+            if (firstContent && firstContent.type === 'text' && typeof firstContent.text === 'string') {
+              try {
+                finalResult = JSON.parse(firstContent.text);
+                logger.debug('mcpClient', `Successfully parsed JSON from sdkResponse.content[0].text for tool ${toolName} on server ${serverId}`);
+              } catch (parseError) {
+                logger.error('mcpClient', `Failed to parse JSON from sdkResponse.content[0].text for tool ${toolName} on server ${serverId}. Raw text: '${firstContent.text}'. Error: ${parseError.message}`);
+                finalResult = firstContent.text; // Fallback to raw text if parsing fails
+              }
+            } else {
+              logger.warn('mcpClient', `sdkResponse.content[0] for tool ${toolName} on server ${serverId} not in expected format {type: 'text', text: 'string'}. Checking sdkResponse.output. Content[0]:`, firstContent);
+              finalResult = sdkResponse.output; // Fallback to output if content[0] is not as expected
+            }
+          } else if (sdkResponse.output !== undefined) {
+            logger.debug('mcpClient', `Using sdkResponse.output for tool ${toolName} on server ${serverId} as sdkResponse.content was not suitable or absent.`);
+            finalResult = sdkResponse.output;
+          } else {
+            logger.warn('mcpClient', `Neither sdkResponse.content nor sdkResponse.output provided usable data for tool ${toolName} on server ${serverId}. Full response:`, sdkResponse);
+            // If there's no error, but no discernible data, return the whole sdkResponse as a fallback, or an empty object.
+            // This situation implies the server responded successfully but sent an unusual payload.
+            finalResult = sdkResponse; // Or consider returning an empty object or a specific 'no data' indicator.
+          }
+          return { status: 'success', result: finalResult };
+        } else {
+          logger.error('mcpClient', `Invalid or empty response from SDK callTool for ${toolName} on server ${serverId}. sdkResponse:`, sdkResponse);
+          return { status: 'error', error: 'Invalid or empty response from SDK callTool' };
         }
-        return { status: 'error', error: 'Invalid or empty response from SDK callTool' };
       } else if (server.transport) {
         // For stdio servers, use the transport
         logger.debug('mcpClient', `Calling tool ${toolName} via transport on server ${serverId}`, { parameters: mcpParams });
         const result = await server.transport.send('callTool', { name: toolName, arguments: mcpParams });
-        return result.content || { status: 'success', result: result };
+        // The transport.send for 'callTool' is expected to return the direct result or an object with a 'content' field.
+        // If result.content exists, use that, otherwise assume 'result' itself is the payload.
+        if (result && result.content !== undefined) {
+            return { status: 'success', result: result.content };
+        }
+        return { status: 'success', result: result }; // Fallback if no 'content' field
       } else {
         return { status: 'error', error: `Server ${serverId} not configured for tool execution.` };
       }
     } catch (error) {
-      logger.error('mcpClient', `Error calling tool ${toolName} on server ${serverId}:`, {
-        error: error.message,
-        stack: error.stack
-      });
+      logger.error('mcpClient', `Error calling tool ${toolName} on server ${serverId}:`, { error: error.message, stack: error.stack });
       return { status: 'error', error: `Error calling tool ${toolName}: ${error.message}` };
     }
   }
 
-  /**
-   * Register tools from a server
-   * @param {string} serverId - Server ID
-   * @param {Array} tools - Array of tools
-   */
+  // ... (other methods remain the same)
   registerServerTools(serverId, tools) {
     logger.debug('mcpClient', `Registering ${tools.length} tools from server ${serverId}`);
     const server = this.servers.get(serverId);

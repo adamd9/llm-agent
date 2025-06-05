@@ -301,8 +301,9 @@ class MCPToolManager {
                     };
                   },
                   execute: async (actionName, params) => {
-                    logger.debug('mcpToolManager', `Executing remote MCP tool action: ${tool.name}.${actionName}`);
-                    return this.mcpClient.executeTool(tool.name, actionName, params, connectionResult.serverId);
+                    const executionParams = (params && typeof params === 'object') ? params : {};
+                    logger.debug('mcpToolManager', `Executing remote MCP tool action: ${tool.name}.${actionName} on server ${connectionResult.serverId}`, { toolName: tool.name, params: executionParams });
+                    return this.mcpClient.callTool(connectionResult.serverId, tool.name, executionParams);
                   }
                 };
                 if (this.isValidTool(adaptedTool)) {
