@@ -432,7 +432,7 @@ docker-compose up --build
 
 ### Data Directory
 
-The application uses a `data` directory to store various files, including custom tools, personalities, MCP server configurations, memory files, and temporary logs. The location of this directory can be configured using an environment variable:
+The application uses a `data` directory to store various files, including custom tools, personalities, MCP server configurations, memory files, and temporary logs. The location of this directory can be configured using an environment variable. **If the specified or default data directory does not exist at startup, the application will attempt to create it.**
 
 -   **`LLM_AGENT_DATA_DIR`**: Set this environment variable to an **absolute path** to specify the location of the data directory.
     -   If this variable is set and points to a valid absolute path, the application will use that directory.
