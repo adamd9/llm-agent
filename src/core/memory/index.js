@@ -1,12 +1,13 @@
 const fs = require("fs");
-const path = require("path");
+const path = require('path');
+const { DATA_DIR_PATH } = require('../../utils/dataDir');
 const { getOpenAIClient } = require("../../utils/openaiClient.js");
 const logger = require("../../utils/logger.js");
 const prompts = require("./prompts");
 const sharedEventEmitter = require("../../utils/eventEmitter");
 
 // Define the path for storing memory files
-const baseMemoryPath = path.resolve(__dirname, "../../../data/memory");
+const baseMemoryPath = path.join(DATA_DIR_PATH, 'memory');
 const shortTermPath = path.join(baseMemoryPath, "short");
 const longTermPath = path.join(baseMemoryPath, "long");
 const maxLines = 200; // Adjust this as necessary

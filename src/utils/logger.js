@@ -2,6 +2,7 @@ const debug = require('debug');
 const sharedEventEmitter = require('./eventEmitter');
 const fs = require('fs').promises;
 const path = require('path');
+const { DATA_DIR_PATH } = require('./dataDir'); // Assuming dataDir.js is in the same directory
 const safeStringify = require('./safeStringify');
 const PREFIX = 'llm-agent';
 
@@ -21,7 +22,7 @@ class Logger {
     async initialize(sessionId) {
         this.sessionId = sessionId;
         // Use absolute path to data/temp directory
-        const tempDir = path.join(process.cwd(), 'data', 'temp');
+        const tempDir = path.join(DATA_DIR_PATH, 'temp');
         
         // Ensure temp directory exists
         try {

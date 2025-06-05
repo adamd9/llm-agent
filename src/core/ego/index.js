@@ -1,4 +1,5 @@
 const { getOpenAIClient } = require('../../utils/openaiClient.js');
+const { DATA_DIR_PATH } = require('../../utils/dataDir');
 require('dotenv').config();
 const { coordinator } = require('../coordinator');
 const { planner } = require('../planner');
@@ -404,7 +405,7 @@ class Ego {
             const fs = require('fs');
             const path = require('path');
             const timestamp = Math.floor(Date.now() / 1000);
-            const longTermPath = path.join(process.cwd(), 'data', 'memory', 'long', 'long_term.txt');
+            const longTermPath = path.join(DATA_DIR_PATH, 'memory', 'long', 'long_term.txt');
             
             // Create a single reflection entry with all components
             const reflectionEntry = `<MEMORY module="ego" timestamp="${timestamp}">

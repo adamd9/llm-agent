@@ -4,6 +4,7 @@
  */
 const fs = require('fs').promises;
 const path = require('path');
+const { DATA_DIR_PATH } = require('../utils/dataDir');
 const logger = require('../utils/logger');
 const MCPClient = require('./client');
 const sharedEventEmitter = require('../utils/eventEmitter');
@@ -12,9 +13,9 @@ class MCPToolManager {
   constructor() {
     this.tools = new Map();
     this.coreToolsDir = path.join(__dirname, '../tools');
-    this.dataToolsDir = path.join(__dirname, '../../data/tools');
-    this.mcpServersDir = path.join(__dirname, '../../data/mcp-servers');
-    this.remoteMcpServersDir = path.join(__dirname, '../../data/remote-mcp-servers'); // Added for remote servers
+    this.dataToolsDir = path.join(DATA_DIR_PATH, 'tools');
+    this.mcpServersDir = path.join(DATA_DIR_PATH, 'mcp-servers');
+    this.remoteMcpServersDir = path.join(DATA_DIR_PATH, 'remote-mcp-servers'); // Added for remote servers
     this.mcpClient = new MCPClient();
     this._initialized = false;
   }

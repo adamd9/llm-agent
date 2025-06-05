@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const { DATA_DIR_PATH } = require('../utils/dataDir');
 const sharedEventEmitter = require('../utils/eventEmitter');
 
 class SubsystemTool {
@@ -110,7 +111,7 @@ class SubsystemTool {
     async tailLogs(lines) {
         try {
             // Update the path to look for logs in the data/temp directory instead
-            const logPath = path.join(this.basePath, '../../data/temp');
+            const logPath = path.join(DATA_DIR_PATH, 'temp');
             
             // Check if directory exists
             try {

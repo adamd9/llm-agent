@@ -4,6 +4,7 @@
  */
 const { spawn } = require('child_process');
 const path = require('path');
+const { DATA_DIR_PATH } = require('../utils/dataDir');
 const fs = require('fs').promises;
 const logger = require('../utils/logger');
 
@@ -13,7 +14,7 @@ class MCPClientTool {
     this.description = 'Connect to and use MCP servers';
     this.servers = new Map();
     this.toolToServer = new Map();
-    this.mcpServersDir = path.join(__dirname, '../../data/mcp-servers');
+    this.mcpServersDir = path.join(DATA_DIR_PATH, 'mcp-servers');
   }
 
   /**

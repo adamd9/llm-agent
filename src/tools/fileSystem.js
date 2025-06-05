@@ -1,11 +1,12 @@
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('../utils/logger');
+const { DATA_DIR_PATH } = require('../utils/dataDir'); // Import the centralized path
 
 class FileSystemTool {
     constructor() {
-        // Single root directory for all operations
-        this.dataRoot = path.resolve(__dirname, '../../data');
+        this.dataRoot = DATA_DIR_PATH; // Use the centralized path
+        // Logging for dataRoot selection is now handled in dataDir.js
         this.name = 'fileSystem';
         this.description = 'Tool for file system operations';
     }

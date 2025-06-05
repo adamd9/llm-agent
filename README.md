@@ -428,6 +428,21 @@ OPENAI_API_KEY=your_key_here
 docker-compose up --build
 ```
 
+## Configuration
+
+### Data Directory
+
+The application uses a `data` directory to store various files, including custom tools, personalities, MCP server configurations, memory files, and temporary logs. The location of this directory can be configured using an environment variable:
+
+-   **`LLM_AGENT_DATA_DIR`**: Set this environment variable to an **absolute path** to specify the location of the data directory.
+    -   If this variable is set and points to a valid absolute path, the application will use that directory.
+    -   If this variable is not set, or if it's set to a relative path or an invalid path, the application will default to using the `data` folder located in the project's root directory (i.e., `PROJECT_ROOT/data`).
+
+This allows for flexibility in deploying or managing the agent's data, for example, by placing it on a different volume or a shared location if needed.
+
+
+## Development
+
 The application runs in development mode by default, which includes:
 - Hot reloading using nodemon
 - Automatic restart when files in `src` directory change

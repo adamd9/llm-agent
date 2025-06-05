@@ -1,4 +1,5 @@
 const fs = require('fs').promises;
+const { DATA_DIR_PATH } = require('../utils/dataDir');
 const path = require('path');
 const logger = require('../utils/logger');
 
@@ -6,7 +7,7 @@ class PersonalityManager {
     constructor() {
         this.personalities = new Map();
         this.corePersonalitiesDir = path.join(__dirname);
-        this.dataPersonalitiesDir = path.join(__dirname, '../../data/personalities');
+        this.dataPersonalitiesDir = path.join(DATA_DIR_PATH, 'personalities');
     }
 
     async loadPersonalities() {
