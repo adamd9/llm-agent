@@ -86,15 +86,16 @@ The system evaluates task outcomes to ensure quality:
 This feedback system allows for iterative improvement while maintaining user engagement and transparency throughout the process.
 
 ### 3. Tool Layer
-- Provides specific capabilities (e.g., file operations, web searches) through a combination of:
-  - **Local Tools:** JavaScript modules loaded dynamically from the `src/tools/` (core) and `data/tools/` (custom) directories.
-  - **External MCP Servers:** Integration with Model Context Protocol (MCP) servers, allowing the agent to leverage a wider range of functionalities.
-- Each tool, whether local or exposed via MCP, has a defined interface including its name, description, and parameters.
-- **MCP Client Features:** The agent's MCP client (`src/mcp/client.js`) handles communication with MCP servers and includes:
-  - Support for both local stdio-based servers and remote HTTP-SDK based servers.
-  - Robust parameter parsing (accepting JSON strings, objects, or arrays).
-  - Handling of streaming responses from SDK-based tool calls.
-  - Consistent error reporting from tool invocations.
+- Provides specific capabilities (e.g., file operations, web searches). These tools are managed by the `MCPToolManager` (`src/mcp/toolManager.js`) and can originate from several sources:
+  - **Local JavaScript Tools:** Standardized JavaScript modules loaded dynamically from the `src/tools/` (core system tools) and `data/tools/` (custom user-defined tools) directories.
+  - **Local MCP Servers (Stdio-based):** External processes (e.g., Python or Node.js scripts) that adhere to the Model Context Protocol and communicate via standard input/output. These are configured through definition files in the `data/mcp-servers/` directory.
+  - **Remote MCP Servers (HTTP SDK-based):** External MCP servers accessed over HTTP, typically leveraging the `@modelcontextprotocol/sdk`. These are configured through definition files in the `data/remote-mcp-servers/` directory.
+- Each tool, regardless of its source, is registered with the `MCPToolManager` and presents a standardized interface to the agent, including its name, description, and parameters.
+- **MCP Client (`src/mcp/client.js`) Features:** The MCP client is responsible for the low-level communication with different types of MCP servers. Its key features include:
+  - Connection management for local stdio-based MCP servers (typically scripts running as child processes).
+  - Connection management for remote MCP servers via HTTP, utilizing the `@modelcontextprotocol/sdk` for standardized communication and handling of streaming responses.
+  - Robust parsing of tool parameters, accommodating JSON strings, direct objects, or arrays.
+  - Consistent error reporting from tool invocations across different server types.
 - **Parameter Handling for Tools:**
   - Tools (and the mechanisms invoking them) are designed to be flexible with parameter formatting, accepting both stringified JSON and direct JavaScript objects/arrays.
   - Clear error messages are provided for invalid parameters.
