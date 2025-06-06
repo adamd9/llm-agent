@@ -26,6 +26,12 @@ let voiceStatusIndicator = null;
 let chatInputField = null; // Will be assigned in DOMContentLoaded
 let sendButton = null; // Will be assigned in DOMContentLoaded
 
+// ElevenLabs TTS Variables
+let elevenLabsAudioContext = null;
+let elevenLabsAudioQueue = [];
+let elevenLabsIsPlaying = false;
+let elevenLabsCurrentSource = null; // To keep track of the current audio source
+
 // Function to update message counts on buttons
 function updateMessageCounts() {
     Object.keys(subsystemMessages).forEach(module => {
@@ -433,8 +439,9 @@ function connect() {
         
         switch(data.type) {
             case 'response':
-                const response = data.data.response;
-                addMessage('assistant', response);
+                const responseText = data.data.response; // Renamed to avoid conflict with other 'response' variables
+                addMessage('assistant', responseText);
+                playElevenLabsTTS(responseText); // Play TTS for the assistant's response
                 clearStatus();
                 break;
                 
@@ -879,6 +886,174 @@ async function toggleVoiceSTT() {
 }
 
 // --- New STT Functions End ---
+
+// --- ElevenLabs TTS Functions Start ---
+
+function initializeElevenLabsAudio() {
+    if (!elevenLabsAudioContext) {
+        try {
+            elevenLabsAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+            console.log('ElevenLabs AudioContext initialized.');
+        } catch (e) {
+            console.error('Error initializing AudioContext for ElevenLabs:', e);
+            addMessage('system', 'Error: Could not initialize audio for TTS. Your browser might not support Web Audio API.');
+        }
+    }
+}
+
+async function enqueueElevenLabsAudioChunk(arrayBuffer) {
+    if (!elevenLabsAudioContext) {
+        console.error('ElevenLabs AudioContext not initialized. Cannot process audio chunk.');
+        // Attempt to initialize it if called before DOMContentLoaded or initial play
+        initializeElevenLabsAudio();
+        if (!elevenLabsAudioContext) return; // Still not initialized, bail.
+    }
+    try {
+        const audioBuffer = await elevenLabsAudioContext.decodeAudioData(arrayBuffer);
+        elevenLabsAudioQueue.push(audioBuffer);
+        if (!elevenLabsIsPlaying) {
+            playNextElevenLabsChunk();
+        }
+    } catch (e) {
+        console.error('Error decoding audio data for ElevenLabs:', e);
+        addMessage('system', 'Error: Could not decode TTS audio chunk.');
+    }
+}
+
+function actuallyPlayNextChunk() {
+    if (elevenLabsAudioQueue.length === 0 || !elevenLabsAudioContext) {
+        elevenLabsIsPlaying = false;
+        return;
+    }
+    
+    elevenLabsIsPlaying = true;
+    const audioBuffer = elevenLabsAudioQueue.shift();
+    
+    elevenLabsCurrentSource = elevenLabsAudioContext.createBufferSource();
+    elevenLabsCurrentSource.buffer = audioBuffer;
+    elevenLabsCurrentSource.connect(elevenLabsAudioContext.destination);
+    elevenLabsCurrentSource.onended = () => {
+        console.log('ElevenLabs audio chunk finished playing.');
+        if (elevenLabsAudioQueue.length > 0) {
+            playNextElevenLabsChunk(); // Intentionally call the wrapper to handle resume logic if needed again
+        } else {
+            elevenLabsIsPlaying = false;
+            console.log('ElevenLabs TTS queue finished.');
+        }
+    };
+    try {
+      elevenLabsCurrentSource.start();
+      console.log('Playing next ElevenLabs audio chunk.');
+    } catch (e) {
+      console.error('Error starting audio source for ElevenLabs:', e);
+      elevenLabsIsPlaying = false;
+      // Attempt to play the next one if there was an error with this one
+      if (elevenLabsAudioQueue.length > 0) playNextElevenLabsChunk();
+    }
+}
+
+function playNextElevenLabsChunk() {
+    if (elevenLabsAudioQueue.length === 0) {
+        elevenLabsIsPlaying = false;
+        console.log('ElevenLabs TTS queue finished.');
+        return;
+    }
+
+    if (!elevenLabsAudioContext) {
+        console.error('ElevenLabs AudioContext not initialized. Cannot play audio.');
+        initializeElevenLabsAudio(); // Try to initialize it
+        if (!elevenLabsAudioContext) {
+            elevenLabsIsPlaying = false;
+            return;
+        }
+    }
+    
+    if (elevenLabsAudioContext.state === 'suspended') {
+        elevenLabsAudioContext.resume().then(() => {
+            console.log('AudioContext resumed by playNextElevenLabsChunk.');
+            actuallyPlayNextChunk();
+        }).catch(e => {
+            console.error('Error resuming AudioContext:', e);
+            addMessage('system', 'Error: Could not resume audio playback. Please interact with the page and try again.');
+            elevenLabsIsPlaying = false;
+        });
+    } else {
+        actuallyPlayNextChunk();
+    }
+}
+
+async function playElevenLabsTTS(text, voiceId = '21m00Tcm4TlvDq8ikWAM', modelId = 'eleven_multilingual_v2') {
+    if (!text || text.trim() === '') {
+        console.log('No text provided for ElevenLabs TTS.');
+        return;
+    }
+
+    initializeElevenLabsAudio(); 
+
+    if (!elevenLabsAudioContext) {
+        console.warn('AudioContext for ElevenLabs not available. TTS playback aborted.');
+        return;
+    }
+
+    if (elevenLabsAudioContext.state === 'suspended') {
+        try {
+            await elevenLabsAudioContext.resume();
+            console.log('AudioContext resumed by playElevenLabsTTS.');
+        } catch (e) {
+            console.error('Could not resume AudioContext on demand:', e);
+            addMessage('system', 'Audio is paused. Click the page to enable sound for TTS, then try again.');
+            return; 
+        }
+    }
+    
+    elevenLabsAudioQueue = [];
+    if (elevenLabsCurrentSource) {
+        try {
+            elevenLabsCurrentSource.stop();
+        } catch (e) {
+            console.warn("Error stopping previous ElevenLabs source, it might have already finished:", e);
+        }
+        elevenLabsCurrentSource = null;
+    }
+    elevenLabsIsPlaying = false;
+
+    console.log(`Requesting ElevenLabs TTS for: "${text.substring(0, 50)}..."`);
+
+    try {
+        const response = await fetch('/api/tts/elevenlabs-stream', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text, voice_id: voiceId, model_id: modelId }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Failed to parse error from TTS endpoint.' }));
+            console.error('ElevenLabs TTS API request failed:', response.status, errorData);
+            addMessage('system', `Error from TTS service: ${errorData.error || response.statusText}`);
+            return;
+        }
+
+        const reader = response.body.getReader();
+        
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+                console.log('ElevenLabs TTS stream finished.');
+                break;
+            }
+            await enqueueElevenLabsAudioChunk(value.buffer);
+        }
+
+    } catch (error) {
+        console.error('Error fetching or processing ElevenLabs TTS stream:', error);
+        addMessage('system', `Error with TTS playback: ${error.message}`);
+    }
+}
+
+// --- ElevenLabs TTS Functions End ---
 
 // Initialize WebSocket connection
 document.addEventListener('DOMContentLoaded', () => {

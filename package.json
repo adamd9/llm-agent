@@ -10,6 +10,8 @@
         "query": "DEBUG=llm-agent:* node src/index.js"
     },
     "dependencies": {
+        "@elevenlabs/elevenlabs-js": "^2.2.0",
+        "@modelcontextprotocol/sdk": "^1.12.1",
         "ajv": "^8.12.0",
         "body-parser": "^1.20.2",
         "debug": "^4.3.4",
@@ -18,8 +20,7 @@
         "flatted": "^3.3.2",
         "openai": "^4.96.2",
         "uuid": "^9.0.1",
-        "ws": "^8.18.0",
-        "@modelcontextprotocol/sdk": "^1.12.1"
+        "ws": "^8.18.0"
     },
     "devDependencies": {
         "jest": "^29.7.0",

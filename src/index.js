@@ -6,6 +6,7 @@ const WebSocket = require("ws");
 const http = require("http");
 const logger = require("./utils/logger");
 const sharedEventEmitter = require("./utils/eventEmitter");
+const { ElevenLabsClient } = require('@elevenlabs/elevenlabs-js');
 const safeStringify = require('./utils/safeStringify');
 const app = express();
 app.use(express.json());
@@ -27,6 +28,65 @@ app.get('/api/assemblyai-token', (req, res) => {
   res.json({ token: apiKey });
 });
 // --- End AssemblyAI Endpoint ---
+
+// +++ Start ElevenLabs TTS Streaming Endpoint +++
+app.post('/api/tts/elevenlabs-stream', async (req, res) => {
+    const { text, voice_id = '21m00Tcm4TlvDq8ikWAM', model_id = 'eleven_multilingual_v2' } = req.body; // Default voice 'Rachel' and a common model
+
+    if (!text) {
+        logger.error('elevenlabs-tts', 'Text is required for TTS.');
+        return res.status(400).json({ error: 'Text is required.' });
+    }
+
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey) {
+        logger.error('elevenlabs-tts', 'ELEVENLABS_API_KEY not found in environment variables.');
+        return res.status(500).json({ error: 'ElevenLabs API key not configured on server.' });
+    }
+
+    try {
+        logger.debug('elevenlabs-tts', 'Requesting TTS stream from ElevenLabs', { text, voice_id, model_id });
+        const elevenlabs = new ElevenLabsClient({ apiKey });
+
+        const audioStream = await elevenlabs.textToSpeech.stream(voice_id, {
+            text,
+            model_id,
+            // You can add output_format here if needed, e.g., 'mp3_44100_128'
+            // optimize_streaming_latency: 0, // Optional: latency optimization
+        });
+
+        res.setHeader('Content-Type', 'audio/mpeg'); // Adjust if you use a different output format
+
+        // Pipe the stream to the response
+        res.setHeader('Content-Type', 'audio/mpeg');
+        for await (const chunk of audioStream) {
+            res.write(chunk);
+        }
+        res.end();
+
+        audioStream.on('error', (error) => {
+            logger.error('elevenlabs-tts', 'Error streaming audio from ElevenLabs to client', error);
+            // Don't try to send a JSON error if headers already sent
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Error streaming audio.' });
+            }
+            // Ensure the response stream is ended if an error occurs mid-stream
+            res.end();
+        });
+
+        // Log when the stream finishes
+        audioStream.on('end', () => {
+            logger.debug('elevenlabs-tts', 'Successfully streamed TTS audio to client.');
+        });
+
+    } catch (error) {
+        logger.error('elevenlabs-tts', 'Error processing ElevenLabs TTS request', error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Failed to process TTS request.' });
+        }
+    }
+});
+// +++ End ElevenLabs TTS Streaming Endpoint +++
 
 // Store sessions in memory (replace with proper storage in production)
 const sessions = new Map();
