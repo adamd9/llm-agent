@@ -11,6 +11,21 @@ let subsystemMessages = {
 };
 let connectionError = false; // Track connection error state
 
+// STT Variables
+let isRecording = false;
+let sttWs; // WebSocket for AssemblyAI STT
+let microphone;
+let isAutoSendEnabled = true; // Default to auto-send
+let hasSentFinalForCurrentUtterance = false;
+let inputFieldJustClearedBySend = false; // Flag to prevent repopulation after send
+
+// UI Elements for STT
+let voiceInputToggleBtn = null;
+let autoSendToggleCheckbox = null;
+let voiceStatusIndicator = null;
+let chatInputField = null; // Will be assigned in DOMContentLoaded
+let sendButton = null; // Will be assigned in DOMContentLoaded
+
 // Function to update message counts on buttons
 function updateMessageCounts() {
     Object.keys(subsystemMessages).forEach(module => {
@@ -393,14 +408,23 @@ function connect() {
     
     ws.onopen = () => {
         console.log('Connected to server');
-        const userInput = document.getElementById('user-input');
-        userInput.disabled = false;
         connectionError = false; // Reset connection error state on successful connection
-        document.getElementById('send-button').disabled = false;
+
+        if (chatInputField) {
+            chatInputField.disabled = false;
+            // Auto-focus the chat input after connection is established
+            chatInputField.focus();
+        } else {
+            console.error('Chat input field not found in ws.onopen');
+        }
+
+        if (sendButton) {
+            sendButton.disabled = false;
+        } else {
+            console.error('Send button not found in ws.onopen');
+        }
+
         showStatus('Connected to server', { noSpinner: true });
-        
-        // Auto-focus the chat input after connection is established
-        userInput.focus();
     };
     
     ws.onmessage = (event) => {
@@ -550,8 +574,13 @@ function connect() {
 }
 
 function sendMessage() {
-    const input = document.getElementById('user-input');
-    const message = input.value.trim();
+    // Use the global chatInputField which is already assigned in DOMContentLoaded
+    if (!chatInputField) {
+        console.error("sendMessage: chatInputField is not available! Element with ID 'chatInput' might be missing or not yet initialized.");
+        addMessage('system', 'Error: Chat input field not found. Cannot send message.');
+        return;
+    }
+    const message = chatInputField.value.trim();
     
     if (message && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
@@ -559,42 +588,353 @@ function sendMessage() {
         }));
         
         addMessage('user', message);
-        input.value = '';
+        if (chatInputField) chatInputField.value = ''; // Clear the global chatInputField
+        inputFieldJustClearedBySend = true; // Indicate input was just cleared by a send operation
     }
 }
 
+// --- New STT Functions Start ---
+
+function createMicrophone() {
+  let stream;
+  let audioContext;
+  let audioWorkletNode;
+  let source;
+  let audioBufferQueue = new Int16Array(0);
+
+  return {
+    async requestPermission() {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    },
+    async startRecording(onAudioCallback) {
+      if (!stream) stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      audioContext = new AudioContext({
+        sampleRate: 16000,
+        latencyHint: 'balanced'
+      });
+
+      source = audioContext.createMediaStreamSource(stream);
+      // Ensure the path to audio-processor.js is correct if it's not in the same dir as index.html
+      // Assuming chat.js and audio-processor.js are both in /js/, this relative path should work from chat.js context if served correctly.
+      // However, AudioWorklet path is relative to the HTML file or a base URL.
+      // For simplicity, let's assume it's served such that 'js/audio-processor.js' is accessible from the root.
+      try {
+        await audioContext.audioWorklet.addModule('js/audio-processor.js');
+      } catch (e) {
+        console.error('Failed to load audio-processor.js for AudioWorklet. Make sure the path is correct.', e);
+        if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Audio Processor Error!';
+        addMessage('system', 'Critical error: Audio processor module could not be loaded. Voice input disabled.');
+        return; // Stop further execution if audio processor fails
+      }
+
+      audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
+      source.connect(audioWorkletNode);
+      audioWorkletNode.connect(audioContext.destination); // Optional: connect to destination if you want to hear the mic input
+
+      audioWorkletNode.port.onmessage = (event) => {
+        const currentBuffer = new Int16Array(event.data.audio_data);
+        audioBufferQueue = mergeBuffers(audioBufferQueue, currentBuffer);
+
+        const bufferDuration = (audioBufferQueue.length / audioContext.sampleRate) * 1000;
+
+        if (bufferDuration >= 100) { // Send audio in 100ms chunks
+          const totalSamples = Math.floor(audioContext.sampleRate * 0.1);
+          const finalBuffer = new Uint8Array(audioBufferQueue.subarray(0, totalSamples).buffer);
+          audioBufferQueue = audioBufferQueue.subarray(totalSamples);
+
+          if (onAudioCallback) onAudioCallback(finalBuffer);
+        }
+      };
+    },
+    stopRecording() {
+      stream?.getTracks().forEach((track) => track.stop());
+      audioContext?.close();
+      audioBufferQueue = new Int16Array(0);
+      stream = null; // Clear the stream
+      audioContext = null; // Clear the context
+    }
+  };
+}
+
+function mergeBuffers(lhs, rhs) {
+  const merged = new Int16Array(lhs.length + rhs.length);
+  merged.set(lhs, 0);
+  merged.set(rhs, lhs.length);
+  return merged;
+}
+
+async function toggleVoiceSTT() {
+  if (isRecording) {
+    // Stop recording
+    if (sttWs) {
+      if (sttWs.readyState === WebSocket.OPEN || sttWs.readyState === WebSocket.CONNECTING) {
+        sttWs.send(JSON.stringify({ type: "Terminate" })); 
+        sttWs.close(); 
+      }
+      sttWs = null; // Ensure it's nulled for the next session
+    }
+    // General cleanup for stopping, regardless    // Reset STT state for the next recording session
+    isRecording = false;
+    if(microphone) {
+        microphone.stopRecording();
+        microphone = null;
+    }
+    // turns is re-initialized within toggleVoiceSTT when starting
+    hasSentFinalForCurrentUtterance = false;
+    inputFieldJustClearedBySend = false;
+    // sttWs is nulled in the calling context (toggleVoiceSTT's stop branch)
+
+    if(voiceInputToggleBtn) voiceInputToggleBtn.textContent = '🎤 Start Voice';
+    if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Idle.';
+  } else {
+    // Start recording
+    if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Initializing...';
+    microphone = createMicrophone();
+    try {
+      await microphone.requestPermission();
+    } catch (error) {
+      console.error('Microphone permission denied:', error);
+      if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Mic Permission Denied!';
+      addMessage('system', 'Microphone permission denied. Please allow microphone access.');
+      if (microphone) microphone.stopRecording(); // Stop if it was started
+      microphone = null; // Reset microphone
+      isRecording = false; // Ensure recording state is false
+      if(voiceInputToggleBtn) voiceInputToggleBtn.textContent = '🎤 Start Voice'; // Reset button
+      return;
+    }
+
+    if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Fetching Auth Token...';
+    let token;
+    try {
+      const response = await fetch('/api/assemblyai-token');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error from token endpoint.' }));
+        throw new Error(`Failed to fetch AssemblyAI token: ${response.status} ${response.statusText}. Server said: ${errorData.error || 'Unknown error'}`);
+      }
+      const data = await response.json();
+      token = data.token;
+      if (!token) {
+        throw new Error('Token not found in response from /api/assemblyai-token');
+      }
+      if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Token received. Connecting...';
+      console.log('Successfully fetched AssemblyAI token.');
+    } catch (error) {
+      console.error('Error fetching AssemblyAI token:', error);
+      if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Token Fetch Error!';
+      addMessage('system', `Error fetching AssemblyAI token: ${error.message}. Please check server logs.`);
+      isRecording = false; // Ensure isRecording is reset
+      if(voiceInputToggleBtn) voiceInputToggleBtn.textContent = '🎤 Start Voice';
+      if (microphone) microphone.stopRecording(); // Stop microphone if active
+      microphone = null; // Clean up microphone instance
+      return;
+    }
+
+    const endpoint = `wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&formatted_finals=true&token=${token}`;
+    sttWs = new WebSocket(endpoint);
+    inputFieldJustClearedBySend = false; // Reset for a new WebSocket session
+
+    let turns = {}; // keyed by turn_order
+    // let fullTranscript = ''; // This variable seems unused now, can be removed if confirmed.
+
+    sttWs.onopen = async () => {
+      console.log('AssemblyAI WebSocket connected!');
+      if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Connected. Recording...';
+      isRecording = true;
+      if(voiceInputToggleBtn) voiceInputToggleBtn.textContent = '🎤 Stop Voice';
+      if(chatInputField) chatInputField.value = ''; // Clear input field
+    // ... (rest of the code remains the same)
+      hasSentFinalForCurrentUtterance = false; // Reset flag for new recording session
+      // turns object is already freshly initialized in the outer toggleVoiceSTT scope for a new recording
+      
+      await microphone.startRecording((audioChunk) => {
+        if (sttWs && sttWs.readyState === WebSocket.OPEN) {
+          sttWs.send(audioChunk);
+        }
+      });
+    };
+
+    sttWs.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'Turn') {
+
+        if (hasSentFinalForCurrentUtterance && !msg.end_of_turn && msg.transcript.trim() !== '') {
+            console.log("New speech detected after final. Resetting for new utterance.");
+            turns = {};
+            hasSentFinalForCurrentUtterance = false;
+            inputFieldJustClearedBySend = false; 
+            if (chatInputField) chatInputField.value = '';
+        }
+
+        turns[msg.turn_order] = msg.transcript;
+        const orderedTurnsText = Object.keys(turns).sort((a, b) => Number(a) - Number(b)).map(k => turns[k]).join('');
+        
+        if (!inputFieldJustClearedBySend) {
+            if (chatInputField) chatInputField.value = orderedTurnsText;
+        }
+
+        if (msg.end_of_turn) {
+            console.log('Received end_of_turn. Current transcript:', orderedTurnsText, 'Has already sent:', hasSentFinalForCurrentUtterance, 'InputJustCleared:', inputFieldJustClearedBySend);
+
+            if (isAutoSendEnabled && orderedTurnsText.trim().length > 0 && !hasSentFinalForCurrentUtterance) {
+                // This is the first final of an utterance, and auto-send is on.
+                sendMessage(); // Sets inputFieldJustClearedBySend = true
+                hasSentFinalForCurrentUtterance = true;
+                if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
+                // inputFieldJustClearedBySend remains true to guard against its own formatted final.
+            } else {
+                // This 'else' covers:
+                // 1. Formatted final of an auto-sent utterance (hasSentFinalForCurrentUtterance=true).
+                // 2. Manual send mode (isAutoSendEnabled=false).
+                // 3. End of a new utterance that wasn't the *first* final to be auto-sent.
+                // 4. Empty transcript end_of_turn.
+
+                if (isAutoSendEnabled && hasSentFinalForCurrentUtterance && inputFieldJustClearedBySend) {
+                    // Case 1: This is the formatted final of the utterance that was JUST auto-sent.
+                    // inputFieldJustClearedBySend was true from sendMessage(). Keep it true to prevent repopulation.
+                    if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Transcript refined. Listening...';
+                } else {
+                    // All other end_of_turn scenarios: allow input field to update if needed.
+                    inputFieldJustClearedBySend = false;
+
+                    if (!isAutoSendEnabled && orderedTurnsText.trim().length > 0) { // Manual send mode with text
+                        if (chatInputField) chatInputField.value = orderedTurnsText;
+                        if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Final. Review & Send.';
+                    } else if (orderedTurnsText.trim().length > 0) { // Some text, not manual, not the first auto-send (e.g. final of new utterance, or formatted final when input wasn't just cleared)
+                        if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Transcript refined. Listening...';
+                    } else { // Empty transcript
+                        if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Listening...';
+                    }
+                }
+            }
+        } else { // Partial transcript
+            // If input was just cleared by send, AND this new partial has text, it means user continued speaking.
+            if (inputFieldJustClearedBySend && orderedTurnsText.trim().length > 0) {
+                inputFieldJustClearedBySend = false; // Allow this new partial to update the input.
+                // The input field will be updated by the `if (!inputFieldJustClearedBySend)` block that follows.
+            }
+            // Update status indicator based on whether a final has been sent for the current logical utterance
+            if (hasSentFinalForCurrentUtterance) {
+                 // This partial is likely part of a formatted final or refinement after sending.
+                if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Refining...';
+            } else {
+                // This is a partial for an ongoing, unsent utterance.
+                if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Listening...';
+            }
+        }
+      } else if (msg.type === 'Error') {
+        console.error('AssemblyAI STT Error:', msg.error);
+        if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'STT Error!';
+        addMessage('system', `STT Error from AssemblyAI: ${msg.error}`);
+        // Consider if we should stop recording here or let user decide
+      } else if (msg.type === 'SessionTerminated') {
+        console.log('AssemblyAI STT Session Terminated:', msg);
+        if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Session Ended.';
+        // If session is terminated by server, ensure we are in a stopped state
+        if (isRecording) {
+            // This will clean up microphone and UI
+            if (microphone) microphone.stopRecording();
+            microphone = null;
+            if(voiceInputToggleBtn) voiceInputToggleBtn.textContent = '🎤 Start Voice';
+            isRecording = false;
+            sttWs = null; // Ensure WebSocket is nulled as it's terminated
+        }
+      }
+    };
+
+    sttWs.onerror = (err) => {
+      console.error('AssemblyAI WebSocket error:', err);
+      if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'WS Connection Error!';
+      addMessage('system', 'WebSocket connection error with STT service.');
+      if (isRecording) {
+        toggleVoiceSTT(); // Attempt to stop and reset state
+      }
+    };
+
+    sttWs.onclose = (event) => {
+      console.log('AssemblyAI WebSocket closed. Code:', event.code, 'Reason:', event.reason);
+      // Only update UI if it was an unexpected close during recording
+      if (isRecording) {
+        if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Disconnected.';
+        // Attempt to clean up and reset state if closed unexpectedly
+        if (microphone) microphone.stopRecording();
+        microphone = null;
+        if(voiceInputToggleBtn) voiceInputToggleBtn.textContent = '🎤 Start Voice';
+        isRecording = false; 
+      }
+      inputFieldJustClearedBySend = false; // Reset flag on WebSocket close
+      sttWs = null; // Ensure it's nulled on close
+    };
+  }
+}
+
+// --- New STT Functions End ---
+
 // Initialize WebSocket connection
 document.addEventListener('DOMContentLoaded', () => {
-    connect();
+    // Assign critical UI elements first
+    chatInputField = document.getElementById('chatInput');
+    sendButton = document.getElementById('send-button'); // Assign sendButton globally
+    voiceInputToggleBtn = document.getElementById('voiceInputToggle');
+    autoSendToggleCheckbox = document.getElementById('autoSendToggle');
+    voiceStatusIndicator = document.getElementById('voiceStatusIndicator');
+
+    connect(); // Establishes WebSocket and might enable/disable inputs in ws.onopen
     
     // Initialize message counts
     updateMessageCounts();
-    
-    const userInput = document.getElementById('user-input');
-    userInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            sendMessage();
-        }
-    });
-    
-    document.getElementById('send-button').addEventListener('click', sendMessage);
 
-    // Close modals on background click
-    document.getElementById('debug-modal').addEventListener('click', (e) => {
-        if (e.target.id === 'debug-modal') {
-            toggleDebug();
+    if (chatInputField) {
+        chatInputField.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    }
+
+    if (sendButton) {
+        sendButton.addEventListener('click', sendMessage);
+    }
+
+    // Check for chatInputField existence before proceeding with STT specific UI checks
+    if (!chatInputField && voiceInputToggleBtn) { // Ensure voiceInputToggleBtn exists before trying to disable
+        console.warn("Chat input field (id='chatInput') not found. STT will be disabled.");
+        if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Chat Input Missing.';
+        voiceInputToggleBtn.disabled = true;
+    } else if (voiceInputToggleBtn) { // Only proceed if voice toggle exists
+        // Setup event listeners for the voice input toggle button
+        if (voiceInputToggleBtn) {
+            voiceInputToggleBtn.addEventListener('click', toggleVoiceSTT);
         }
-    });
-    
-    document.getElementById('results-modal').addEventListener('click', (e) => {
-        if (e.target.id === 'results-modal') {
-            toggleResults();
+        if (autoSendToggleCheckbox) {
+            isAutoSendEnabled = autoSendToggleCheckbox.checked;
+            autoSendToggleCheckbox.addEventListener('change', (event) => {
+                isAutoSendEnabled = event.target.checked;
+            });
+        } else {
+          console.warn('Auto-send toggle checkbox not found.');
         }
-    });
-    
-    document.getElementById('system-error-modal').addEventListener('click', (e) => {
-        if (e.target.id === 'system-error-modal') {
-            toggleSystemErrors();
+    } else {
+        console.warn("Voice input toggle button not found. STT UI cannot be initialized.");
+    }
+
+    // Modal background click listeners - ensure these are only attached once and correctly
+    const modals = ['debug-modal', 'results-modal', 'planner-modal', 'coordinator-modal', 'ego-modal', 'system-error-modal'];
+    modals.forEach(modalId => {
+        const modalElement = document.getElementById(modalId);
+        if (modalElement) {
+            modalElement.addEventListener('click', (e) => {
+                if (e.target.id === modalId) {
+                    // Determine the correct toggle function based on modalId
+                    if (modalId === 'debug-modal') toggleDebug();
+                    else if (modalId === 'results-modal') toggleResults();
+                    else if (modalId === 'system-error-modal') toggleSystemErrors();
+                    else { // For planner, coordinator, ego
+                        const moduleName = modalId.replace('-modal', '');
+                        toggleSubsystem(moduleName);
+                    }
+                }
+            });
         }
     });
 });

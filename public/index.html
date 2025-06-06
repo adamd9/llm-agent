@@ -29,8 +29,14 @@
 
         <div id="chat-container">
             <div id="messages"></div>
+            <div id="voice-controls-container">
+                <button id="voiceInputToggle">🎤 Start Voice</button>
+                <input type="checkbox" id="autoSendToggle" checked />
+                <label for="autoSendToggle">Auto-send on speech end</label>
+                <span id="voiceStatusIndicator"></span>
+            </div>
             <div id="input-container">
-                <input type="text" id="user-input" placeholder="Type your message..." disabled>
+                <input type="text" id="chatInput" placeholder="Type your message or use voice..." disabled>
                 <button id="send-button" disabled>Send</button>
             </div>
         </div>

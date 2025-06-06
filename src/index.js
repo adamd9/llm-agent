@@ -11,6 +11,23 @@ const app = express();
 app.use(express.json());
 app.use(express.static("public"));
 
+// Ensure .env variables are loaded
+require('dotenv').config();
+
+// --- AssemblyAI Temporary Token Endpoint ---
+app.get('/api/assemblyai-token', (req, res) => {
+  const apiKey = process.env.ASSEMBLY_AI_KEY;
+  if (!apiKey) {
+    logger.error('assemblyai-token', 'ASSEMBLY_AI_KEY not found in environment variables.');
+    return res.status(500).json({ error: 'AssemblyAI API key not configured on server.' });
+  }
+  // For actual AssemblyAI V3, this should be exchanged for a temporary session token.
+  // For now, returning the API key directly for testing.
+  logger.debug('assemblyai-token', 'Returning AssemblyAI API key (for temporary testing).');
+  res.json({ token: apiKey });
+});
+// --- End AssemblyAI Endpoint ---
+
 // Store sessions in memory (replace with proper storage in production)
 const sessions = new Map();
 
