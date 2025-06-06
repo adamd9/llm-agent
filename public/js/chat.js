@@ -758,12 +758,18 @@ async function toggleVoiceSTT() {
       const msg = JSON.parse(event.data);
       if (msg.type === 'Turn') {
 
+        // Logic for handling new speech or continued speech after a final has been sent.
         if (hasSentFinalForCurrentUtterance && !msg.end_of_turn && msg.transcript.trim() !== '') {
-            console.log("New speech detected after final. Resetting for new utterance.");
-            turns = {};
-            hasSentFinalForCurrentUtterance = false;
-            inputFieldJustClearedBySend = false; 
-            if (chatInputField) chatInputField.value = '';
+            // A final for a previous utterance was sent, and this is a new partial.
+            console.log("Partial received after a final. InputJustCleared:", inputFieldJustClearedBySend, "Transcript:", msg.transcript);
+            // This partial indicates either continued speech or the start of formatting for the previous utterance.
+            // In either case, we are starting a 'new' logical segment from the user's perspective for the input field.
+            turns = {}; // Reset turns for this new segment.
+            hasSentFinalForCurrentUtterance = false; // This new segment can be sent.
+            inputFieldJustClearedBySend = false; // Allow the input field to be updated with this new segment.
+            // chatInputField.value will be cleared by the subsequent `turns[msg.turn_order] = msg.transcript;` if turns is empty
+            // or will start fresh with this transcript.
+            console.log("State reset for new/continued speech segment. Turns cleared, hasSentFinal=false, inputFieldJustClearedBySend=false.");
         }
 
         turns[msg.turn_order] = msg.transcript;
@@ -792,7 +798,8 @@ async function toggleVoiceSTT() {
                 if (isAutoSendEnabled && hasSentFinalForCurrentUtterance && inputFieldJustClearedBySend) {
                     // Case 1: This is the formatted final of the utterance that was JUST auto-sent.
                     // inputFieldJustClearedBySend was true from sendMessage(). Keep it true to prevent repopulation.
-                    if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Transcript refined. Listening...';
+                    // Status should remain 'Sent. Listening...' from the initial send.
+                    console.log("Formatted final arrived while inputFieldJustClearedBySend is true. Status remains 'Sent. Listening...'.");
                 } else {
                     // All other end_of_turn scenarios: allow input field to update if needed.
                     inputFieldJustClearedBySend = false;
@@ -808,14 +815,17 @@ async function toggleVoiceSTT() {
                 }
             }
         } else { // Partial transcript
-            // If input was just cleared by send, AND this new partial has text, it means user continued speaking.
-            if (inputFieldJustClearedBySend && orderedTurnsText.trim().length > 0) {
-                inputFieldJustClearedBySend = false; // Allow this new partial to update the input.
-                // The input field will be updated by the `if (!inputFieldJustClearedBySend)` block that follows.
+            // If input was just cleared by send, AND this new partial has text,
+            // AND a final has NOT yet been sent for the current logical utterance (meaning this is continued speech for the current utterance, not refinement of a sent one)
+            if (inputFieldJustClearedBySend && orderedTurnsText.trim().length > 0 && !hasSentFinalForCurrentUtterance) {
+                inputFieldJustClearedBySend = false; // Allow this new partial (continued speech) to update the input.
+                // The input field will then be updated by the general `if (!inputFieldJustClearedBySend)` block.
             }
+            
             // Update status indicator based on whether a final has been sent for the current logical utterance
             if (hasSentFinalForCurrentUtterance) {
-                 // This partial is likely part of a formatted final or refinement after sending.
+                 // This partial is part of a formatted final or refinement after sending.
+                 // The input field should remain cleared if inputFieldJustClearedBySend is true (set by sendMessage).
                 if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Refining...';
             } else {
                 // This is a partial for an ongoing, unsent utterance.
