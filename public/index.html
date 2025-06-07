@@ -34,10 +34,18 @@
                     <!-- System status and notifications will appear here -->
                 </div>
                 <div id="voice-controls-container">
-                    <button id="voiceInputToggle">🎤 Start Voice</button>
-                    <input type="checkbox" id="autoSendToggle" checked />
-                    <label for="autoSendToggle">Auto-send on speech end</label>
-                    <span id="voiceStatusIndicator"></span>
+                    <div class="control-group">
+                        <button id="voiceInputToggle">🎤 Start Voice</button>
+                        <input type="checkbox" id="autoSendToggle" checked />
+                        <label for="autoSendToggle">Auto-send on speech end</label>
+                        <span id="voiceStatusIndicator"></span>
+                    </div>
+                    <div class="control-group">
+                        <button id="ttsToggle" class="tts-toggle" title="Toggle Text-to-Speech">
+                            <span class="tts-icon">🔊</span>
+                            <span class="tts-text">TTS: On</span>
+                        </button>
+                    </div>
                 </div>
                 <div id="input-container">
                     <div class="input-row">

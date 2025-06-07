@@ -46,6 +46,57 @@ header {
     padding: 20px;
 }
 
+/* Voice controls container */
+#voice-controls-container {
+    padding: 8px 20px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* TTS Toggle Button */
+#ttsToggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 16px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    color: #333;
+}
+
+#ttsToggle:hover {
+    background: #e0e0e0;
+    border-color: #ccc;
+}
+
+#ttsToggle.active {
+    background: #e3f2fd;
+    border-color: #90caf9;
+    color: #0d47a1;
+}
+
+#ttsToggle .tts-icon {
+    font-size: 16px;
+}
+
+#ttsToggle .tts-text {
+    white-space: nowrap;
+}
+
 /* System messages container */
 #system-messages-container {
     padding: 8px 20px;

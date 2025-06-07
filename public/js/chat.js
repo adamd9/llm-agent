@@ -39,6 +39,7 @@ const MAX_RETRY_ATTEMPTS = 3; // Max retry attempts for audio chunk processing
 let retryCount = 0; // Track retry attempts
 const MIN_AUDIO_CHUNK_SIZE = 1000; // Minimum size to attempt decoding
 let audioDataBuffer = new Uint8Array(0); // Buffer for accumulating small audio chunks
+let isTTSEnabled = true; // Toggle state for TTS functionality
 
 // Function to update message counts on buttons
 function updateMessageCounts() {
@@ -1445,12 +1446,15 @@ function playNextElevenLabsChunk() {
     }
 }
 
-// ...
-
 async function playElevenLabsTTS(text) {
-    // ...
-
-    // Reset audio queue and playing state for the new stream
+    // Check if TTS is enabled
+    if (!isTTSEnabled) {
+        console.log('TTS is currently disabled. Not playing message.');
+        return;
+    }
+    
+    // Clear any existing audio data buffer when starting new TTS
+    audioDataBuffer = new Uint8Array(0);
     elevenLabsAudioQueue = [];
     elevenLabsIsPlaying = false; // Will be set to true by playNextElevenLabsChunk when first chunk plays
     if (elevenLabsCurrentSource) { // Should have been cleared by stopElevenLabsPlaybackAndStream if active
@@ -1588,6 +1592,24 @@ function updateCanvas(canvasData) {
     canvasContent.scrollTop = 0;
 }
 
+// --- TTS Toggle UI Update ---
+function updateTTSToggleUI(button, isEnabled) {
+    if (!button) return;
+    
+    const icon = button.querySelector('.tts-icon');
+    const text = button.querySelector('.tts-text');
+    
+    if (isEnabled) {
+        button.classList.add('active');
+        if (icon) icon.textContent = '🔊'; // Speaker icon
+        if (text) text.textContent = 'TTS: On';
+    } else {
+        button.classList.remove('active');
+        if (icon) icon.textContent = '🔇'; // Muted speaker icon
+        if (text) text.textContent = 'TTS: Off';
+    }
+}
+
 // --- ElevenLabs TTS Functions End ---
 
 // Add user interaction handler to ensure AudioContext is properly resumed
@@ -1621,6 +1643,31 @@ document.addEventListener('DOMContentLoaded', () => {
         interruptTTSButton.addEventListener('click', stopElevenLabsPlaybackAndStream);
     } else {
         console.warn('Interrupt TTS button (interrupt-tts-button) not found in the DOM.');
+    }
+    
+    // Initialize TTS toggle button
+    const ttsToggle = document.getElementById('ttsToggle');
+    if (ttsToggle) {
+        // Load saved TTS preference from localStorage, default to true (enabled)
+        isTTSEnabled = localStorage.getItem('ttsEnabled') !== 'false';
+        updateTTSToggleUI(ttsToggle, isTTSEnabled);
+        
+        ttsToggle.addEventListener('click', () => {
+            isTTSEnabled = !isTTSEnabled;
+            localStorage.setItem('ttsEnabled', isTTSEnabled);
+            updateTTSToggleUI(ttsToggle, isTTSEnabled);
+            
+            // If disabling TTS while it's playing, stop the playback
+            if (!isTTSEnabled && (elevenLabsIsPlaying || elevenLabsStreamReader)) {
+                stopElevenLabsPlaybackAndStream();
+            }
+            
+            // Show feedback to the user
+            const status = isTTSEnabled ? 'enabled' : 'disabled';
+            addMessage('system', `Text-to-speech has been ${status}.`);
+        });
+    } else {
+        console.warn('TTS toggle button not found in the DOM.');
     }
     
     // Initialize message counts
