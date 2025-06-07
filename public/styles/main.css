@@ -49,7 +49,7 @@ header {
 /* System messages container */
 #system-messages-container {
     padding: 8px 20px;
-    background: #f8f9fa;
+    background: #fff;
     border-top: 1px solid #e0e0e0;
     border-bottom: 1px solid #e0e0e0;
     display: flex;
@@ -58,7 +58,7 @@ header {
     max-height: 200px;
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: #ccc #f0f0f0;
+    scrollbar-color: #e0e0e0 #f8f8f8;
 }
 
 #system-messages-container::-webkit-scrollbar {
@@ -66,73 +66,122 @@ header {
 }
 
 #system-messages-container::-webkit-scrollbar-track {
-    background: #f0f0f0;
+    background: #f8f8f8;
     border-radius: 3px;
 }
 
 #system-messages-container::-webkit-scrollbar-thumb {
-    background-color: #ccc;
+    background-color: #e0e0e0;
     border-radius: 3px;
 }
 
 .system-message {
-    padding: 10px 15px;
+    padding: 8px 12px 8px 32px;
     margin: 2px 0;
-    background: #fff3e0;
-    color: #e65100;
+    background: #fff;
+    color: #333;
     border-radius: 4px;
     font-size: 14px;
     line-height: 1.4;
-    border-left: 3px solid #ff9800;
+    border: 1px solid #e0e0e0;
     animation: fadeIn 0.3s ease-in-out;
-    transition: opacity 0.3s ease-in-out;
+    transition: all 0.2s ease;
     display: flex;
     align-items: center;
-    justify-content: space-between;
     position: relative;
 }
 
-.system-message .spinner {
-    margin-right: 8px;
-    flex-shrink: 0;
+.system-message::before {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #ff9800; /* Default color */
 }
 
 .system-message.persistent {
-    background: #e3f2fd;
-    border-left-color: #2196f3;
-    color: #0d47a1;
+    background: #fff;
+    border-color: #e0e0e0;
+    color: #333;
+}
+
+.system-message.persistent::before {
+    background-color: #2196f3; /* Blue for persistent messages */
+}
+
+.system-message.error {
+    border-color: #ffcdd2;
+}
+
+.system-message.error::before {
+    background-color: #f44336; /* Red for errors */
+}
+
+.system-message.success::before {
+    background-color: #4caf50; /* Green for success */
+}
+
+.system-message.warning::before {
+    background-color: #ff9800; /* Orange for warnings */
+}
+
+.system-message .spinner {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    margin: 0;
+}
+
+.system-message .message-content {
+    flex: 1;
+    margin-right: 8px;
 }
 
 .system-message .close-button {
     background: none;
     border: none;
-    color: inherit;
+    color: #757575;
     font-size: 18px;
     line-height: 1;
     cursor: pointer;
-    padding: 0 0 0 10px;
-    margin-left: 8px;
+    padding: 4px;
+    margin-left: 4px;
     opacity: 0.7;
-    transition: opacity 0.2s;
+    transition: all 0.2s;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .system-message .close-button:hover {
     opacity: 1;
+    background-color: #f5f5f5;
+    color: #333;
 }
 
 .system-message .view-results-button {
-    margin-left: 10px;
-    padding: 2px 8px;
-    background: rgba(255, 255, 255, 0.3);
-    border: 1px solid currentColor;
-    border-radius: 3px;
+    margin-left: 8px;
+    padding: 2px 10px;
+    background: #f5f5f5;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
     cursor: pointer;
     font-size: 12px;
     transition: all 0.2s;
+    color: #333;
+    white-space: nowrap;
 }
 
 .system-message .view-results-button:hover {
-    background: rgba(255, 255, 255, 0.5);
+    background: #e0e0e0;
 }
 
 .message {
@@ -335,18 +384,81 @@ header {
 }
 
 .subsystem-toggle {
-    background: #f5f5f5;
+    display: flex;
+    align-items: center;
+    background: #fff;
     border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    padding: 8px 12px;
+    border-radius: 6px;
+    padding: 10px 16px;
+    margin-bottom: 8px;
     cursor: pointer;
     font-size: 14px;
-    color: #666;
+    color: #333;
     transition: all 0.2s ease;
+    position: relative;
+}
+
+.subsystem-toggle::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 12px;
+    flex-shrink: 0;
+    background-color: #757575; /* Default color */
 }
 
 .subsystem-toggle:hover {
-    background: #e0e0e0;
+    background: #f8f8f8;
+    border-color: #bdbdbd;
+}
+
+/* Specific module colors */
+.subsystem-toggle[data-module="planner"]::before {
+    background-color: #9c27b0; /* Purple for planner */
+}
+
+.subsystem-toggle[data-module="code"]::before {
+    background-color: #2196f3; /* Blue for code */
+}
+
+.subsystem-toggle[data-module="browser"]::before {
+    background-color: #4caf50; /* Green for browser */
+}
+
+.subsystem-toggle[data-module="terminal"]::before {
+    background-color: #ff9800; /* Orange for terminal */
+}
+
+.subsystem-toggle[data-module="filesystem"]::before {
+    background-color: #f44336; /* Red for filesystem */
+}
+
+.subsystem-toggle[data-module="memory"]::before {
+    background-color: #673ab7; /* Deep purple for memory */
+}
+
+.subsystem-toggle .toggle-arrow {
+    margin-left: auto;
+    transition: transform 0.2s;
+    color: #757575;
+    font-size: 16px;
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.subsystem-toggle:hover .toggle-arrow {
+    background: #f0f0f0;
+}
+
+.subsystem-toggle.active {
+    background: #f8f9ff;
+    border-color: #c5cae9;
+}
+
+.subsystem-toggle.active .toggle-arrow {
+    transform: rotate(180deg);
+    color: #3f51b5;
 }
 
 .message-count {
@@ -365,44 +477,36 @@ header {
     margin-right: 2px;
 }
 
-.planner-toggle {
-    background: #e3f2fd;
-    color: #1565c0;
-    border-color: #bbdefb;
+.planner-toggle::before {
+    background-color: #2196f3; /* Blue for planner */
 }
 
 .planner-toggle:hover {
-    background: #bbdefb;
+    background: #f8f9ff;
 }
 
-.coordinator-toggle {
-    background: #e8f5e9;
-    color: #2e7d32;
-    border-color: #c8e6c9;
+.coordinator-toggle::before {
+    background-color: #4caf50; /* Green for coordinator */
 }
 
 .coordinator-toggle:hover {
-    background: #c8e6c9;
+    background: #f1f8e9;
 }
 
-.ego-toggle {
-    background: #fff3e0;
-    color: #e65100;
-    border-color: #ffe0b2;
+.ego-toggle::before {
+    background-color: #ff9800; /* Orange for ego */
 }
 
 .ego-toggle:hover {
-    background: #ffe0b2;
+    background: #fff3e0;
 }
 
-.system-error-toggle {
-    background: #ffebee;
-    color: #c62828;
-    border-color: #ffcdd2;
+.system-error-toggle::before {
+    background-color: #f44336; /* Red for system errors */
 }
 
 .system-error-toggle:hover {
-    background: #ffcdd2;
+    background: #ffebee;
 }
 
 .status-toggle {
