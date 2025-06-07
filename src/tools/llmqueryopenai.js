@@ -87,7 +87,7 @@ class LLMQueryOpenAITool {
                 output_text_length: response.output_text ? response.output_text.length : 0 
             });
 
-            // For now, return a simplified result format
+            // Return the raw response from the LLM
             const result = {
                 status: 'success',
                 data: {
@@ -97,6 +97,7 @@ class LLMQueryOpenAITool {
             };
 
             logger.debug('llmqueryopenai.execute - Returning final result', { result });
+            
             return result;
         } catch (error) {
             logger.error('llmqueryopenai.execute - Error', error);

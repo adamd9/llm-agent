@@ -451,13 +451,31 @@ function humanizeStatusMessage(message) {
 function addMessage(type, content, format = 'basic') {
     console.log('Adding message:', { type, content });
     
+    // Handle object content (e.g., from WebSocket)
+    let messageContent = content;
+    let canvasContent = null;
+    
+    if (typeof content === 'object' && content !== null) {
+        // If the content has a chat property, use that as the message content
+        if (content.chat !== undefined) {
+            messageContent = content.chat;
+            canvasContent = content.canvas || null;
+        } else {
+            // If it's just an object, stringify it for display
+            messageContent = JSON.stringify(content, null, 2);
+        }
+    }
+    
+    // Ensure messageContent is a string
+    messageContent = String(messageContent);
+    
     // For system messages, add them to the system messages container
     if (type === 'system') {
         // Check if this is a TTS error and should go to system errors instead
-        if (content.includes('Error from TTS service')) {
+        if (messageContent.includes('Error from TTS service')) {
             if (subsystemMessages.systemError) {
                 subsystemMessages.systemError.push({
-                    content: content,
+                    content: messageContent,
                     timestamp: new Date().toISOString()
                 });
                 updateMessageCounts();
@@ -476,11 +494,11 @@ function addMessage(type, content, format = 'basic') {
         if (systemMessagesContainer) {
             const messageDiv = document.createElement('div');
             messageDiv.className = 'system-message';
-            messageDiv.innerHTML = content.replace(/\n/g, '<br>');
+            messageDiv.innerHTML = messageContent.replace(/\n/g, '<br>');
             systemMessagesContainer.appendChild(messageDiv);
             
             // Auto-remove after 5 seconds for non-critical messages
-            if (!content.toLowerCase().includes('error')) {
+            if (!messageContent.toLowerCase().includes('error')) {
                 setTimeout(() => {
                     messageDiv.style.opacity = '0';
                     setTimeout(() => messageDiv.remove(), 300);
@@ -496,9 +514,20 @@ function addMessage(type, content, format = 'basic') {
     
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}`;
-    messageDiv.innerHTML = format === 'markdown' ? content.replace(/\n/g, '<br>') : content.replace(/\n/g, '<br>');
+    
+    // Format the message content
+    const formattedContent = format === 'markdown' 
+        ? messageContent.replace(/\n/g, '<br>') 
+        : messageContent.replace(/\n/g, '<br>');
+    
+    messageDiv.innerHTML = formattedContent;
     messagesDiv.appendChild(messageDiv);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    
+    // If there's canvas content, update the canvas
+    if (canvasContent) {
+        updateCanvas(canvasContent);
+    }
 }
 
 function connect() {
@@ -534,7 +563,30 @@ function connect() {
         
         switch(data.type) {
             case 'response':
-                const responseText = data.data.response; // Renamed to avoid conflict with other 'response' variables
+                // Handle the new response format with both chat and canvas content
+                const responseData = data.data;
+                let responseText = '';
+                
+                // Handle both old and new response formats
+                if (typeof responseData === 'string') {
+                    // Old format: just a string response
+                    responseText = responseData;
+                } else if (responseData.response) {
+                    // Old format with response wrapper
+                    responseText = responseData.response;
+                } else if (responseData.chat !== undefined) {
+                    // New format with chat and canvas
+                    responseText = responseData.chat;
+                    
+                    // Update canvas if canvas content is provided
+                    if (responseData.canvas) {
+                        updateCanvas(responseData.canvas);
+                    }
+                } else {
+                    // Fallback for any other format
+                    responseText = JSON.stringify(responseData);
+                }
+                
                 addMessage('assistant', responseText);
                 playElevenLabsTTS(responseText); // Play TTS for the assistant's response
                 clearStatus();
@@ -1269,6 +1321,47 @@ async function playElevenLabsTTS(text) {
              elevenLabsAudioQueue = [];
         }
     }
+}
+
+// --- Canvas Functions ---
+
+/**
+ * Updates the canvas with the provided content
+ * @param {Object} canvasData - The canvas data to display
+ * @param {string} canvasData.type - The type of content ('html' or 'text')
+ * @param {string} canvasData.content - The content to display
+ */
+function updateCanvas(canvasData) {
+    const canvasContent = document.getElementById('canvas-content');
+    if (!canvasContent) return;
+    
+    // Clear the canvas
+    canvasContent.innerHTML = '';
+    
+    if (!canvasData || !canvasData.content) {
+        // Show placeholder if no content
+        canvasContent.innerHTML = `
+            <div class="canvas-placeholder">
+                <p>No content to display</p>
+                <p><small>This area can display rich content like data visualizations, images, or formatted text.</small></p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Handle different content types
+    if (canvasData.type === 'html') {
+        canvasContent.innerHTML = canvasData.content;
+    } else {
+        // Default to text if type is not specified or unsupported
+        const pre = document.createElement('pre');
+        pre.style.whiteSpace = 'pre-wrap';
+        pre.textContent = canvasData.content;
+        canvasContent.appendChild(pre);
+    }
+    
+    // Scroll to top of canvas
+    canvasContent.scrollTop = 0;
 }
 
 // --- ElevenLabs TTS Functions End ---

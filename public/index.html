@@ -9,7 +9,7 @@
 </head>
 <body>
     <div id="app-container">
-        <header>
+        <header class="main-header">
             <div class="header-buttons">
                 <button onclick="toggleDebug()" class="debug-toggle">Debug ▼</button>
                 <button onclick="toggleSubsystem('planner')" class="subsystem-toggle planner-toggle">
@@ -27,23 +27,32 @@
             </div>
         </header>
 
-        <div id="chat-container">
-            <div id="messages"></div>
-            <div id="system-messages-container" class="system-messages">
-                <!-- System status and notifications will appear here -->
+        <div class="main-content">
+            <div id="chat-container" class="chat-panel">
+                <div id="messages"></div>
+                <div id="system-messages-container" class="system-messages">
+                    <!-- System status and notifications will appear here -->
+                </div>
+                <div id="voice-controls-container">
+                    <button id="voiceInputToggle">🎤 Start Voice</button>
+                    <input type="checkbox" id="autoSendToggle" checked />
+                    <label for="autoSendToggle">Auto-send on speech end</label>
+                    <span id="voiceStatusIndicator"></span>
+                </div>
+                <div id="input-container">
+                    <div class="input-row">
+                        <input type="text" id="chatInput" placeholder="Type your message or use voice..." disabled>
+                        <button id="send-button" disabled>Send</button>
+                        <button id="interrupt-tts-button" style="display:none; margin-left: 10px;">Interrupt TTS</button>
+                    </div>
+                </div>
             </div>
-            <div id="voice-controls-container">
-                <button id="voiceInputToggle">🎤 Start Voice</button>
-                <input type="checkbox" id="autoSendToggle" checked />
-                <label for="autoSendToggle">Auto-send on speech end</label>
-                <span id="voiceStatusIndicator"></span>
-            </div>
-            <div id="input-container">
-                <!-- System messages will appear here -->
-                <div class="input-row">
-                    <input type="text" id="chatInput" placeholder="Type your message or use voice..." disabled>
-                    <button id="send-button" disabled>Send</button>
-                    <button id="interrupt-tts-button" style="display:none; margin-left: 10px;">Interrupt TTS</button>
+            <div id="canvas-container" class="canvas-panel">
+                <div id="canvas-content">
+                    <div class="canvas-placeholder">
+                        <p>Canvas content will appear here</p>
+                        <p><small>This area can display rich content like data visualizations, images, or formatted text.</small></p>
+                    </div>
                 </div>
             </div>
         </div>

@@ -5,11 +5,46 @@ const { coordinator } = require('../coordinator');
 const { planner } = require('../planner');
 const { evaluator } = require('../evaluator');
 const personalityManager = require('../../personalities');
-const logger = require('../../utils/logger.js');
-const sharedEventEmitter = require('../../utils/eventEmitter.js');
+const logger = require('../../utils/logger');
 const memory = require('../memory');
+const sharedEventEmitter = require('../../utils/eventEmitter');
 const prompts = require('./prompts');
 const reflectionPrompts = require('./reflection-prompts');
+
+/**
+ * Escapes HTML special characters to prevent XSS
+ * @param {string} unsafe - The string to escape
+ * @returns {string} The escaped string
+ */
+function escapeHtml(unsafe) {
+    if (typeof unsafe !== 'string') return unsafe;
+    return unsafe
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+/**
+ * Formats a tool result for display in the canvas
+ * @param {any} result - The result to format
+ * @returns {string} The formatted result as HTML
+ */
+function formatToolResult(result) {
+    if (typeof result === 'string') {
+        // If it's a string, escape HTML and preserve line breaks
+        return escapeHtml(result).replace(/\n/g, '<br>');
+    } else if (typeof result === 'object' && result !== null) {
+        try {
+            // Try to pretty-print JSON
+            return `<pre>${escapeHtml(JSON.stringify(result, null, 2))}</pre>`;
+        } catch (e) {
+            return 'Unable to format result';
+        }
+    }
+    return String(result);
+}
 
 // Configuration
 const MAX_RETRIES = 1;
@@ -301,7 +336,7 @@ class Ego {
 
             const messages = [
                 { role: 'system', content: prompts.EGO_SYSTEM
-                    .replace('{{identity}}', this.identity)
+                    .replace(/{{identity}}/g, this.identity)
                     .replace('{{personality}}', this.personality.prompt)
                     .replace('{{capabilities}}', this.capabilities.join(', '))
                 },
@@ -328,15 +363,107 @@ class Ego {
             // Store the cleaned response in short-term memory
             await memory.storeShortTerm('Response to user', assistantMessage);
 
-            // Emit the response to the user - only send the cleaned message
+            // Prepare the response data with the assistant's message
+            let responseData = { chat: assistantMessage };
+            
+            // Check if this is a tool response that should be formatted for the canvas
+            if (result.type === 'success' && result.content) {
+                try {
+                    // Try to parse the content as JSON
+                    let toolResponse;
+                    try {
+                        toolResponse = typeof result.content === 'string' ? JSON.parse(result.content) : result.content;
+                    } catch (e) {
+                        // If it's not JSON, use it as-is
+                        toolResponse = { status: 'success', data: { result: result.content } };
+                    }
+                    
+                    // If we have a successful tool response with data
+                    if (toolResponse && toolResponse.status === 'success' && toolResponse.data) {
+                        const toolData = toolResponse.data;
+                        const query = toolData.query || 'Your request';
+                        const resultText = toolData.result || toolData.message || toolData.content || 'No result available';
+                        
+                        // Format the canvas content with the full response
+                        const canvasContent = {
+                            type: 'html',
+                            content: `
+                                <div class="tool-response">
+                                    <h3>${escapeHtml(query)}</h3>
+                                    <div class="tool-result">
+                                        ${formatToolResult(resultText)}
+                                    </div>
+                                    <div class="tool-meta">
+                                        <small>Generated at ${new Date().toLocaleTimeString()}</small>
+                                    </div>
+                                </div>
+                                <style>
+                                    .tool-response { 
+                                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                                        padding: 16px;
+                                    }
+                                    .tool-response h3 { 
+                                        margin-top: 0; 
+                                        color: #333; 
+                                        border-bottom: 1px solid #eee; 
+                                        padding-bottom: 8px; 
+                                    }
+                                    .tool-result { 
+                                        line-height: 1.6; 
+                                        margin: 12px 0; 
+                                        white-space: pre-wrap;
+                                    }
+                                    .tool-meta { 
+                                        margin-top: 16px; 
+                                        font-size: 0.85em; 
+                                        color: #666; 
+                                        text-align: right;
+                                    }
+                                </style>
+                            `
+                        };
+                        
+                        // Update the response data with both chat and canvas content
+                        responseData.chat = `I've processed your request. Check the canvas for details.`;
+                        responseData.canvas = canvasContent;
+                        
+                        logger.debug('handleBubble', 'Formatted tool response for canvas', {
+                            query: query,
+                            resultLength: String(resultText).length,
+                            canvasContentLength: canvasContent.content.length
+                        });
+                    }
+                } catch (error) {
+                    logger.error('handleBubble', 'Error formatting tool response for canvas', {
+                        error: error.message,
+                        stack: error.stack,
+                        originalContent: result.content
+                    });
+                }
+            }
+
+            // Format the response for the frontend
+            const frontendResponse = {
+                chat: responseData.chat,
+                canvas: responseData.canvas || null
+            };
+
+            // Emit the response to the user in the format expected by the frontend
             await sharedEventEmitter.emit('message', {
-                role: 'assistant',
-                content: assistantMessage
+                type: 'response',
+                data: frontendResponse
             });
             
             // Emit the original events for compatibility
-            await sharedEventEmitter.emit('assistantResponse', assistantMessage);
+            await sharedEventEmitter.emit('assistantResponse', frontendResponse);
             await sharedEventEmitter.emit('assistantComplete');
+            
+            logger.debug('handleBubble', 'Response sent to frontend', { 
+                chatLength: frontendResponse.chat?.length || 0,
+                hasCanvas: !!frontendResponse.canvas,
+                canvasType: frontendResponse.canvas?.type,
+                response: JSON.stringify(frontendResponse, null, 2)
+            });
             
             // Perform reflection after the response is sent to the user
             // Run it asynchronously to avoid blocking
