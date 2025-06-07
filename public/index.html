@@ -29,6 +29,9 @@
 
         <div id="chat-container">
             <div id="messages"></div>
+            <div id="system-messages-container" class="system-messages">
+                <!-- System status and notifications will appear here -->
+            </div>
             <div id="voice-controls-container">
                 <button id="voiceInputToggle">🎤 Start Voice</button>
                 <input type="checkbox" id="autoSendToggle" checked />
@@ -36,9 +39,12 @@
                 <span id="voiceStatusIndicator"></span>
             </div>
             <div id="input-container">
-                <input type="text" id="chatInput" placeholder="Type your message or use voice..." disabled>
-                <button id="send-button" disabled>Send</button>
-                <button id="interrupt-tts-button" style="display:none; margin-left: 10px;">Interrupt TTS</button>
+                <!-- System messages will appear here -->
+                <div class="input-row">
+                    <input type="text" id="chatInput" placeholder="Type your message or use voice..." disabled>
+                    <button id="send-button" disabled>Send</button>
+                    <button id="interrupt-tts-button" style="display:none; margin-left: 10px;">Interrupt TTS</button>
+                </div>
             </div>
         </div>
     </div>

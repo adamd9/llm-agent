@@ -323,61 +323,108 @@ function toggleStatus(messageDiv) {
 }
 
 function showStatus(message, options = {}) {
-    console.log('[showStatus] isProcessing before:', isProcessing);
-    if (!options.noSpinner && !options.persistent) {
-        isProcessing = true; // Agent is busy
-        console.log('[showStatus] isProcessing set to true. Message:', message);
-    }
+    console.log('Showing status:', message, options);
+    
     // Process message
     let messageText, isPersistent;
     if (typeof message === 'string') {
         messageText = message;
         isPersistent = false;
     } else {
-        messageText = message.message;
-        isPersistent = message.persistent;
+        messageText = message.message || '';
+        isPersistent = message.persistent || false;
     }
     
-    console.log('Status update:', { messageText, isPersistent });
-    
+    // Humanize the message
     messageText = humanizeStatusMessage(messageText);
     
-    if (!systemMessageDiv) {
-        console.log('Creating system message div');
-        systemMessageDiv = document.createElement('div');
-        systemMessageDiv.className = 'message system';
-        const messagesDiv = document.getElementById('messages');
-        if (messagesDiv.firstChild) {
-            messagesDiv.insertBefore(systemMessageDiv, messagesDiv.firstChild);
-        } else {
-            messagesDiv.appendChild(systemMessageDiv);
+    // Use the system messages container for all status messages
+    const systemMessagesContainer = document.getElementById('system-messages-container');
+    if (!systemMessagesContainer) return;
+    
+    // Clear any existing status messages if they're not persistent
+    if (!isPersistent) {
+        const existingStatus = systemMessagesContainer.querySelector('.status-message:not(.persistent)');
+        if (existingStatus) {
+            existingStatus.remove();
         }
     }
     
-    if (isPersistent) {
-        // Store the result and show a button to view it
+    // Create status div
+    const statusDiv = document.createElement('div');
+    statusDiv.className = 'system-message status-message';
+    
+    // Add spinner if needed
+    const spinner = options.noSpinner ? '' : '<span class="spinner"></span>';
+    
+    if (isPersistent && message.includes('Results ready')) {
+        // For persistent results, show a button to view them
+        statusDiv.classList.add('persistent');
         currentResult = messageText;
         const viewButton = '<button onclick="toggleResults()" class="view-results-button">View Results ▼</button>';
-        const spinner = '<span class="spinner"></span>';
-        systemMessageDiv.innerHTML = `${spinner}Results ready ${viewButton}`;
+        statusDiv.innerHTML = `${spinner}${messageText} ${viewButton}`;
     } else {
-        // Show non-persistent messages in the system message area
-        const spinner = options.noSpinner ? '' : '<span class="spinner"></span>';
-        systemMessageDiv.innerHTML = `${spinner}${messageText.replace(/\n/g, '<br>')}`;
+        // Regular status message
+        statusDiv.innerHTML = `${spinner}${messageText.replace(/\n/g, '<br>')}`;
     }
     
-    currentMessagePersistent = isPersistent;
+    // Add close button for persistent messages
+    if (isPersistent) {
+        const closeButton = document.createElement('button');
+        closeButton.className = 'close-button';
+        closeButton.textContent = '×';
+        closeButton.onclick = () => {
+            statusDiv.remove();
+            currentMessagePersistent = false;
+            currentResult = null;
+        };
+        statusDiv.appendChild(closeButton);
+    }
+    
+    // Add to container and scroll into view
+    systemMessagesContainer.appendChild(statusDiv);
+    statusDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    
+    // Auto-hide non-persistent messages after 5 seconds
+    if (!isPersistent) {
+        setTimeout(() => {
+            if (statusDiv && statusDiv.isConnected) {
+                statusDiv.style.opacity = '0';
+                setTimeout(() => statusDiv.remove(), 300);
+            }
+        }, 5000);
+    }
+    
+    // Update processing state
+    if (!options.noSpinner && !isPersistent) {
+        isProcessing = true;
+    }
+    
+    // Store reference to the current status div if needed
+    if (isPersistent) {
+        currentMessagePersistent = true;
+        systemMessageDiv = statusDiv;
+    }
 }
 
 function clearStatus() {
     console.log('[clearStatus] isProcessing before:', isProcessing);
     isProcessing = false; // Agent is no longer busy
     console.log('[clearStatus] isProcessing set to false.');
-    if (!currentMessagePersistent && systemMessageDiv) {
-        systemMessageDiv.innerHTML = '';
+    
+    // Clear non-persistent status messages
+    const systemMessagesContainer = document.getElementById('system-messages-container');
+    if (systemMessagesContainer) {
+        const nonPersistentMessages = systemMessagesContainer.querySelectorAll('.status-message:not(.persistent)');
+        nonPersistentMessages.forEach(msg => {
+            msg.style.opacity = '0';
+            setTimeout(() => msg.remove(), 300);
+        });
     }
+    
     if (!currentMessagePersistent) {
         currentResult = null;
+        systemMessageDiv = null;
     }
 }
 
@@ -403,24 +450,54 @@ function humanizeStatusMessage(message) {
 
 function addMessage(type, content, format = 'basic') {
     console.log('Adding message:', { type, content });
+    
+    // For system messages, add them to the system messages container
+    if (type === 'system') {
+        // Check if this is a TTS error and should go to system errors instead
+        if (content.includes('Error from TTS service')) {
+            if (subsystemMessages.systemError) {
+                subsystemMessages.systemError.push({
+                    content: content,
+                    timestamp: new Date().toISOString()
+                });
+                updateMessageCounts();
+                
+                // Update the output if the modal is open
+                const errorModal = document.getElementById('system-error-modal');
+                if (errorModal && !errorModal.classList.contains('hidden')) {
+                    updateSubsystemOutput('systemError');
+                }
+            }
+            return; // Don't show TTS errors in the main chat
+        }
+        
+        // Add system message to the system messages container
+        const systemMessagesContainer = document.getElementById('system-messages-container');
+        if (systemMessagesContainer) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'system-message';
+            messageDiv.innerHTML = content.replace(/\n/g, '<br>');
+            systemMessagesContainer.appendChild(messageDiv);
+            
+            // Auto-remove after 5 seconds for non-critical messages
+            if (!content.toLowerCase().includes('error')) {
+                setTimeout(() => {
+                    messageDiv.style.opacity = '0';
+                    setTimeout(() => messageDiv.remove(), 300);
+                }, 5000);
+            }
+        }
+        return;
+    }
+    
+    // For non-system messages, add them to the messages container
     const messagesDiv = document.getElementById('messages');
+    if (!messagesDiv) return;
+    
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}`;
-    
-    if (format === 'markdown') {
-        // Add markdown formatting if needed
-        messageDiv.innerHTML = content.replace(/\n/g, '<br>');
-    } else {
-        messageDiv.innerHTML = content.replace(/\n/g, '<br>');
-    }
-    
-    // For system messages, insert after the system status if it exists
-    if (type === 'system' && systemMessageDiv) {
-        systemMessageDiv.after(messageDiv);
-    } else {
-        messagesDiv.appendChild(messageDiv);
-    }
-    
+    messageDiv.innerHTML = format === 'markdown' ? content.replace(/\n/g, '<br>') : content.replace(/\n/g, '<br>');
+    messagesDiv.appendChild(messageDiv);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
@@ -1052,11 +1129,25 @@ async function playElevenLabsTTS(text) {
         console.log('No text provided for ElevenLabs TTS.');
         return;
     }
+    
+    // Update UI to show processing state
+    const sendButton = document.getElementById('send-button');
+    if (sendButton) {
+        sendButton.disabled = true;
+        sendButton.innerHTML = '<span class="spinner"></span> Processing...';
+    }
 
     // If already playing or streaming, interrupt the previous one
     if (elevenLabsIsPlaying || elevenLabsStreamReader || elevenLabsFetchController) {
         console.log('Previous TTS active, interrupting it before starting new TTS.');
         await stopElevenLabsPlaybackAndStream(); 
+    }
+    
+    // Reset send button state in case of previous errors
+    const sendButtonEl = document.getElementById('send-button');
+    if (sendButtonEl) {
+        sendButtonEl.disabled = false;
+        sendButtonEl.textContent = 'Send';
     }
 
     initializeElevenLabsAudio();
@@ -1133,12 +1224,18 @@ async function playElevenLabsTTS(text) {
         }
 
     } catch (error) {
-        if (error.name === 'AbortError') {
-            console.log('ElevenLabs TTS fetch explicitly aborted (catch block).');
-        } else {
-            console.error('Error fetching or processing ElevenLabs TTS stream:', error);
-            addMessage('system', `Error with TTS playback: ${error.message}`);
+        console.error('Error with ElevenLabs TTS:', error);
+        // Add error to system errors instead of showing as a system message
+        if (subsystemMessages.systemError) {
+            subsystemMessages.systemError.push({
+                content: `TTS Error: ${error.message}`,
+                timestamp: new Date().toISOString()
+            });
+            updateMessageCounts();
         }
+        // Reset the abort controller and reader on error
+        elevenLabsFetchController = null;
+        elevenLabsStreamReader = null;
     } finally {
         console.log('TTS finally block executing.');
         const wasAbortedByController = elevenLabsFetchController && elevenLabsFetchController.signal.aborted;
@@ -1198,14 +1295,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (chatInputField) {
         chatInputField.addEventListener('keypress', function(event) {
-            if (event.key === 'Enter') {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault(); // Prevent newline in input
                 sendMessage();
             }
         });
     }
 
     if (sendButton) {
-        sendButton.addEventListener('click', sendMessage);
+        sendButton.addEventListener('click', function() {
+            // Disable button and show spinner when clicked
+            sendButton.disabled = true;
+            sendButton.innerHTML = '<span class="spinner"></span> Sending...';
+            sendMessage();
+        });
     }
 
     // Check for chatInputField existence before proceeding with STT specific UI checks

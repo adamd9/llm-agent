@@ -46,6 +46,95 @@ header {
     padding: 20px;
 }
 
+/* System messages container */
+#system-messages-container {
+    padding: 8px 20px;
+    background: #f8f9fa;
+    border-top: 1px solid #e0e0e0;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #ccc #f0f0f0;
+}
+
+#system-messages-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+#system-messages-container::-webkit-scrollbar-track {
+    background: #f0f0f0;
+    border-radius: 3px;
+}
+
+#system-messages-container::-webkit-scrollbar-thumb {
+    background-color: #ccc;
+    border-radius: 3px;
+}
+
+.system-message {
+    padding: 10px 15px;
+    margin: 2px 0;
+    background: #fff3e0;
+    color: #e65100;
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1.4;
+    border-left: 3px solid #ff9800;
+    animation: fadeIn 0.3s ease-in-out;
+    transition: opacity 0.3s ease-in-out;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+}
+
+.system-message .spinner {
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.system-message.persistent {
+    background: #e3f2fd;
+    border-left-color: #2196f3;
+    color: #0d47a1;
+}
+
+.system-message .close-button {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0 0 10px;
+    margin-left: 8px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.system-message .close-button:hover {
+    opacity: 1;
+}
+
+.system-message .view-results-button {
+    margin-left: 10px;
+    padding: 2px 8px;
+    background: rgba(255, 255, 255, 0.3);
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.system-message .view-results-button:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
 .message {
     margin-bottom: 15px;
     padding: 12px;
@@ -158,6 +247,7 @@ header {
     border-top: 1px solid #e0e0e0;
     display: flex;
     gap: 10px;
+    position: relative;
 }
 
 #user-input {
@@ -191,6 +281,42 @@ header {
 #send-button:disabled {
     background: #cccccc;
     cursor: not-allowed;
+    position: relative;
+    padding-left: 40px;
+}
+
+#send-button .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+/* System message styles */
+#input-container {
+    position: relative;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 20px;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Make sure the input and button container stays in a row */
+#input-container .input-row {
+    display: flex;
+    gap: 10px;
+    width: 100%;
 }
 
 .debug-toggle {
