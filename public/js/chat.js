@@ -938,7 +938,9 @@ async function enqueueElevenLabsAudioChunk(arrayBuffer) {
         }
     } catch (e) {
         console.error('Error decoding audio data for ElevenLabs:', e);
-        addMessage('system', 'Error: Could not decode TTS audio chunk.');
+        // NOTE: We are not adding a system message here as per user request,
+        // because speech often still works despite these decoding errors.
+        // addMessage('system', 'Error: Could not decode TTS audio chunk.');
     }
 }
 
