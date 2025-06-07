@@ -31,7 +31,7 @@ app.get('/api/assemblyai-token', (req, res) => {
 
 // +++ Start ElevenLabs TTS Streaming Endpoint +++
 app.post('/api/tts/elevenlabs-stream', async (req, res) => {
-    const { text, voice_id = '21m00Tcm4TlvDq8ikWAM', model_id = 'eleven_multilingual_v2' } = req.body; // Default voice 'Rachel' and a common model
+    const { text, voice_id = 'D38z5RcWu1voky8WS1ja', model_id = 'eleven_flash_v2_5' } = req.body; // Default voice 'Rachel' and a common model
 
     if (!text) {
         logger.error('elevenlabs-tts', 'Text is required for TTS.');

@@ -1016,7 +1016,7 @@ function playNextElevenLabsChunk() {
     }
 }
 
-async function playElevenLabsTTS(text, voiceId = '21m00Tcm4TlvDq8ikWAM', modelId = 'eleven_multilingual_v2') {
+async function playElevenLabsTTS(text) {
     if (!text || text.trim() === '') {
         console.log('No text provided for ElevenLabs TTS.');
         return;
