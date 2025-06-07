@@ -31,6 +31,9 @@ let elevenLabsAudioContext = null;
 let elevenLabsAudioQueue = [];
 let elevenLabsIsPlaying = false;
 let elevenLabsCurrentSource = null; // To keep track of the current audio source
+let interruptTTSButton = null;
+let elevenLabsStreamReader = null;
+let elevenLabsFetchController = null;
 
 // Function to update message counts on buttons
 function updateMessageCounts() {
@@ -1016,13 +1019,47 @@ function playNextElevenLabsChunk() {
     }
 }
 
+async function stopElevenLabsPlaybackAndStream() {
+    console.log('Interrupting ElevenLabs TTS playback and stream.');
+
+    // Stop local audio playback
+    if (elevenLabsCurrentSource) {
+        try {
+            elevenLabsCurrentSource.stop();
+        } catch (e) {
+            console.warn("Error stopping current ElevenLabs source during interrupt:", e);
+        }
+        elevenLabsCurrentSource = null;
+    }
+    elevenLabsAudioQueue = [];
+    elevenLabsIsPlaying = false;
+
+    // Abort the fetch request
+    if (elevenLabsFetchController) {
+        elevenLabsFetchController.abort();
+        // Controller reset is handled in playElevenLabsTTS finally or at new request
+    }
+    // The reader will be cancelled by the fetch abort.
+    elevenLabsStreamReader = null; // Clear the reference
+
+    if (interruptTTSButton) {
+        interruptTTSButton.style.display = 'none';
+    }
+}
+
 async function playElevenLabsTTS(text) {
     if (!text || text.trim() === '') {
         console.log('No text provided for ElevenLabs TTS.');
         return;
     }
 
-    initializeElevenLabsAudio(); 
+    // If already playing or streaming, interrupt the previous one
+    if (elevenLabsIsPlaying || elevenLabsStreamReader || elevenLabsFetchController) {
+        console.log('Previous TTS active, interrupting it before starting new TTS.');
+        await stopElevenLabsPlaybackAndStream(); 
+    }
+
+    initializeElevenLabsAudio();
 
     if (!elevenLabsAudioContext) {
         console.warn('AudioContext for ElevenLabs not available. TTS playback aborted.');
@@ -1036,22 +1073,21 @@ async function playElevenLabsTTS(text) {
         } catch (e) {
             console.error('Could not resume AudioContext on demand:', e);
             addMessage('system', 'Audio is paused. Click the page to enable sound for TTS, then try again.');
-            return; 
+            return;
         }
     }
     
+    // Reset audio queue and playing state for the new stream
     elevenLabsAudioQueue = [];
-    if (elevenLabsCurrentSource) {
-        try {
-            elevenLabsCurrentSource.stop();
-        } catch (e) {
-            console.warn("Error stopping previous ElevenLabs source, it might have already finished:", e);
-        }
+    elevenLabsIsPlaying = false; // Will be set to true by playNextElevenLabsChunk when first chunk plays
+    if (elevenLabsCurrentSource) { // Should have been cleared by stopElevenLabsPlaybackAndStream if active
+        try { elevenLabsCurrentSource.stop(); } catch(e) { /* ignore */ }
         elevenLabsCurrentSource = null;
     }
-    elevenLabsIsPlaying = false;
 
     console.log(`Requesting ElevenLabs TTS for: "${text.substring(0, 50)}..."`);
+
+    elevenLabsFetchController = new AbortController(); // Create a new controller for this request
 
     try {
         const response = await fetch('/api/tts/elevenlabs-stream', {
@@ -1059,37 +1095,87 @@ async function playElevenLabsTTS(text) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ text, voice_id: voiceId, model_id: modelId }),
+            body: JSON.stringify({ text }), // voice_id and model_id will use server defaults
+            signal: elevenLabsFetchController.signal, // Pass the abort signal
         });
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Failed to parse error from TTS endpoint.' }));
-            console.error('ElevenLabs TTS API request failed:', response.status, errorData);
-            addMessage('system', `Error from TTS service: ${errorData.error || response.statusText}`);
-            return;
-        }
-
-        const reader = response.body.getReader();
-        
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-                console.log('ElevenLabs TTS stream finished.');
-                break;
+            if (elevenLabsFetchController && elevenLabsFetchController.signal.aborted) {
+                console.log('ElevenLabs TTS fetch aborted by user (response.ok check).');
+            } else {
+                const errorData = await response.json().catch(() => ({ error: 'Failed to parse error from TTS endpoint.' }));
+                console.error('ElevenLabs TTS API request failed:', response.status, errorData);
+                addMessage('system', `Error from TTS service: ${errorData.error || response.statusText}`);
             }
-            await enqueueElevenLabsAudioChunk(value.buffer);
+        } else {
+            if (interruptTTSButton) {
+                interruptTTSButton.style.display = 'inline-block';
+            }
+            elevenLabsStreamReader = response.body.getReader();
+            
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+                if (!elevenLabsStreamReader) { 
+                    console.log('Stream reader became null (e.g. interrupted), exiting read loop.');
+                    break;
+                }
+                const { done, value } = await elevenLabsStreamReader.read();
+                if (done) {
+                    console.log('ElevenLabs TTS stream finished naturally.');
+                    break;
+                }
+                if (elevenLabsFetchController && elevenLabsFetchController.signal.aborted) {
+                    console.log('Stream processing aborted during read loop.');
+                    break;
+                }
+                await enqueueElevenLabsAudioChunk(value.buffer);
+            }
         }
 
     } catch (error) {
-        console.error('Error fetching or processing ElevenLabs TTS stream:', error);
-        addMessage('system', `Error with TTS playback: ${error.message}`);
+        if (error.name === 'AbortError') {
+            console.log('ElevenLabs TTS fetch explicitly aborted (catch block).');
+        } else {
+            console.error('Error fetching or processing ElevenLabs TTS stream:', error);
+            addMessage('system', `Error with TTS playback: ${error.message}`);
+        }
+    } finally {
+        console.log('TTS finally block executing.');
+        const wasAbortedByController = elevenLabsFetchController && elevenLabsFetchController.signal.aborted;
+
+        if (elevenLabsStreamReader) {
+            try {
+                if (typeof elevenLabsStreamReader.cancel === 'function') {
+                    await elevenLabsStreamReader.cancel('Stream finished, errored, or aborted.');
+                }
+            } catch (e) {
+                console.warn('Warning: Error cancelling stream reader in finally block:', e);
+            }
+            elevenLabsStreamReader = null;
+        }
+        
+        if (!wasAbortedByController) { // If not aborted by our explicit interrupt call
+            if (interruptTTSButton) {
+                interruptTTSButton.style.display = 'none';
+            }
+        }
+        // Always nullify the controller for the completed/aborted request
+        elevenLabsFetchController = null;
+
+        // If playback was ongoing and not part of an explicit abort action that already reset this
+        if (elevenLabsIsPlaying && !wasAbortedByController) {
+            elevenLabsIsPlaying = false;
+        }
+        // Clear queue if stream ended naturally/errored and not part of an explicit abort
+        if (elevenLabsAudioQueue.length > 0 && !wasAbortedByController) {
+             console.log("Clearing audio queue as TTS stream ended naturally or with non-abort error.");
+             elevenLabsAudioQueue = [];
+        }
     }
 }
 
 // --- ElevenLabs TTS Functions End ---
 
-// Initialize WebSocket connection
 document.addEventListener('DOMContentLoaded', () => {
     // Assign critical UI elements first
     chatInputField = document.getElementById('chatInput');
@@ -1097,8 +1183,15 @@ document.addEventListener('DOMContentLoaded', () => {
     voiceInputToggleBtn = document.getElementById('voiceInputToggle');
     autoSendToggleCheckbox = document.getElementById('autoSendToggle');
     voiceStatusIndicator = document.getElementById('voiceStatusIndicator');
+    interruptTTSButton = document.getElementById('interrupt-tts-button'); // Assign interrupt button
 
     connect(); // Establishes WebSocket and might enable/disable inputs in ws.onopen
+
+    if (interruptTTSButton) {
+        interruptTTSButton.addEventListener('click', stopElevenLabsPlaybackAndStream);
+    } else {
+        console.warn('Interrupt TTS button (interrupt-tts-button) not found in the DOM.');
+    }
     
     // Initialize message counts
     updateMessageCounts();

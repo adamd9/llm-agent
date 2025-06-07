@@ -51,7 +51,7 @@ app.post('/api/tts/elevenlabs-stream', async (req, res) => {
         const audioStream = await elevenlabs.textToSpeech.stream(voice_id, {
             text,
             model_id,
-            // You can add output_format here if needed, e.g., 'mp3_44100_128'
+            output_format: 'mp3_44100_128', // Explicitly set output format
             // optimize_streaming_latency: 0, // Optional: latency optimization
         });
 

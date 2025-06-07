@@ -365,7 +365,7 @@ const logger = require('../utils/logger');
 logger.debug('mcpServerTool', 'Loading server', { path });
 
 // Info level for normal operations
-logger.info('mcpServerTool', 'Server registered', { name });
+logger.debug('mcpServerTool', 'Server registered', { name });
 
 // Error level for failures
 logger.error('mcpServerTool', 'Server failed', { error });
