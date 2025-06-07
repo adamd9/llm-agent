@@ -36,7 +36,11 @@ let elevenLabsCurrentSource = null; // To keep track of the current audio source
 function updateMessageCounts() {
     Object.keys(subsystemMessages).forEach(module => {
         const count = subsystemMessages[module].length;
-        const countElement = document.querySelector(`.${module}-count`);
+        let countElementSelector = `.${module}-count`;
+        if (module === 'systemError') {
+            countElementSelector = '.system-error-count'; // Adjust for hyphenated class convention
+        }
+        const countElement = document.querySelector(countElementSelector);
         if (countElement) {
             countElement.textContent = count;
             countElement.style.display = count > 0 ? 'inline-flex' : 'none';
@@ -143,7 +147,11 @@ function toggleResults() {
 }
 
 function updateSubsystemOutput(module) {
-    const output = document.getElementById(`${module}-output`);
+    let elementIdToFind = `${module}-output`;
+    if (module === 'systemError') {
+        elementIdToFind = 'system-error-output'; // Adjust for hyphenated ID convention
+    }
+    const output = document.getElementById(elementIdToFind);
     if (!output) {
         console.error(`Element with id '${module}-output' not found`);
         return;
@@ -536,12 +544,14 @@ function connect() {
                     subsystemMessages.systemError.push({
                         content: {
                             type: 'system_error',
-                            error: typeof data.error === 'string' ? data.error : data.error?.message || 'Unknown error',
-                            stack: data.error?.stack || '',
+                            error: data.data?.message || (typeof data.error === 'string' ? data.error : data.error?.message) || 'Unknown server error',
+                            specific_error: data.data?.error?.message || '',
+                            stack: data.data?.error?.stack || data.error?.stack || '',
+                            context: data.data?.context || '',
                             location: 'server',
                             status: 'error'
                         },
-                        timestamp: new Date().toISOString()
+                        timestamp: data.timestamp || new Date().toISOString() // Use server timestamp if available
                     });
                     
                     // Update the message count
@@ -557,7 +567,7 @@ function connect() {
                     }
                 }
                 
-                addMessage('error', `Error: ${typeof data.error === 'string' ? data.error : JSON.stringify(data.error)}`);
+                // addMessage('error', `Error: ${typeof data.error === 'string' ? data.error : JSON.stringify(data.error)}`); // Removed: Server errors should only go to the System Errors toggle
                 clearStatus();
                 break;
 
