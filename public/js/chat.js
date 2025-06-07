@@ -34,6 +34,11 @@ let elevenLabsCurrentSource = null; // To keep track of the current audio source
 let interruptTTSButton = null;
 let elevenLabsStreamReader = null;
 let elevenLabsFetchController = null;
+let userInteracted = false; // Track if user has interacted with the page
+const MAX_RETRY_ATTEMPTS = 3; // Max retry attempts for audio chunk processing
+let retryCount = 0; // Track retry attempts
+const MIN_AUDIO_CHUNK_SIZE = 1000; // Minimum size to attempt decoding
+let audioDataBuffer = new Uint8Array(0); // Buffer for accumulating small audio chunks
 
 // Function to update message counts on buttons
 function updateMessageCounts() {
@@ -557,9 +562,36 @@ function connect() {
         showStatus('Connected to server', { noSpinner: true });
     };
     
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        console.log('WebSocket message received:', data);
+    ws.onmessage = async (event) => {
+        // Check if the message is binary (audio data)
+        if (event.data instanceof Blob) {
+            console.log(`Received binary blob of size: ${event.data.size} bytes`);
+            try {
+                const arrayBuffer = await event.data.arrayBuffer();
+                console.log(`Converted blob to ArrayBuffer: ${arrayBuffer.byteLength} bytes`);
+                
+                if (arrayBuffer && arrayBuffer.byteLength > 0) {
+                    console.log('Enqueuing audio chunk...');
+                    await enqueueElevenLabsAudioChunk(arrayBuffer);
+                } else {
+                    console.warn('Received empty audio chunk');
+                }
+            } catch (e) {
+                console.error('Error processing binary audio chunk:', e);
+                // Try to continue with other chunks even if one fails
+            }
+            return; // Skip the rest of the handler for binary messages
+        }
+
+        // Handle text messages
+        let data;
+        try {
+            data = JSON.parse(event.data);
+            console.log('WebSocket message received:', data);
+        } catch (e) {
+            console.error('Error parsing WebSocket message:', e, 'Raw data:', event.data);
+            return;
+        }
         
         switch(data.type) {
             case 'response':
@@ -610,6 +642,22 @@ function connect() {
                         ttsText = String(ttsText);
                     }
                     console.log('Playing TTS:', ttsText.substring(0, 100) + (ttsText.length > 100 ? '...' : ''));
+                    
+                    // Clear any existing audio queue before starting new TTS
+                    if (elevenLabsCurrentSource) {
+                        try {
+                            elevenLabsCurrentSource.stop();
+                        } catch (e) {
+                            console.warn('Error stopping current audio source:', e);
+                        }
+                        elevenLabsCurrentSource = null;
+                    }
+                    
+                    // Clear the queue and reset state
+                    elevenLabsAudioQueue = [];
+                    elevenLabsIsPlaying = false;
+                    
+                    // Start the new TTS
                     playElevenLabsTTS(ttsText);
                 } else {
                     console.warn('No valid text found for TTS in response:', responseData);
@@ -1079,181 +1127,329 @@ async function toggleVoiceSTT() {
 
 // --- ElevenLabs TTS Functions Start ---
 
-function initializeElevenLabsAudio() {
-    if (!elevenLabsAudioContext) {
+async function stopElevenLabsPlaybackAndStream() {
+    // Stop any currently playing audio
+    if (elevenLabsCurrentSource) {
         try {
-            elevenLabsAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-            console.log('ElevenLabs AudioContext initialized.');
+            elevenLabsCurrentSource.stop();
+            elevenLabsCurrentSource.disconnect();
         } catch (e) {
-            console.error('Error initializing AudioContext for ElevenLabs:', e);
-            addMessage('system', 'Error: Could not initialize audio for TTS. Your browser might not support Web Audio API.');
+            // Ignore errors when stopping
         }
+        elevenLabsCurrentSource = null;
+    }
+
+    // Clear the audio queue
+    elevenLabsAudioQueue = [];
+    audioDataBuffer = new Uint8Array(0);
+    
+    // Abort any in-progress fetch request
+    if (elevenLabsFetchController) {
+        elevenLabsFetchController.abort();
+        elevenLabsFetchController = null;
+    }
+    
+    // Clean up the stream reader if it exists
+    if (elevenLabsStreamReader) {
+        try {
+            await elevenLabsStreamReader.cancel();
+        } catch (e) {
+            // Ignore cancellation errors
+        }
+        elevenLabsStreamReader = null;
+    }
+    
+    // Update UI state
+    elevenLabsIsPlaying = false;
+    
+    if (interruptTTSButton) {
+        interruptTTSButton.style.display = 'none';
     }
 }
 
-async function enqueueElevenLabsAudioChunk(arrayBuffer) {
-    if (!elevenLabsAudioContext) {
-        console.error('ElevenLabs AudioContext not initialized. Cannot process audio chunk.');
-        // Attempt to initialize it if called before DOMContentLoaded or initial play
-        initializeElevenLabsAudio();
-        if (!elevenLabsAudioContext) return; // Still not initialized, bail.
+function initializeElevenLabsAudio() {
+    if (elevenLabsAudioContext) {
+        console.log('AudioContext already initialized');
+        return true;
     }
+    
     try {
-        const audioBuffer = await elevenLabsAudioContext.decodeAudioData(arrayBuffer);
-        elevenLabsAudioQueue.push(audioBuffer);
-        if (!elevenLabsIsPlaying) {
-            playNextElevenLabsChunk();
+        console.log('Initializing new AudioContext...');
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        
+        if (!AudioContext) {
+            throw new Error('Web Audio API is not supported in this browser');
+        }
+        
+        elevenLabsAudioContext = new AudioContext();
+        
+        // Log the sample rate for debugging
+        console.log(`AudioContext created with sample rate: ${elevenLabsAudioContext.sampleRate}Hz`);
+        
+        // Set up error handling for the audio context
+        if (elevenLabsAudioContext.state === 'suspended') {
+            console.log('AudioContext started in suspended state, will resume on user interaction');
+        }
+        
+        // Add event listeners for state changes
+        elevenLabsAudioContext.addEventListener('statechange', () => {
+            console.log(`AudioContext state changed to: ${elevenLabsAudioContext.state}`);
+            
+            if (elevenLabsAudioContext.state === 'suspended' && userInteracted) {
+                console.log('Attempting to resume AudioContext after state change...');
+                elevenLabsAudioContext.resume().catch(e => {
+                    console.error('Error resuming AudioContext after state change:', e);
+                });
+            }
+        });
+        
+        console.log('AudioContext initialized successfully');
+        return true;
+        
+    } catch (e) {
+        console.error('Failed to initialize AudioContext:', e);
+        
+        // Try to recover by creating a new context on error
+        if (elevenLabsAudioContext) {
+            try {
+                elevenLabsAudioContext.close();
+            } catch (closeError) {
+                console.warn('Error closing failed AudioContext:', closeError);
+            }
+            elevenLabsAudioContext = null;
+        }
+        
+        addMessage('system', 'Error: Could not initialize audio. Please refresh the page and try again.');
+        return false;
+    }
+}
+
+function isAudioDataValid(arrayBuffer) {
+    // Basic validation of the audio data
+    if (!arrayBuffer || arrayBuffer.byteLength < 44) { // WAV header is typically 44 bytes
+        console.warn('Audio chunk is too small or invalid');
+        return false;
+    }
+    
+    // You can add more specific validation here if needed
+    // For example, check for WAV/MP3 headers if you know the expected format
+    
+    return true;
+}
+
+async function enqueueElevenLabsAudioChunk(chunk, retryAttempt = 0) {
+    console.log(`Processing audio chunk: ${chunk?.byteLength || 0} bytes, retry: ${retryAttempt}`);
+    
+    // Validate the input
+    if (!chunk || !(chunk instanceof ArrayBuffer)) {
+        console.error('Invalid audio chunk: not an ArrayBuffer');
+        return;
+    }
+    
+    if (!elevenLabsAudioContext) {
+        console.log('Initializing AudioContext...');
+        initializeElevenLabsAudio();
+        if (!elevenLabsAudioContext) {
+            if (retryAttempt < MAX_RETRY_ATTEMPTS) {
+                const delay = 100 * (retryAttempt + 1);
+                console.log(`Retrying AudioContext initialization in ${delay}ms (attempt ${retryAttempt + 1}/${MAX_RETRY_ATTEMPTS})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return enqueueElevenLabsAudioChunk(chunk, retryAttempt + 1);
+            }
+            console.error('Max retry attempts reached for AudioContext initialization');
+            return;
+        }
+    }
+    
+    // Convert chunk to Uint8Array if it's an ArrayBuffer
+    const chunkData = new Uint8Array(chunk);
+    
+    // Combine with any buffered data
+    const combined = new Uint8Array(audioDataBuffer.length + chunkData.length);
+    combined.set(audioDataBuffer);
+    combined.set(chunkData, audioDataBuffer.length);
+    
+    try {
+        // Only try to decode if we have enough data
+        if (combined.length >= MIN_AUDIO_CHUNK_SIZE) {
+            console.log(`Decoding combined audio chunk (${combined.length} bytes total)`);
+            
+            const audioBuffer = await elevenLabsAudioContext.decodeAudioData(
+                combined.buffer.slice(0),
+                (buffer) => {
+                    console.log(`Successfully decoded audio buffer: ${buffer.duration.toFixed(2)}s, ${buffer.numberOfChannels} channels`);
+                    return buffer;
+                },
+                (error) => {
+                    console.error('Error in decodeAudioData callback:', error);
+                    throw error;
+                }
+            );
+            
+            if (!audioBuffer) {
+                throw new Error('Decoded audio buffer is null');
+            }
+            
+            console.log(`Adding audio buffer to queue: ${audioBuffer.duration.toFixed(2)}s`);
+            elevenLabsAudioQueue.push(audioBuffer);
+            audioDataBuffer = new Uint8Array(0); // Clear the buffer after successful decode
+            
+            if (!elevenLabsIsPlaying) {
+                console.log('Starting playback of audio queue');
+                playNextElevenLabsChunk();
+            } else {
+                console.log(`Audio is already playing, added to queue (${elevenLabsAudioQueue.length} items in queue)`);
+            }
+        } else {
+            // Not enough data yet, store for next time
+            console.log(`Buffering small chunk (${chunkData.length} bytes), total buffered: ${combined.length} bytes`);
+            audioDataBuffer = combined;
         }
     } catch (e) {
-        console.error('Error decoding audio data for ElevenLabs:', e);
-        // NOTE: We are not adding a system message here as per user request,
-        // because speech often still works despite these decoding errors.
-        // addMessage('system', 'Error: Could not decode TTS audio chunk.');
+        console.error('Error processing audio chunk:', e);
+        
+        if (retryAttempt < MAX_RETRY_ATTEMPTS) {
+            const delay = 100 * (retryAttempt + 1);
+            console.log(`Retrying audio chunk in ${delay}ms (attempt ${retryAttempt + 1}/${MAX_RETRY_ATTEMPTS})`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return enqueueElevenLabsAudioChunk(chunk, retryAttempt + 1);
+        }
+        
+        console.error('Max retry attempts reached for audio chunk, skipping...');
+        audioDataBuffer = new Uint8Array(0); // Clear buffer on final failure
     }
 }
 
 function actuallyPlayNextChunk() {
-    if (elevenLabsAudioQueue.length === 0 || !elevenLabsAudioContext) {
+    if (elevenLabsAudioQueue.length === 0) {
+        console.log('Audio queue is empty, stopping playback');
         elevenLabsIsPlaying = false;
         return;
     }
     
-    elevenLabsIsPlaying = true;
-    const audioBuffer = elevenLabsAudioQueue.shift();
+    if (!elevenLabsAudioContext) {
+        console.error('AudioContext not available for playback');
+        elevenLabsIsPlaying = false;
+        return;
+    }
     
-    elevenLabsCurrentSource = elevenLabsAudioContext.createBufferSource();
-    elevenLabsCurrentSource.buffer = audioBuffer;
-    elevenLabsCurrentSource.connect(elevenLabsAudioContext.destination);
-    elevenLabsCurrentSource.onended = () => {
-        console.log('ElevenLabs audio chunk finished playing.');
+    const audioBuffer = elevenLabsAudioQueue.shift();
+    if (!audioBuffer) {
+        console.error('No audio buffer available for playback');
+        return;
+    }
+    
+    try {
+        // Clean up any existing source
+        if (elevenLabsCurrentSource) {
+            try {
+                elevenLabsCurrentSource.stop();
+                elevenLabsCurrentSource.disconnect();
+            } catch (e) {
+                console.warn('Error cleaning up audio source:', e);
+            }
+        }
+        
+        // Create new audio source
+        elevenLabsCurrentSource = elevenLabsAudioContext.createBufferSource();
+        elevenLabsCurrentSource.buffer = audioBuffer;
+        
+        // Connect to destination through a gain node
+        const gainNode = elevenLabsAudioContext.createGain();
+        gainNode.gain.value = 1.0;
+        
+        elevenLabsCurrentSource.connect(gainNode);
+        gainNode.connect(elevenLabsAudioContext.destination);
+        
+        // Set up event handlers
+        elevenLabsCurrentSource.onended = () => {
+            gainNode.disconnect();
+            
+            if (elevenLabsAudioQueue.length > 0) {
+                playNextElevenLabsChunk();
+            } else {
+                elevenLabsIsPlaying = false;
+                elevenLabsCurrentSource = null;
+                
+                // Process any remaining buffered data
+                if (audioDataBuffer?.length > 0) {
+                    const bufferToPlay = audioDataBuffer;
+                    audioDataBuffer = new Uint8Array(0);
+                    enqueueElevenLabsAudioChunk(bufferToPlay);
+                }
+            }
+        };
+        
+        // Start playback
+        elevenLabsCurrentSource.start();
+        elevenLabsIsPlaying = true;
+        
+    } catch (e) {
+        console.error('Error during audio playback:', e);
+        
+        // Clean up on error
+        if (elevenLabsCurrentSource) {
+            try {
+                elevenLabsCurrentSource.stop();
+                elevenLabsCurrentSource.disconnect();
+            } catch (err) {
+                console.warn('Error cleaning up after playback error:', err);
+            }
+            elevenLabsCurrentSource = null;
+        }
+        
+        // Try to continue with next chunk if available
         if (elevenLabsAudioQueue.length > 0) {
-            playNextElevenLabsChunk(); // Intentionally call the wrapper to handle resume logic if needed again
+            console.log('Attempting to play next chunk after error');
+            setTimeout(() => playNextElevenLabsChunk(), 100);
         } else {
             elevenLabsIsPlaying = false;
-            console.log('ElevenLabs TTS queue finished.');
         }
-    };
-    try {
-      elevenLabsCurrentSource.start();
-      console.log('Playing next ElevenLabs audio chunk.');
-    } catch (e) {
-      console.error('Error starting audio source for ElevenLabs:', e);
-      elevenLabsIsPlaying = false;
-      // Attempt to play the next one if there was an error with this one
-      if (elevenLabsAudioQueue.length > 0) playNextElevenLabsChunk();
     }
 }
 
 function playNextElevenLabsChunk() {
     if (elevenLabsAudioQueue.length === 0) {
         elevenLabsIsPlaying = false;
-        console.log('ElevenLabs TTS queue finished.');
         return;
     }
 
+    // Ensure we have a valid audio context
     if (!elevenLabsAudioContext) {
-        console.error('ElevenLabs AudioContext not initialized. Cannot play audio.');
-        initializeElevenLabsAudio(); // Try to initialize it
+        console.log('Initializing new AudioContext...');
+        initializeElevenLabsAudio();
+        
         if (!elevenLabsAudioContext) {
+            console.error('Failed to initialize AudioContext');
             elevenLabsIsPlaying = false;
             return;
         }
     }
     
+    // Handle suspended state
     if (elevenLabsAudioContext.state === 'suspended') {
-        elevenLabsAudioContext.resume().then(() => {
-            console.log('AudioContext resumed by playNextElevenLabsChunk.');
-            actuallyPlayNextChunk();
-        }).catch(e => {
-            console.error('Error resuming AudioContext:', e);
-            addMessage('system', 'Error: Could not resume audio playback. Please interact with the page and try again.');
-            elevenLabsIsPlaying = false;
-        });
+        elevenLabsAudioContext.resume()
+            .then(() => {
+                // Small delay to ensure the context is fully ready
+                setTimeout(() => actuallyPlayNextChunk(), 50);
+            })
+            .catch((error) => {
+                console.error('Failed to resume AudioContext:', error);
+                if (userInteracted) {
+                    addMessage('system', 'Error: Could not resume audio playback. Please try again.');
+                }
+                elevenLabsIsPlaying = false;
+            });
     } else {
         actuallyPlayNextChunk();
     }
 }
 
-async function stopElevenLabsPlaybackAndStream() {
-    console.log('Interrupting ElevenLabs TTS playback and stream.');
-
-    // Stop local audio playback
-    if (elevenLabsCurrentSource) {
-        try {
-            elevenLabsCurrentSource.stop();
-        } catch (e) {
-            console.warn("Error stopping current ElevenLabs source during interrupt:", e);
-        }
-        elevenLabsCurrentSource = null;
-    }
-    elevenLabsAudioQueue = [];
-    elevenLabsIsPlaying = false;
-
-    // Abort the fetch request
-    if (elevenLabsFetchController) {
-        elevenLabsFetchController.abort();
-        // Controller reset is handled in playElevenLabsTTS finally or at new request
-    }
-    // The reader will be cancelled by the fetch abort.
-    elevenLabsStreamReader = null; // Clear the reference
-
-    if (interruptTTSButton) {
-        interruptTTSButton.style.display = 'none';
-    }
-}
+// ...
 
 async function playElevenLabsTTS(text) {
-    console.log('playElevenLabsTTS called with text:', text);
-    if (!text || (typeof text === 'string' && text.trim() === '')) {
-        console.log('No valid text provided for ElevenLabs TTS.');
-        return;
-    }
-    
-    // Ensure text is a string
-    const ttsText = typeof text === 'string' ? text : '';
-    if (ttsText === '') {
-        console.error('Invalid text for TTS:', text);
-        return;
-    }
-    
-    // Update UI to show processing state
-    const sendButton = document.getElementById('send-button');
-    if (sendButton) {
-        sendButton.disabled = true;
-        sendButton.innerHTML = '<span class="spinner"></span> Processing...';
-    }
+    // ...
 
-    // If already playing or streaming, interrupt the previous one
-    if (elevenLabsIsPlaying || elevenLabsStreamReader || elevenLabsFetchController) {
-        console.log('Previous TTS active, interrupting it before starting new TTS.');
-        await stopElevenLabsPlaybackAndStream(); 
-    }
-    
-    // Reset send button state in case of previous errors
-    const sendButtonEl = document.getElementById('send-button');
-    if (sendButtonEl) {
-        sendButtonEl.disabled = false;
-        sendButtonEl.textContent = 'Send';
-    }
-
-    initializeElevenLabsAudio();
-
-    if (!elevenLabsAudioContext) {
-        console.warn('AudioContext for ElevenLabs not available. TTS playback aborted.');
-        return;
-    }
-
-    if (elevenLabsAudioContext.state === 'suspended') {
-        try {
-            await elevenLabsAudioContext.resume();
-            console.log('AudioContext resumed by playElevenLabsTTS.');
-        } catch (e) {
-            console.error('Could not resume AudioContext on demand:', e);
-            addMessage('system', 'Audio is paused. Click the page to enable sound for TTS, then try again.');
-            return;
-        }
-    }
-    
     // Reset audio queue and playing state for the new stream
     elevenLabsAudioQueue = [];
     elevenLabsIsPlaying = false; // Will be set to true by playNextElevenLabsChunk when first chunk plays
@@ -1262,8 +1458,7 @@ async function playElevenLabsTTS(text) {
         elevenLabsCurrentSource = null;
     }
 
-    console.log(`Requesting ElevenLabs TTS for: "${text.substring(0, 50)}..."`);
-
+    // Reset the abort controller for this request
     elevenLabsFetchController = new AbortController(); // Create a new controller for this request
 
     try {
@@ -1290,28 +1485,19 @@ async function playElevenLabsTTS(text) {
             }
             elevenLabsStreamReader = response.body.getReader();
             
-            // eslint-disable-next-line no-constant-condition
+            // Process the stream
             while (true) {
-                if (!elevenLabsStreamReader) { 
-                    console.log('Stream reader became null (e.g. interrupted), exiting read loop.');
-                    break;
-                }
                 const { done, value } = await elevenLabsStreamReader.read();
-                if (done) {
-                    console.log('ElevenLabs TTS stream finished naturally.');
-                    break;
-                }
-                if (elevenLabsFetchController && elevenLabsFetchController.signal.aborted) {
-                    console.log('Stream processing aborted during read loop.');
-                    break;
-                }
+                
+                if (done) break;
+                if (elevenLabsFetchController?.signal.aborted) break;
+                
                 await enqueueElevenLabsAudioChunk(value.buffer);
             }
         }
 
     } catch (error) {
         console.error('Error with ElevenLabs TTS:', error);
-        // Add error to system errors instead of showing as a system message
         if (subsystemMessages.systemError) {
             subsystemMessages.systemError.push({
                 content: `TTS Error: ${error.message}`,
@@ -1323,36 +1509,25 @@ async function playElevenLabsTTS(text) {
         elevenLabsFetchController = null;
         elevenLabsStreamReader = null;
     } finally {
-        console.log('TTS finally block executing.');
-        const wasAbortedByController = elevenLabsFetchController && elevenLabsFetchController.signal.aborted;
+        const wasAborted = elevenLabsFetchController?.signal.aborted;
 
-        if (elevenLabsStreamReader) {
+        if (elevenLabsStreamReader?.cancel) {
             try {
-                if (typeof elevenLabsStreamReader.cancel === 'function') {
-                    await elevenLabsStreamReader.cancel('Stream finished, errored, or aborted.');
-                }
+                await elevenLabsStreamReader.cancel('Stream finished, errored, or aborted.');
             } catch (e) {
-                console.warn('Warning: Error cancelling stream reader in finally block:', e);
+                console.warn('Error cancelling stream reader:', e);
             }
             elevenLabsStreamReader = null;
         }
         
-        if (!wasAbortedByController) { // If not aborted by our explicit interrupt call
-            if (interruptTTSButton) {
-                interruptTTSButton.style.display = 'none';
-            }
+        if (!wasAborted && interruptTTSButton) {
+            interruptTTSButton.style.display = 'none';
         }
-        // Always nullify the controller for the completed/aborted request
+        
         elevenLabsFetchController = null;
-
-        // If playback was ongoing and not part of an explicit abort action that already reset this
-        if (elevenLabsIsPlaying && !wasAbortedByController) {
+        
+        if (elevenLabsIsPlaying && !wasAborted) {
             elevenLabsIsPlaying = false;
-        }
-        // Clear queue if stream ended naturally/errored and not part of an explicit abort
-        if (elevenLabsAudioQueue.length > 0 && !wasAbortedByController) {
-             console.log("Clearing audio queue as TTS stream ended naturally or with non-abort error.");
-             elevenLabsAudioQueue = [];
         }
     }
 }
@@ -1414,6 +1589,22 @@ function updateCanvas(canvasData) {
 }
 
 // --- ElevenLabs TTS Functions End ---
+
+// Add user interaction handler to ensure AudioContext is properly resumed
+document.addEventListener('click', () => {
+    userInteracted = true;
+    if (elevenLabsAudioContext && elevenLabsAudioContext.state === 'suspended') {
+        elevenLabsAudioContext.resume().then(() => {
+            console.log('AudioContext resumed after user interaction');
+            // If we were trying to play something, retry now
+            if (elevenLabsAudioQueue.length > 0 && !elevenLabsIsPlaying) {
+                playNextElevenLabsChunk();
+            }
+        }).catch(e => {
+            console.error('Error resuming AudioContext after user interaction:', e);
+        });
+    }
+}, { once: false });
 
 document.addEventListener('DOMContentLoaded', () => {
     // Assign critical UI elements first
