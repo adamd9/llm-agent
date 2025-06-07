@@ -286,6 +286,15 @@ class Ego {
             return await this.executeWithEvaluation(enrichedMessage, sessionHistory, attempt + 1);
         }
 
+        // Emit finalizing status message before preparing the final response
+        await sharedEventEmitter.emit('systemStatusMessage', {
+            message: 'finalizing',
+            persistent: false
+        });
+
+        // Small delay to ensure the message is sent before the response
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         // Return final result
         let finalResponse;
         if (Array.isArray(executionResult.response)) {

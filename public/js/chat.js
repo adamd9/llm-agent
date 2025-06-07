@@ -434,13 +434,27 @@ function clearStatus() {
     }
 }
 
+function formatMessage(message, format = 'basic') {
+    if (format === 'markdown') {
+        // Simple markdown formatting - just convert newlines to <br> for now
+        return message.replace(/\n/g, '<br>');
+    }
+    // Default formatting - escape HTML and preserve newlines
+    return message
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>');
+}
+
 function humanizeStatusMessage(message) {
     const messageMap = {
         'Starting to work on your request...': '💭 Thinking...',
         'Starting execution of the plan...': '🔧 Working on it...',
         'Executing the plan...': '🚀 Almost there...',
         'query': '📨 Querying model...',
-        'evalForUpdate': 'Evaluating results...'           
+        'evalForUpdate': 'Evaluating results...',
+        'finalizing': '✨ Finalizing response...'
     };
 
     if (messageMap[message]) {
@@ -454,7 +468,36 @@ function humanizeStatusMessage(message) {
     return message;
 }
 
-function addMessage(type, content, format = 'basic') {
+// Add a working message for the final response state
+function showFinalizingMessage() {
+    // Check if we already have a finalizing message
+    const existingFinalizing = document.querySelector('.message.working[data-type="finalizing"]');
+    if (existingFinalizing) {
+        return existingFinalizing;
+    }
+    
+    const workingMessage = {
+        type: 'system',
+        content: 'finalizing',
+        format: 'working',
+        timestamp: new Date().toISOString(),
+        dataType: 'finalizing'  // Add data attribute to identify this message
+    };
+    
+    // Add the message and get the message element
+    const messageId = 'msg-' + Date.now();
+    addMessage(workingMessage.type, workingMessage.content, workingMessage.format, messageId);
+    
+    // Add data attribute to identify this message
+    const messageElement = document.getElementById(messageId);
+    if (messageElement) {
+        messageElement.setAttribute('data-type', 'finalizing');
+    }
+    
+    return messageElement || workingMessage;
+}
+
+function addMessage(type, content, format = 'basic', messageId = null) {
     console.log('Adding message:', { type, content });
     
     // Handle object content (e.g., from WebSocket)
@@ -519,14 +562,29 @@ function addMessage(type, content, format = 'basic') {
     if (!messagesDiv) return;
     
     const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${type}`;
+    messageDiv.className = `message ${type} ${format}`;
     
-    // Format the message content
-    const formattedContent = format === 'markdown' 
-        ? messageContent.replace(/\n/g, '<br>') 
-        : messageContent.replace(/\n/g, '<br>');
+    // Add message ID if provided
+    if (messageId) {
+        messageDiv.id = messageId;
+    }
     
-    messageDiv.innerHTML = formattedContent;
+    // Format the message based on the format type
+    if (format === 'working') {
+        messageDiv.innerHTML = `
+            <div class="typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <div class="message-content">${humanizeStatusMessage(messageContent)}</div>
+        `;
+    } else {
+        messageDiv.innerHTML = `
+            <div class="message-content">${formatMessage(messageContent, format)}</div>
+        `;
+    }
+    
     messagesDiv.appendChild(messageDiv);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
     
@@ -596,6 +654,24 @@ function connect() {
         
         switch(data.type) {
             case 'response':
+                // Clear any pending finalizing message
+                const finalizingMessage = document.querySelector('.message.working[data-type="finalizing"]');
+                if (finalizingMessage) {
+                    // Fade out the finalizing message
+                    finalizingMessage.style.opacity = '0.5';
+                    setTimeout(() => {
+                        if (finalizingMessage && finalizingMessage.parentNode) {
+                            finalizingMessage.remove();
+                        }
+                    }, 300);
+                }
+                
+                // Clear any pending finalizing timeout
+                if (window.finalizingTimeout) {
+                    clearTimeout(window.finalizingTimeout);
+                    window.finalizingTimeout = null;
+                }
+                
                 // Handle the response which may be nested in a response property
                 let responseData = data.data;
                 let responseText = '';
@@ -670,6 +746,22 @@ function connect() {
             case 'working':
                 console.log('Working status update:', data.data.status);
                 showStatus(data.data.status);
+                
+                // If this is the last working message before the final response,
+                // show a finalizing message
+                if (data.data.status === 'evalForUpdate') {
+                    // Set a timeout to show the finalizing message if the response doesn't come soon
+                    if (window.finalizingTimeout) {
+                        clearTimeout(window.finalizingTimeout);
+                    }
+                    window.finalizingTimeout = setTimeout(() => {
+                        // Only show if we haven't received a response yet
+                        if (!document.querySelector('.message.assistant:last-child') || 
+                            document.querySelector('.message.assistant:last-child').textContent.trim() === '') {
+                            showFinalizingMessage();
+                        }
+                    }, 2000); // Show after 2 seconds if no response
+                }
                 break;
                 
             case 'subsystem':
