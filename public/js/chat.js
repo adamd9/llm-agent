@@ -1781,9 +1781,138 @@ async function playElevenLabsTTS(text) {
 // --- Canvas Functions ---
 
 /**
+ * Simple markdown to HTML converter
+ * @param {string} text - Markdown text to convert
+ * @returns {string} HTML string
+ */
+function simpleMarkdownToHtml(text) {
+    if (!text) return '';
+    
+    // Escape HTML to prevent XSS
+    const escapeHtml = (unsafe) => {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    };
+    
+    // Split into lines and process each line
+    const lines = text.split('\n');
+    let inList = false;
+    let inParagraph = false;
+    let result = [];
+    
+    const closeParagraph = () => {
+        if (inParagraph) {
+            result.push('</p>');
+            inParagraph = false;
+        }
+    };
+    
+    const closeList = () => {
+        if (inList) {
+            result.push('</ul>');
+            inList = false;
+        }
+    };
+    
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].trim();
+        
+        // Skip empty lines
+        if (!line) {
+            closeParagraph();
+            closeList();
+            continue;
+        }
+        
+        // Handle headers
+        if (line.startsWith('### ')) {
+            closeParagraph();
+            closeList();
+            result.push(`<h3>${escapeHtml(line.substring(4))}</h3>`);
+            continue;
+        } else if (line.startsWith('## ')) {
+            closeParagraph();
+            closeList();
+            result.push(`<h2>${escapeHtml(line.substring(3))}</h2>`);
+            continue;
+        } else if (line.startsWith('# ')) {
+            closeParagraph();
+            closeList();
+            result.push(`<h1>${escapeHtml(line.substring(2))}</h1>`);
+            continue;
+        }
+        
+        // Handle lists
+        if (/^[-*+]\s+/.test(line)) {
+            closeParagraph();
+            if (!inList) {
+                result.push('<ul>');
+                inList = true;
+            }
+            line = line.replace(/^[-*+]\s+/, '');
+            result.push(`<li>${processInlineMarkdown(line)}</li>`);
+            continue;
+        }
+        
+        // If we get here, it's a regular paragraph line
+        closeList();
+        
+        // Start a new paragraph if needed
+        if (!inParagraph) {
+            result.push('<p>');
+            inParagraph = true;
+        } else {
+            // Add a space between lines in the same paragraph
+            result.push(' ');
+        }
+        
+        // Process inline markdown (bold, italic, links)
+        result.push(processInlineMarkdown(line));
+    }
+    
+    // Close any open tags
+    closeParagraph();
+    closeList();
+    
+    return result.join('');
+}
+
+/**
+ * Process inline markdown (bold, italic, links) in a line
+ * @param {string} line - The line to process
+ * @returns {string} Processed HTML
+ */
+function processInlineMarkdown(line) {
+    // Escape HTML first
+    let result = line
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    
+    // Process links
+    result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, 
+        '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    
+    // Process bold and italic
+    result = result
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+        .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+        .replace(/_([^_]+)_/g, '<em>$1</em>');
+    
+    return result;
+}
+
+/**
  * Updates the canvas with the provided content
  * @param {Object} canvasData - The canvas data to display
- * @param {string} canvasData.type - The type of content ('html' or 'text')
+ * @param {string} canvasData.type - The type of content ('html', 'markdown', or 'text')
  * @param {string} canvasData.content - The content to display
  */
 function updateCanvas(canvasData) {
@@ -1819,14 +1948,90 @@ function updateCanvas(canvasData) {
     
     console.log('Setting canvas content, type:', canvasData.type);
     
-    // Handle different content types
-    if (canvasData.type === 'html') {
-        canvasContent.innerHTML = canvasData.content;
-    } else {
-        // Default to text if type is not specified or unsupported
+    try {
+        // Handle different content types
+        if (canvasData.type === 'html') {
+            canvasContent.innerHTML = canvasData.content;
+        } else if (canvasData.type === 'markdown' || canvasData.type === 'text') {
+            // For text or markdown, apply simple markdown parsing
+            const content = canvasData.content;
+            const isLikelyMarkdown = 
+                content.includes('## ') || // Headers
+                content.includes('**') ||  // Bold
+                content.includes('*') ||   // Italic or lists
+                content.includes('__') ||  // Bold/italic
+                content.match(/\[.*?\]\(.*?\)/); // Links
+                
+            if (canvasData.type === 'markdown' || isLikelyMarkdown) {
+                // Apply simple markdown to HTML conversion
+                canvasContent.innerHTML = `<div class="markdown-content">${simpleMarkdownToHtml(content)}</div>`;
+                
+                // Add some basic styling
+                const style = document.createElement('style');
+                style.textContent = `
+                    .markdown-content { line-height: 1.6; }
+                    .markdown-content h1 { 
+                        font-size: 1.8em; 
+                        border-bottom: 1px solid #eaecef; 
+                        padding-bottom: 0.3em;
+                        margin: 1em 0 0.5em 0;
+                    }
+                    .markdown-content h2 { 
+                        font-size: 1.5em;
+                        border-bottom: 1px solid #eaecef;
+                        padding-bottom: 0.3em;
+                        margin: 1em 0 0.5em 0;
+                    }
+                    .markdown-content h3 { 
+                        font-size: 1.25em;
+                        margin: 1em 0 0.5em 0;
+                    }
+                    .markdown-content p { 
+                        margin: 0 0 1em 0;
+                    }
+                    .markdown-content ul, 
+                    .markdown-content ol { 
+                        padding-left: 2em; 
+                        margin: 0 0 1em 0; 
+                    }
+                    .markdown-content li { 
+                        margin: 0.25em 0; 
+                    }
+                    .markdown-content a { 
+                        color: #0366d6;
+                        text-decoration: none;
+                    }
+                    .markdown-content a:hover { 
+                        text-decoration: underline;
+                    }
+                    .markdown-content strong { 
+                        font-weight: 600;
+                    }
+                    .markdown-content em { 
+                        font-style: italic;
+                    }
+                `;
+                document.head.appendChild(style);
+            } else {
+                // Plain text
+                const pre = document.createElement('pre');
+                pre.style.whiteSpace = 'pre-wrap';
+                pre.textContent = content;
+                canvasContent.appendChild(pre);
+            }
+        } else {
+            // Default to text if type is not specified or unsupported
+            const pre = document.createElement('pre');
+            pre.style.whiteSpace = 'pre-wrap';
+            pre.textContent = canvasData.content;
+            canvasContent.appendChild(pre);
+        }
+    } catch (error) {
+        console.error('Error rendering canvas content:', error);
+        // Fallback to plain text display on error
         const pre = document.createElement('pre');
         pre.style.whiteSpace = 'pre-wrap';
-        pre.textContent = canvasData.content;
+        pre.textContent = `Error: ${error.message}\n\n${canvasData.content}`;
         canvasContent.appendChild(pre);
     }
     
