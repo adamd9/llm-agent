@@ -57,8 +57,14 @@
                 <div id="input-container">
                     <div class="input-row">
                         <input type="text" id="chatInput" placeholder="Type your message or use voice..." disabled>
-                        <button id="send-button" disabled>Send</button>
-                        <button id="interrupt-tts-button" style="display:none; margin-left: 10px;">Interrupt TTS</button>
+                        <div class="button-group">
+                            <button id="send-button" disabled>Send</button>
+                            <button id="interrupt-button" class="interrupt-button" disabled>
+                                <span class="interrupt-icon">⏹️</span>
+                                <span class="interrupt-text">Interrupt</span>
+                            </button>
+                        </div>
+                        <button id="interrupt-tts-button" style="display:none;">Interrupt TTS</button>
                     </div>
                 </div>
             </div>

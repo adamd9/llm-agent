@@ -10,12 +10,15 @@ let subsystemMessages = {
     systemError: []
 };
 let connectionError = false; // Track connection error state
+let interruptButton = null; // Reference to the interrupt button
+let pendingUserAction = false; // Track if we're waiting for user action on interrupt
 
 // STT Variables
 let isRecording = false;
 let sttWs; // WebSocket for AssemblyAI STT
 let microphone;
-let isAutoSendEnabled = true; // Default to auto-send
+// Load auto-send preference from localStorage or default to true
+let isAutoSendEnabled = localStorage.getItem('autoSendEnabled') !== 'false'; // Default to true if not set
 let hasSentFinalForCurrentUtterance = false;
 let inputFieldJustClearedBySend = false; // Flag to prevent repopulation after send
 
@@ -416,22 +419,72 @@ function showStatus(message, options = {}) {
 function clearStatus() {
     console.log('[clearStatus] isProcessing before:', isProcessing);
     isProcessing = false; // Agent is no longer busy
+    pendingUserAction = false; // Reset pending user action flag
     console.log('[clearStatus] isProcessing set to false.');
     
-    // Clear non-persistent status messages
-    const systemMessagesContainer = document.getElementById('system-messages-container');
-    if (systemMessagesContainer) {
-        const nonPersistentMessages = systemMessagesContainer.querySelectorAll('.status-message:not(.persistent)');
-        nonPersistentMessages.forEach(msg => {
-            msg.style.opacity = '0';
-            setTimeout(() => msg.remove(), 300);
-        });
-    }
+    // Update UI based on processing state
+    updateProcessingUI();
     
-    if (!currentMessagePersistent) {
-        currentResult = null;
+    // Clear any system messages after a delay
+    if (systemMessageDiv) {
+        setTimeout(() => {
+            if (systemMessageDiv) {
+                systemMessageDiv.remove();
+                systemMessageDiv = null;
+            }
+        }, 3000);
         systemMessageDiv = null;
     }
+}
+
+// Update UI based on processing and TTS states
+function updateProcessingUI() {
+    // Enable/disable interrupt button based on processing or TTS state
+    const shouldShowInterrupt = isProcessing || elevenLabsIsPlaying;
+    
+    if (interruptButton) {
+        interruptButton.disabled = !shouldShowInterrupt;
+        interruptButton.style.display = shouldShowInterrupt ? 'flex' : 'none';
+    }
+    
+    // Update send button state
+    if (sendButton) {
+        sendButton.disabled = isProcessing;
+        sendButton.innerHTML = isProcessing ? '<span class="spinner"></span> Sending...' : 'Send';
+    }
+    
+    // Update input field state
+    if (chatInputField) {
+        chatInputField.disabled = isProcessing;
+    }
+}
+
+// Handle interrupt button click
+function handleInterrupt() {
+    if (elevenLabsIsPlaying) {
+        // Stop TTS playback if it's playing
+        stopElevenLabsPlaybackAndStream();
+    }
+    
+    if (isProcessing) {
+        // If we were waiting for user action, clear the pending state
+        if (pendingUserAction) {
+            pendingUserAction = false;
+            clearStatus();
+            
+            // If there's text in the input, send it
+            if (chatInputField && chatInputField.value.trim().length > 0) {
+                sendMessage();
+            }
+        } else {
+            // Otherwise, just clear the processing state
+            isProcessing = false;
+            updateProcessingUI();
+        }
+    }
+    
+    // Notify the user
+    addMessage('system', 'Operation interrupted by user.');
 }
 
 function formatMessage(message, format = 'basic') {
@@ -907,13 +960,20 @@ function sendMessage() {
     const message = chatInputField.value.trim();
     
     if (message && ws.readyState === WebSocket.OPEN) {
+        // Reset utterance tracking state before sending
+        hasSentFinalForCurrentUtterance = true; // Mark current utterance as sent
+        inputFieldJustClearedBySend = true; // Indicate input was just cleared by a send operation
+        
+        // Send the message
         ws.send(JSON.stringify({
             message: message
         }));
         
+        // Update UI and clear input
         addMessage('user', message);
         if (chatInputField) chatInputField.value = ''; // Clear the global chatInputField
-        inputFieldJustClearedBySend = true; // Indicate input was just cleared by a send operation
+        
+        console.log('Message sent, reset utterance tracking state');
     }
 }
 
@@ -1110,64 +1170,66 @@ async function toggleVoiceSTT() {
                 // This is the first final of an utterance, and auto-send is on.
                 console.log('[toggleVoiceSTT - end_of_turn] Checking isProcessing. Value:', isProcessing, 'Transcript:', orderedTurnsText);
                 if (isProcessing) {
-                    if (window.confirm("The agent is still processing the previous request. Send new query anyway?")) {
-                        sendMessage(); // Sets inputFieldJustClearedBySend = true
-                        hasSentFinalForCurrentUtterance = true;
-                        if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
-                    } else {
-                        // User cancelled. Keep text in input, allow manual send.
-                        if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Final. Review & Send.';
-                        // Do not set hasSentFinalForCurrentUtterance to true, so it can be sent again if needed.
-                        // Do not set inputFieldJustClearedBySend, so input remains populated.
+                    // Show the interrupt button and update UI
+                    pendingUserAction = true;
+                    updateProcessingUI();
+                    
+                    // Update status to inform user they can interrupt
+                    if (voiceStatusIndicator) {
+                        voiceStatusIndicator.textContent = 'Agent busy. Click Interrupt to send new query.';
                     }
+                    // We don't send automatically anymore, user must click interrupt
+                    // The interrupt handler will call sendMessage() if needed
                 } else {
-                    sendMessage(); // Sets inputFieldJustClearedBySend = true
+                    // Not processing, safe to send
+                    sendMessage();
                     hasSentFinalForCurrentUtterance = true;
-                    if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
+                    if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
                 }
-                // inputFieldJustClearedBySend remains true to guard against its own formatted final if message was sent.
-            } else {
-                // This 'else' covers:
-                // 1. Formatted final of an auto-sent utterance (hasSentFinalForCurrentUtterance=true).
-                // 2. Manual send mode (isAutoSendEnabled=false).
-                // 3. End of a new utterance that wasn't the *first* final to be auto-sent.
-                // 4. Empty transcript end_of_turn.
-
-                if (isAutoSendEnabled && hasSentFinalForCurrentUtterance && inputFieldJustClearedBySend) {
-                    // Case 1: This is the formatted final of the utterance that was JUST auto-sent.
-                    // inputFieldJustClearedBySend was true from sendMessage(). Keep it true to prevent repopulation.
-                    // Status should remain 'Sent. Listening...' from the initial send.
-                    console.log("Formatted final arrived while inputFieldJustClearedBySend is true. Status remains 'Sent. Listening...'.");
-                } else {
-                    // All other end_of_turn scenarios: allow input field to update if needed.
-                    inputFieldJustClearedBySend = false;
-
-                    if (!isAutoSendEnabled && orderedTurnsText.trim().length > 0) { // Manual send mode with text
-                        if (chatInputField) chatInputField.value = orderedTurnsText;
-                        if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Final. Review & Send.';
-                    } else if (orderedTurnsText.trim().length > 0) { // Some text, not manual, not the first auto-send (e.g. final of new utterance, or formatted final when input wasn't just cleared)
-                        if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Transcript refined. Listening...';
-                    } else { // Empty transcript
-                        if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Listening...';
-                    }
+            } else if (!hasSentFinalForCurrentUtterance) {
+                // Handle the case when auto-send is off or it's a subsequent final
+                if (isAutoSendEnabled) {
+                    // Auto-send is on, send the message
+                    sendMessage();
+                    hasSentFinalForCurrentUtterance = true;
+                    if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
+                } else if (orderedTurnsText.trim().length > 0) {
+                    // Auto-send is off, just update the UI to show the message is ready to send
+                    if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Ready to send. Click Send or press Enter.';
+                    // Don't set hasSentFinalForCurrentUtterance to true so the user can send it manually
                 }
             }
-        } else { // Partial transcript
+            // inputFieldJustClearedBySend remains true to guard against its own formatted final if message was sent.
+        } else {
+            // This 'else' covers all non-end_of_turn messages (partial transcripts, etc.)
+            
+            // Check if this is the start of a new utterance (no turns recorded yet or previous turn was finalized)
+            const isNewUtterance = Object.keys(turns).length === 0 || hasSentFinalForCurrentUtterance;
+            
+            // If this is a new utterance, reset the flag
+            if (isNewUtterance) {
+                hasSentFinalForCurrentUtterance = false;
+                console.log('Detected start of new utterance, resetting hasSentFinalForCurrentUtterance');
+            }
+            
             // If input was just cleared by send, AND this new partial has text,
-            // AND a final has NOT yet been sent for the current logical utterance (meaning this is continued speech for the current utterance, not refinement of a sent one)
+            // AND a final has NOT yet been sent for the current logical utterance
             if (inputFieldJustClearedBySend && orderedTurnsText.trim().length > 0 && !hasSentFinalForCurrentUtterance) {
-                inputFieldJustClearedBySend = false; // Allow this new partial (continued speech) to update the input.
-                // The input field will then be updated by the general `if (!inputFieldJustClearedBySend)` block.
+                inputFieldJustClearedBySend = false; // Allow this new partial to update the input
             }
             
             // Update status indicator based on whether a final has been sent for the current logical utterance
             if (hasSentFinalForCurrentUtterance) {
-                 // This partial is part of a formatted final or refinement after sending.
-                 // The input field should remain cleared if inputFieldJustClearedBySend is true (set by sendMessage).
-                if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Refining...';
+                // This partial is part of a formatted final or refinement after sending.
+                if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Refining...';
             } else {
                 // This is a partial for an ongoing, unsent utterance.
-                if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Listening...';
+                if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Listening...';
+            }
+            
+            // Update input field with current transcript if not just cleared by send
+            if (!inputFieldJustClearedBySend && chatInputField) {
+                chatInputField.value = orderedTurnsText;
             }
         }
       } else if (msg.type === 'Error') {
@@ -1744,7 +1806,15 @@ document.addEventListener('DOMContentLoaded', () => {
     voiceInputToggleBtn = document.getElementById('voiceInputToggle');
     autoSendToggleCheckbox = document.getElementById('autoSendToggle');
     voiceStatusIndicator = document.getElementById('voiceStatusIndicator');
-    interruptTTSButton = document.getElementById('interrupt-tts-button'); // Assign interrupt button
+    interruptTTSButton = document.getElementById('interrupt-tts-button'); // Assign TTS interrupt button
+    interruptButton = document.getElementById('interrupt-button'); // Assign general interrupt button
+    
+    // Set up interrupt button click handler
+    if (interruptButton) {
+        interruptButton.addEventListener('click', handleInterrupt);
+    } else {
+        console.warn('Interrupt button not found in the DOM.');
+    }
 
     connect(); // Establishes WebSocket and might enable/disable inputs in ws.onopen
 
@@ -1780,20 +1850,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Initialize Auto-send toggle button
-    const autoSendToggle = document.getElementById('autoSendToggle');
+    autoSendToggle = document.getElementById('autoSendToggle');
     if (autoSendToggle) {
-        // Load saved auto-send preference from localStorage, default to true (enabled)
-        isAutoSendEnabled = localStorage.getItem('autoSendEnabled') !== 'false';
+        // Initialize the UI based on the current state
         updateAutoSendToggleUI(autoSendToggle, isAutoSendEnabled);
         
+        // Add click event listener
         autoSendToggle.addEventListener('click', () => {
+            // Toggle the state
             isAutoSendEnabled = !isAutoSendEnabled;
+            // Save to localStorage
             localStorage.setItem('autoSendEnabled', isAutoSendEnabled);
+            // Update the UI
             updateAutoSendToggleUI(autoSendToggle, isAutoSendEnabled);
             
-            // Show feedback to the user
+            // Provide feedback to the user
             const status = isAutoSendEnabled ? 'enabled' : 'disabled';
-            addMessage('system', `Auto-send on speech end has been ${status}.`);
+            addMessage('system', `Auto-send ${status}. ${isAutoSendEnabled ? 'Messages will be sent automatically.' : 'Click Send or press Enter to send messages.'}`);
         });
     } else {
         console.warn('Auto-send toggle button not found in the DOM.');
