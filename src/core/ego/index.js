@@ -350,31 +350,53 @@ class Ego {
             const openai = getOpenAIClient();
             const response = await openai.chat(messages);
             
-            // Extract only the actual response content, removing any reflection prompts
-            // that might have been included in the response
-            let assistantMessage = response.content;
-            
-            // Check if the response contains the reflection prompt markers and remove them
-            const reflectionPromptIndex = assistantMessage.indexOf('\n\nProvide a thoughtful reflection');
-            if (reflectionPromptIndex > -1) {
-                assistantMessage = assistantMessage.substring(0, reflectionPromptIndex);
-            }
-            
-            // Store the cleaned response in short-term memory
-            await memory.storeShortTerm('Response to user', assistantMessage);
+            // Try to parse the response as JSON with chat and canvas content
+            let responseData = { 
+                chat: '',
+                canvas: null 
+            };
 
-            // Prepare the response data with the assistant's message
-            let responseData = { chat: assistantMessage };
-            
-            // Check if this is a tool response that should be formatted for the canvas
+            try {
+                // First try to parse as JSON
+                const parsedResponse = JSON.parse(response.content);
+                
+                if (parsedResponse.chat && parsedResponse.canvas) {
+                    // We got a properly formatted response with chat and canvas
+                    responseData.chat = parsedResponse.chat;
+                    responseData.canvas = parsedResponse.canvas;
+                    logger.debug('handleBubble', 'Parsed response with chat and canvas', { 
+                        chatLength: responseData.chat.length,
+                        hasCanvas: !!responseData.canvas
+                    });
+                } else {
+                    // Fallback to using the entire response as chat
+                    responseData.chat = response.content;
+                    logger.debug('handleBubble', 'Response is not in expected format, using as chat', {
+                        content: response.content
+                    });
+                }
+            } catch (e) {
+                // If not JSON, use the entire response as chat
+                responseData.chat = response.content;
+                logger.debug('handleBubble', 'Response is not JSON, using as chat', {
+                    content: response.content
+                });
+            }
+
+            // Store the chat response in short-term memory
+            await memory.storeShortTerm('Response to user', responseData.chat);
+
+            // Process tool responses if this is a tool result
             if (result.type === 'success' && result.content) {
                 try {
                     // Try to parse the content as JSON
                     let toolResponse;
                     try {
                         toolResponse = typeof result.content === 'string' ? JSON.parse(result.content) : result.content;
+                        logger.debug('handleBubble', 'Parsed tool response', { toolResponse });
                     } catch (e) {
                         // If it's not JSON, use it as-is
+                        logger.debug('handleBubble', 'Content is not JSON, using as-is');
                         toolResponse = { status: 'success', data: { result: result.content } };
                     }
                     
@@ -384,57 +406,37 @@ class Ego {
                         const query = toolData.query || 'Your request';
                         const resultText = toolData.result || toolData.message || toolData.content || 'No result available';
                         
-                        // Format the canvas content with the full response
-                        const canvasContent = {
-                            type: 'html',
-                            content: `
-                                <div class="tool-response">
-                                    <h3>${escapeHtml(query)}</h3>
-                                    <div class="tool-result">
-                                        ${formatToolResult(resultText)}
-                                    </div>
-                                    <div class="tool-meta">
-                                        <small>Generated at ${new Date().toLocaleTimeString()}</small>
-                                    </div>
-                                </div>
-                                <style>
-                                    .tool-response { 
-                                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                                        padding: 16px;
-                                    }
-                                    .tool-response h3 { 
-                                        margin-top: 0; 
-                                        color: #333; 
-                                        border-bottom: 1px solid #eee; 
-                                        padding-bottom: 8px; 
-                                    }
-                                    .tool-result { 
-                                        line-height: 1.6; 
-                                        margin: 12px 0; 
-                                        white-space: pre-wrap;
-                                    }
-                                    .tool-meta { 
-                                        margin-top: 16px; 
-                                        font-size: 0.85em; 
-                                        color: #666; 
-                                        text-align: right;
-                                    }
-                                </style>
-                            `
-                        };
+                        // If we don't already have canvas content, create it from the tool response
+                        if (!responseData.canvas) {
+                            responseData.canvas = {
+                                type: 'markdown',
+                                content: `# ${query}\n\n${resultText}`
+                            };
+                            
+                            logger.debug('handleBubble', 'Created canvas content from tool response', {
+                                query: query,
+                                resultLength: String(resultText).length,
+                                canvasContentLength: responseData.canvas.content.length
+                            });
+                        }
                         
-                        // Update the response data with both chat and canvas content
-                        responseData.chat = `I've processed your request. Check the canvas for details.`;
-                        responseData.canvas = canvasContent;
-                        
-                        logger.debug('handleBubble', 'Formatted tool response for canvas', {
-                            query: query,
-                            resultLength: String(resultText).length,
-                            canvasContentLength: canvasContent.content.length
-                        });
-                    }
+                        try {
+                            logger.debug('handleBubble', 'Formatted tool response for canvas', {
+                                query: query,
+                                responseData: responseData,
+                                resultLength: String(resultText).length,
+                                canvasContentLength: canvasContent?.content?.length || 0
+                            });
+                        } catch (error) {
+                            logger.error('handleBubble', 'Error formatting tool response for canvas', {
+                                error: error.message,
+                                stack: error.stack,
+                                originalContent: result.content
+                            });
+                        }
+                    } // End of if (toolResponse && toolResponse.status === 'success' && toolResponse.data)
                 } catch (error) {
-                    logger.error('handleBubble', 'Error formatting tool response for canvas', {
+                    logger.error('handleBubble', 'Error processing tool response', {
                         error: error.message,
                         stack: error.stack,
                         originalContent: result.content
@@ -480,7 +482,8 @@ class Ego {
                 }
             }, 100);
             
-            return assistantMessage;
+            // Return the chat content that will be shown to the user
+            return responseData.chat;
             
         } catch (error) {
             logger.error('handleBubble', 'Error handling bubble', {

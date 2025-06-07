@@ -80,7 +80,16 @@ class LLMQueryTool {
 
         logger.debug('llmquery', 'OpenAI response', { response }, false);
         const receivedMessage = response.content;
-        const toolResponse = { status: 'success', message: `Response: ${receivedMessage}` };
+        
+        // Return a properly structured response with data property
+        const toolResponse = { 
+            status: 'success', 
+            data: { 
+                result: receivedMessage,
+                content: receivedMessage,
+                query: query
+            } 
+        };
         
         const validation = validateToolResponse(toolResponse);
         if (!validation.isValid) {
@@ -88,6 +97,7 @@ class LLMQueryTool {
             return { status: 'error', error: 'Internal tool response validation failed' };
         }
         
+        logger.debug('llmquery', 'Returning tool response:', toolResponse);
         return toolResponse;
     }
 

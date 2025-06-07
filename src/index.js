@@ -39,6 +39,12 @@ app.post('/api/tts/elevenlabs-stream', async (req, res) => {
     }
 
     const apiKey = process.env.ELEVENLABS_API_KEY;
+    logger.debug('elevenlabs-tts', 'Using ElevenLabs API key:', { 
+        keyPresent: !!apiKey,
+        keyLength: apiKey ? apiKey.length : 0,
+        keyPrefix: apiKey ? apiKey.substring(0, 5) + '...' : 'N/A'
+    });
+    
     if (!apiKey) {
         logger.error('elevenlabs-tts', 'ELEVENLABS_API_KEY not found in environment variables.');
         return res.status(500).json({ error: 'ElevenLabs API key not configured on server.' });

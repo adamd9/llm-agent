@@ -563,17 +563,19 @@ function connect() {
         
         switch(data.type) {
             case 'response':
-                // Handle the new response format with both chat and canvas content
-                const responseData = data.data;
+                // Handle the response which may be nested in a response property
+                let responseData = data.data;
                 let responseText = '';
+                
+                // Check if the response is nested in a response property
+                if (responseData && responseData.response) {
+                    responseData = responseData.response;
+                }
                 
                 // Handle both old and new response formats
                 if (typeof responseData === 'string') {
                     // Old format: just a string response
                     responseText = responseData;
-                } else if (responseData.response) {
-                    // Old format with response wrapper
-                    responseText = responseData.response;
                 } else if (responseData.chat !== undefined) {
                     // New format with chat and canvas
                     responseText = responseData.chat;
@@ -587,8 +589,32 @@ function connect() {
                     responseText = JSON.stringify(responseData);
                 }
                 
-                addMessage('assistant', responseText);
-                playElevenLabsTTS(responseText); // Play TTS for the assistant's response
+                // Add the message to the chat - use the chat text or response text
+                const displayText = responseData.chat || responseText;
+                
+                // Log the final response for debugging
+                console.log('=== FINAL RESPONSE ===');
+                console.log('Chat:', displayText);
+                console.log('Canvas Content:', responseData.canvas ? 'Available' : 'None');
+                console.log('Full Response:', JSON.stringify(responseData, null, 2));
+                console.log('======================');
+                
+                addMessage('assistant', displayText);
+                
+                // Handle TTS - use the chat text if available, otherwise fall back to responseText
+                let ttsText = responseData.chat || responseText;
+                
+                if (ttsText) {
+                    if (typeof ttsText !== 'string') {
+                        console.warn('Invalid text for TTS, converting to string');
+                        ttsText = String(ttsText);
+                    }
+                    console.log('Playing TTS:', ttsText.substring(0, 100) + (ttsText.length > 100 ? '...' : ''));
+                    playElevenLabsTTS(ttsText);
+                } else {
+                    console.warn('No valid text found for TTS in response:', responseData);
+                }
+                
                 clearStatus();
                 break;
                 
@@ -1177,8 +1203,16 @@ async function stopElevenLabsPlaybackAndStream() {
 }
 
 async function playElevenLabsTTS(text) {
-    if (!text || text.trim() === '') {
-        console.log('No text provided for ElevenLabs TTS.');
+    console.log('playElevenLabsTTS called with text:', text);
+    if (!text || (typeof text === 'string' && text.trim() === '')) {
+        console.log('No valid text provided for ElevenLabs TTS.');
+        return;
+    }
+    
+    // Ensure text is a string
+    const ttsText = typeof text === 'string' ? text : '';
+    if (ttsText === '') {
+        console.error('Invalid text for TTS:', text);
         return;
     }
     
@@ -1332,13 +1366,26 @@ async function playElevenLabsTTS(text) {
  * @param {string} canvasData.content - The content to display
  */
 function updateCanvas(canvasData) {
+    console.log('=== UPDATING CANVAS ===');
+    console.log('Canvas Data:', canvasData);
+    
     const canvasContent = document.getElementById('canvas-content');
-    if (!canvasContent) return;
+    if (!canvasContent) {
+        console.error('Canvas content element not found!');
+        return;
+    }
+    
+    // Make canvas visible
+    const canvasContainer = document.getElementById('canvas-container');
+    if (canvasContainer) {
+        canvasContainer.style.display = 'block';
+    }
     
     // Clear the canvas
     canvasContent.innerHTML = '';
     
     if (!canvasData || !canvasData.content) {
+        console.log('No canvas data or content provided');
         // Show placeholder if no content
         canvasContent.innerHTML = `
             <div class="canvas-placeholder">
@@ -1348,6 +1395,8 @@ function updateCanvas(canvasData) {
         `;
         return;
     }
+    
+    console.log('Setting canvas content, type:', canvasData.type);
     
     // Handle different content types
     if (canvasData.type === 'html') {
