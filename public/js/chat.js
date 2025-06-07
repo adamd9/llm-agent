@@ -1,6 +1,6 @@
 let ws;
 let currentMessagePersistent = false;
-let isProcessing = false;
+let isProcessing = false; // Agent is no longer busy
 let systemMessageDiv = null;
 let currentResult = null;
 let subsystemMessages = {
@@ -312,6 +312,11 @@ function toggleStatus(messageDiv) {
 }
 
 function showStatus(message, options = {}) {
+    console.log('[showStatus] isProcessing before:', isProcessing);
+    if (!options.noSpinner && !options.persistent) {
+        isProcessing = true; // Agent is busy
+        console.log('[showStatus] isProcessing set to true. Message:', message);
+    }
     // Process message
     let messageText, isPersistent;
     if (typeof message === 'string') {
@@ -354,13 +359,15 @@ function showStatus(message, options = {}) {
 }
 
 function clearStatus() {
+    console.log('[clearStatus] isProcessing before:', isProcessing);
+    isProcessing = false; // Agent is no longer busy
+    console.log('[clearStatus] isProcessing set to false.');
     if (!currentMessagePersistent && systemMessageDiv) {
         systemMessageDiv.innerHTML = '';
     }
     if (!currentMessagePersistent) {
         currentResult = null;
     }
-    isProcessing = false;
 }
 
 function humanizeStatusMessage(message) {
@@ -581,6 +588,7 @@ function connect() {
 }
 
 function sendMessage() {
+    showStatus('Sending message...', { spinner: true });
     // Use the global chatInputField which is already assigned in DOMContentLoaded
     if (!chatInputField) {
         console.error("sendMessage: chatInputField is not available! Element with ID 'chatInput' might be missing or not yet initialized.");
@@ -791,10 +799,24 @@ async function toggleVoiceSTT() {
 
             if (isAutoSendEnabled && orderedTurnsText.trim().length > 0 && !hasSentFinalForCurrentUtterance) {
                 // This is the first final of an utterance, and auto-send is on.
-                sendMessage(); // Sets inputFieldJustClearedBySend = true
-                hasSentFinalForCurrentUtterance = true;
-                if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
-                // inputFieldJustClearedBySend remains true to guard against its own formatted final.
+                console.log('[toggleVoiceSTT - end_of_turn] Checking isProcessing. Value:', isProcessing, 'Transcript:', orderedTurnsText);
+                if (isProcessing) {
+                    if (window.confirm("The agent is still processing the previous request. Send new query anyway?")) {
+                        sendMessage(); // Sets inputFieldJustClearedBySend = true
+                        hasSentFinalForCurrentUtterance = true;
+                        if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
+                    } else {
+                        // User cancelled. Keep text in input, allow manual send.
+                        if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Final. Review & Send.';
+                        // Do not set hasSentFinalForCurrentUtterance to true, so it can be sent again if needed.
+                        // Do not set inputFieldJustClearedBySend, so input remains populated.
+                    }
+                } else {
+                    sendMessage(); // Sets inputFieldJustClearedBySend = true
+                    hasSentFinalForCurrentUtterance = true;
+                    if(voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
+                }
+                // inputFieldJustClearedBySend remains true to guard against its own formatted final if message was sent.
             } else {
                 // This 'else' covers:
                 // 1. Formatted final of an auto-sent utterance (hasSentFinalForCurrentUtterance=true).

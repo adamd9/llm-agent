@@ -63,22 +63,7 @@ app.post('/api/tts/elevenlabs-stream', async (req, res) => {
             res.write(chunk);
         }
         res.end();
-
-        audioStream.on('error', (error) => {
-            logger.error('elevenlabs-tts', 'Error streaming audio from ElevenLabs to client', error);
-            // Don't try to send a JSON error if headers already sent
-            if (!res.headersSent) {
-                res.status(500).json({ error: 'Error streaming audio.' });
-            }
-            // Ensure the response stream is ended if an error occurs mid-stream
-            res.end();
-        });
-
-        // Log when the stream finishes
-        audioStream.on('end', () => {
-            logger.debug('elevenlabs-tts', 'Successfully streamed TTS audio to client.');
-        });
-
+        logger.info('elevenlabs-tts', 'Successfully streamed all audio to client and ended response.');
     } catch (error) {
         logger.error('elevenlabs-tts', 'Error processing ElevenLabs TTS request', error);
         if (!res.headersSent) {
