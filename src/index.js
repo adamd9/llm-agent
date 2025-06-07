@@ -63,7 +63,7 @@ app.post('/api/tts/elevenlabs-stream', async (req, res) => {
             res.write(chunk);
         }
         res.end();
-        logger.info('elevenlabs-tts', 'Successfully streamed all audio to client and ended response.');
+        logger.debug('elevenlabs-tts', 'Successfully streamed all audio to client and ended response.');
     } catch (error) {
         logger.error('elevenlabs-tts', 'Error processing ElevenLabs TTS request', error);
         if (!res.headersSent) {
