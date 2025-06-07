@@ -63,6 +63,74 @@ header {
     gap: 8px;
 }
 
+/* Voice Input Button */
+#voiceInputToggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 16px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    color: #333;
+}
+
+#voiceInputToggle:hover {
+    background: #e0e0e0;
+    border-color: #ccc;
+}
+
+#voiceInputToggle.recording {
+    background: #ffebee;
+    border-color: #ef9a9a;
+    color: #c62828;
+}
+
+#voiceInputToggle .voice-icon {
+    font-size: 16px;
+}
+
+#voiceInputToggle .voice-text {
+    white-space: nowrap;
+}
+
+/* Auto-send Toggle Button */
+#autoSendToggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 16px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    color: #333;
+}
+
+#autoSendToggle:hover {
+    background: #e0e0e0;
+    border-color: #ccc;
+}
+
+#autoSendToggle.active {
+    background: #e3f2fd;
+    border-color: #90caf9;
+    color: #0d47a1;
+}
+
+#autoSendToggle .auto-send-icon {
+    font-size: 16px;
+}
+
+#autoSendToggle .auto-send-text {
+    white-space: nowrap;
+}
+
 /* TTS Toggle Button */
 #ttsToggle {
     display: flex;

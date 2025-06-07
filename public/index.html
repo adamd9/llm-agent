@@ -35,10 +35,17 @@
                 </div>
                 <div id="voice-controls-container">
                     <div class="control-group">
-                        <button id="voiceInputToggle">🎤 Start Voice</button>
-                        <input type="checkbox" id="autoSendToggle" checked />
-                        <label for="autoSendToggle">Auto-send on speech end</label>
+                        <button id="voiceInputToggle">
+                            <span class="voice-icon">🎤</span>
+                            <span class="voice-text">Start Voice</span>
+                        </button>
                         <span id="voiceStatusIndicator"></span>
+                    </div>
+                    <div class="control-group">
+                        <button id="autoSendToggle" class="auto-send-toggle" title="Auto-send on speech end">
+                            <span class="auto-send-icon">🚀</span>
+                            <span class="auto-send-text">Auto-send: On</span>
+                        </button>
                     </div>
                     <div class="control-group">
                         <button id="ttsToggle" class="tts-toggle" title="Toggle Text-to-Speech">

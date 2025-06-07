@@ -21,7 +21,7 @@ let inputFieldJustClearedBySend = false; // Flag to prevent repopulation after s
 
 // UI Elements for STT
 let voiceInputToggleBtn = null;
-let autoSendToggleCheckbox = null;
+let autoSendToggle = null;
 let voiceStatusIndicator = null;
 let chatInputField = null; // Will be assigned in DOMContentLoaded
 let sendButton = null; // Will be assigned in DOMContentLoaded
@@ -1592,7 +1592,7 @@ function updateCanvas(canvasData) {
     canvasContent.scrollTop = 0;
 }
 
-// --- TTS Toggle UI Update ---
+// --- Toggle UI Updates ---
 function updateTTSToggleUI(button, isEnabled) {
     if (!button) return;
     
@@ -1607,6 +1607,23 @@ function updateTTSToggleUI(button, isEnabled) {
         button.classList.remove('active');
         if (icon) icon.textContent = '🔇'; // Muted speaker icon
         if (text) text.textContent = 'TTS: Off';
+    }
+}
+
+function updateAutoSendToggleUI(button, isEnabled) {
+    if (!button) return;
+    
+    const icon = button.querySelector('.auto-send-icon');
+    const text = button.querySelector('.auto-send-text');
+    
+    if (isEnabled) {
+        button.classList.add('active');
+        if (icon) icon.textContent = '🚀'; // Rocket icon
+        if (text) text.textContent = 'Auto-send: On';
+    } else {
+        button.classList.remove('active');
+        if (icon) icon.textContent = '✋'; // Hand icon
+        if (text) text.textContent = 'Auto-send: Off';
     }
 }
 
@@ -1670,6 +1687,26 @@ document.addEventListener('DOMContentLoaded', () => {
         console.warn('TTS toggle button not found in the DOM.');
     }
     
+    // Initialize Auto-send toggle button
+    const autoSendToggle = document.getElementById('autoSendToggle');
+    if (autoSendToggle) {
+        // Load saved auto-send preference from localStorage, default to true (enabled)
+        isAutoSendEnabled = localStorage.getItem('autoSendEnabled') !== 'false';
+        updateAutoSendToggleUI(autoSendToggle, isAutoSendEnabled);
+        
+        autoSendToggle.addEventListener('click', () => {
+            isAutoSendEnabled = !isAutoSendEnabled;
+            localStorage.setItem('autoSendEnabled', isAutoSendEnabled);
+            updateAutoSendToggleUI(autoSendToggle, isAutoSendEnabled);
+            
+            // Show feedback to the user
+            const status = isAutoSendEnabled ? 'enabled' : 'disabled';
+            addMessage('system', `Auto-send on speech end has been ${status}.`);
+        });
+    } else {
+        console.warn('Auto-send toggle button not found in the DOM.');
+    }
+    
     // Initialize message counts
     updateMessageCounts();
 
@@ -1698,17 +1735,39 @@ document.addEventListener('DOMContentLoaded', () => {
         voiceInputToggleBtn.disabled = true;
     } else if (voiceInputToggleBtn) { // Only proceed if voice toggle exists
         // Setup event listeners for the voice input toggle button
-        if (voiceInputToggleBtn) {
-            voiceInputToggleBtn.addEventListener('click', toggleVoiceSTT);
-        }
-        if (autoSendToggleCheckbox) {
-            isAutoSendEnabled = autoSendToggleCheckbox.checked;
-            autoSendToggleCheckbox.addEventListener('change', (event) => {
-                isAutoSendEnabled = event.target.checked;
-            });
-        } else {
-          console.warn('Auto-send toggle checkbox not found.');
-        }
+        voiceInputToggleBtn.addEventListener('click', toggleVoiceSTT);
+        
+        // Update voice button UI based on recording state
+        const updateVoiceButtonUI = (isRecording) => {
+            const icon = voiceInputToggleBtn.querySelector('.voice-icon');
+            const text = voiceInputToggleBtn.querySelector('.voice-text');
+            
+            if (isRecording) {
+                voiceInputToggleBtn.classList.add('recording');
+                if (icon) icon.textContent = '⏹️';
+                if (text) text.textContent = 'Stop';
+            } else {
+                voiceInputToggleBtn.classList.remove('recording');
+                if (icon) icon.textContent = '🎤';
+                if (text) text.textContent = 'Start Voice';
+            }
+        };
+        
+        // Save original toggleVoiceSTT function
+        const originalToggleVoiceSTT = toggleVoiceSTT;
+        
+        // Wrap the original function to update UI
+        toggleVoiceSTT = function() {
+            const wasRecording = isRecording;
+            const result = originalToggleVoiceSTT.apply(this, arguments);
+            
+            // If the recording state changed, update the UI
+            if (wasRecording !== isRecording) {
+                updateVoiceButtonUI(isRecording);
+            }
+            
+            return result;
+        };
     } else {
         console.warn("Voice input toggle button not found. STT UI cannot be initialized.");
     }
