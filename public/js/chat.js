@@ -437,14 +437,36 @@ function clearStatus() {
     }
 }
 
-// Update UI based on processing and TTS states
+// Update UI based on processing state and TTS playback
 function updateProcessingUI() {
-    // Enable/disable interrupt button based on processing or TTS state
+    // Show interrupt button when either processing or TTS is playing
     const shouldShowInterrupt = isProcessing || elevenLabsIsPlaying;
+    console.log(`[updateProcessingUI] isProcessing: ${isProcessing}, elevenLabsIsPlaying: ${elevenLabsIsPlaying}, shouldShowInterrupt: ${shouldShowInterrupt}`);
     
     if (interruptButton) {
+        // Update the button text based on context
+        const interruptText = interruptButton.querySelector('.interrupt-text');
+        if (interruptText) {
+            interruptText.textContent = elevenLabsIsPlaying ? 'Stop TTS' : 'Interrupt';
+        }
+        
+        // Update button state and visibility with smooth transitions
         interruptButton.disabled = !shouldShowInterrupt;
-        interruptButton.style.display = shouldShowInterrupt ? 'flex' : 'none';
+        
+        if (shouldShowInterrupt) {
+            interruptButton.classList.add('visible');
+            interruptButton.style.display = 'flex';
+            // Force reflow to ensure the transition works
+            void interruptButton.offsetHeight;
+        } else {
+            interruptButton.classList.remove('visible');
+            // Wait for the transition to complete before hiding completely
+            setTimeout(() => {
+                if (interruptButton && !interruptButton.classList.contains('visible')) {
+                    interruptButton.style.display = 'none';
+                }
+            }, 300); // Match this with the CSS transition duration
+        }
     }
     
     // Update send button state
@@ -461,30 +483,33 @@ function updateProcessingUI() {
 
 // Handle interrupt button click
 function handleInterrupt() {
+    // Handle TTS interruption
     if (elevenLabsIsPlaying) {
-        // Stop TTS playback if it's playing
+        console.log('Interrupting TTS playback');
         stopElevenLabsPlaybackAndStream();
+        // Don't return here, allow processing interruption if needed
     }
     
+    // Handle processing interruption
     if (isProcessing) {
-        // If we were waiting for user action, clear the pending state
+        console.log('Interrupting processing');
         if (pendingUserAction) {
             pendingUserAction = false;
             clearStatus();
             
-            // If there's text in the input, send it
             if (chatInputField && chatInputField.value.trim().length > 0) {
                 sendMessage();
             }
         } else {
-            // Otherwise, just clear the processing state
             isProcessing = false;
             updateProcessingUI();
         }
     }
     
-    // Notify the user
-    addMessage('system', 'Operation interrupted by user.');
+    // Only show interruption message if we actually interrupted something
+    if (elevenLabsIsPlaying || isProcessing) {
+        addMessage('system', 'Operation interrupted by user.');
+    }
 }
 
 function formatMessage(message, format = 'basic') {
@@ -1283,15 +1308,27 @@ async function toggleVoiceSTT() {
 // --- ElevenLabs TTS Functions Start ---
 
 async function stopElevenLabsPlaybackAndStream() {
+    console.log('Stopping ElevenLabs playback and stream');
+    
+    // If already stopped, just ensure UI is updated and return
+    if (!elevenLabsIsPlaying && !elevenLabsCurrentSource && !elevenLabsStreamReader) {
+        console.log('TTS already stopped, updating UI state');
+        updateProcessingUI(); // Ensure UI is in sync with state
+        return;
+    }
+    
     // Stop any currently playing audio
     if (elevenLabsCurrentSource) {
         try {
             elevenLabsCurrentSource.stop();
             elevenLabsCurrentSource.disconnect();
+            console.log('Stopped and disconnected audio source');
         } catch (e) {
+            console.warn('Error stopping audio source:', e);
             // Ignore errors when stopping
+        } finally {
+            elevenLabsCurrentSource = null;
         }
-        elevenLabsCurrentSource = null;
     }
 
     // Clear the audio queue
@@ -1300,26 +1337,43 @@ async function stopElevenLabsPlaybackAndStream() {
     
     // Abort any in-progress fetch request
     if (elevenLabsFetchController) {
-        elevenLabsFetchController.abort();
-        elevenLabsFetchController = null;
+        console.log('Aborting in-progress fetch request');
+        try {
+            elevenLabsFetchController.abort();
+        } catch (e) {
+            console.warn('Error aborting fetch request:', e);
+        } finally {
+            elevenLabsFetchController = null;
+        }
     }
     
     // Clean up the stream reader if it exists
     if (elevenLabsStreamReader) {
+        console.log('Cancelling stream reader');
         try {
             await elevenLabsStreamReader.cancel();
         } catch (e) {
+            console.warn('Error cancelling stream reader:', e);
             // Ignore cancellation errors
+        } finally {
+            elevenLabsStreamReader = null;
         }
-        elevenLabsStreamReader = null;
     }
     
-    // Update UI state
+    // Update state and UI
     elevenLabsIsPlaying = false;
+    console.log('elevenLabsIsPlaying set to false');
     
+    // Force update the UI to reflect the stopped state
+    updateProcessingUI();
+    
+    // Ensure the TTS-specific interrupt button is hidden
     if (interruptTTSButton) {
         interruptTTSButton.style.display = 'none';
     }
+    
+    // Double-check UI state after a short delay
+    setTimeout(updateProcessingUI, 100);
 }
 
 function initializeElevenLabsAudio() {
@@ -1451,6 +1505,9 @@ async function enqueueElevenLabsAudioChunk(chunk, retryAttempt = 0) {
             
             if (!elevenLabsIsPlaying) {
                 console.log('Starting playback of audio queue');
+                // Set the flag and update UI before starting playback
+                elevenLabsIsPlaying = true;
+                updateProcessingUI();
                 playNextElevenLabsChunk();
             } else {
                 console.log(`Audio is already playing, added to queue (${elevenLabsAudioQueue.length} items in queue)`);
@@ -1518,19 +1575,40 @@ function actuallyPlayNextChunk() {
         
         // Set up event handlers
         elevenLabsCurrentSource.onended = () => {
-            gainNode.disconnect();
+            console.log('Audio playback ended, cleaning up');
+            
+            // Clean up nodes
+            try {
+                gainNode.disconnect();
+            } catch (e) {
+                console.warn('Error disconnecting gain node:', e);
+            }
+            
+            // Clean up source
+            if (elevenLabsCurrentSource) {
+                try {
+                    elevenLabsCurrentSource.disconnect();
+                } catch (e) {
+                    console.warn('Error disconnecting audio source:', e);
+                } finally {
+                    elevenLabsCurrentSource = null;
+                }
+            }
             
             if (elevenLabsAudioQueue.length > 0) {
+                console.log('Playing next chunk from queue');
                 playNextElevenLabsChunk();
             } else {
-                elevenLabsIsPlaying = false;
-                elevenLabsCurrentSource = null;
-                
-                // Process any remaining buffered data
+                console.log('No more chunks in queue, stopping playback');
+                // Process any remaining buffered data before stopping
                 if (audioDataBuffer?.length > 0) {
+                    console.log('Processing remaining buffered audio data');
                     const bufferToPlay = audioDataBuffer;
                     audioDataBuffer = new Uint8Array(0);
                     enqueueElevenLabsAudioChunk(bufferToPlay);
+                } else {
+                    // Only stop if there's no more data to process
+                    stopElevenLabsPlaybackAndStream();
                 }
             }
         };
@@ -1538,10 +1616,11 @@ function actuallyPlayNextChunk() {
         // Start playback
         elevenLabsCurrentSource.start();
         elevenLabsIsPlaying = true;
-        
+        console.log('TTS playback started, updating UI');
+        updateProcessingUI(); // Make sure UI is updated to show interrupt button
     } catch (e) {
         console.error('Error during audio playback:', e);
-        
+            
         // Clean up on error
         if (elevenLabsCurrentSource) {
             try {
@@ -1552,7 +1631,7 @@ function actuallyPlayNextChunk() {
             }
             elevenLabsCurrentSource = null;
         }
-        
+            
         // Try to continue with next chunk if available
         if (elevenLabsAudioQueue.length > 0) {
             console.log('Attempting to play next chunk after error');
@@ -1565,8 +1644,17 @@ function actuallyPlayNextChunk() {
 
 function playNextElevenLabsChunk() {
     if (elevenLabsAudioQueue.length === 0) {
+        console.log('Audio queue is empty, stopping playback');
         elevenLabsIsPlaying = false;
+        updateProcessingUI(); // Update UI when queue is empty
         return;
+    }
+    
+    // Update UI to show interrupt button when starting playback
+    if (!elevenLabsIsPlaying) {
+        console.log('Starting TTS playback, showing interrupt button');
+        elevenLabsIsPlaying = true;
+        updateProcessingUI();
     }
 
     // Ensure we have a valid audio context
@@ -1809,9 +1897,18 @@ document.addEventListener('DOMContentLoaded', () => {
     interruptTTSButton = document.getElementById('interrupt-tts-button'); // Assign TTS interrupt button
     interruptButton = document.getElementById('interrupt-button'); // Assign general interrupt button
     
-    // Set up interrupt button click handler
+    // Set up interrupt button
     if (interruptButton) {
         interruptButton.addEventListener('click', handleInterrupt);
+        interruptButton.style.display = 'none'; // Start hidden
+        
+        // Create and append the interrupt button content if it doesn't exist
+        if (!interruptButton.querySelector('.interrupt-icon')) {
+            interruptButton.innerHTML = `
+                <span class="interrupt-icon">⏹️</span>
+                <span class="interrupt-text">Interrupt</span>
+            `;
+        }
     } else {
         console.warn('Interrupt button not found in the DOM.');
     }
