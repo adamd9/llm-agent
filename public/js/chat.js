@@ -464,6 +464,9 @@ function updateProcessingUI() {
     if (sendButton) {
         sendButton.disabled = isProcessing;
         sendButton.innerHTML = isProcessing ? '<span class="spinner"></span> Sending...' : 'Send';
+        if (!isProcessing) {
+            removeFinalizingMessage();
+        }
     }
     
     // Update input field state
@@ -540,7 +543,7 @@ function humanizeStatusMessage(message) {
 // Add a working message for the final response state
 function showFinalizingMessage() {
     // Check if we already have a finalizing message
-    const existingFinalizing = document.querySelector('.message.working[data-type="finalizing"]');
+    const existingFinalizing = document.querySelector('.system-message[data-type="finalizing"]');
     if (existingFinalizing) {
         return existingFinalizing;
     }
@@ -564,6 +567,22 @@ function showFinalizingMessage() {
     );
 
     return messageElement || workingMessage;
+}
+
+function removeFinalizingMessage() {
+    const finalizingMessage = document.querySelector('.system-message[data-type="finalizing"]');
+    if (finalizingMessage) {
+        finalizingMessage.style.opacity = '0.5';
+        setTimeout(() => {
+            if (finalizingMessage && finalizingMessage.parentNode) {
+                finalizingMessage.remove();
+            }
+        }, 300);
+    }
+    if (window.finalizingTimeout) {
+        clearTimeout(window.finalizingTimeout);
+        window.finalizingTimeout = null;
+    }
 }
 
 function addMessage(type, content, format = 'basic', messageId = null, options = {}) {
@@ -730,23 +749,8 @@ function connect() {
         
         switch(data.type) {
             case 'response':
-                // Clear any pending finalizing message
-                const finalizingMessage = document.querySelector('.message.working[data-type="finalizing"]');
-                if (finalizingMessage) {
-                    // Fade out the finalizing message
-                    finalizingMessage.style.opacity = '0.5';
-                    setTimeout(() => {
-                        if (finalizingMessage && finalizingMessage.parentNode) {
-                            finalizingMessage.remove();
-                        }
-                    }, 300);
-                }
-                
-                // Clear any pending finalizing timeout
-                if (window.finalizingTimeout) {
-                    clearTimeout(window.finalizingTimeout);
-                    window.finalizingTimeout = null;
-                }
+                // Clear any pending finalizing message or timeout
+                removeFinalizingMessage();
                 
                 // Handle the response which may be nested in a response property
                 let responseData = data.data;
