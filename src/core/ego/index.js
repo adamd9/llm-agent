@@ -10,6 +10,7 @@ const memory = require('../memory');
 const sharedEventEmitter = require('../../utils/eventEmitter');
 const prompts = require('./prompts');
 const reflectionPrompts = require('./reflection-prompts');
+const { loadSettings } = require('../../utils/settings');
 
 /**
  * Escapes HTML special characters to prevent XSS
@@ -357,7 +358,10 @@ class Ego {
             }
 
             const openai = getOpenAIClient();
-            const response = await openai.chat(messages);
+            const settings = loadSettings();
+            const response = await openai.chat(messages, {
+                model: settings.bubbleModel || settings.llmModel
+            });
             
             // Try to parse the response as JSON with chat and canvas content
             let responseData = { 

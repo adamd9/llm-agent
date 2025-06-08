@@ -1,6 +1,7 @@
 const { OpenAI } = require('openai');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const logger = require('./logger');
+const { loadSettings } = require('./settings');
 require('dotenv').config();
 
 class LLMClient {
@@ -29,14 +30,17 @@ class OpenAIClient extends LLMClient {
         }
 
         this.client = new OpenAI(options);
-        this.defaultModel = process.env.OPENAI_DEFAULT_MODEL;
+        const settings = loadSettings();
+        this.defaultModel = settings.llmModel || process.env.OPENAI_DEFAULT_MODEL;
         logger.debug('OpenAI Client', 'Client initialized', { client: this.client.baseURL });
     }
 
     async chat(messages, options = {}) {
-        logger.debug('OpenAI Client', 'Chatting', { messages, options, defaultModel: this.defaultModel });
+        const settings = loadSettings();
+        const model = options.model || settings.llmModel || this.defaultModel;
+        logger.debug('OpenAI Client', 'Chatting', { messages, options, model });
         const response = await this.client.chat.completions.create({
-            model: options.model || this.defaultModel,
+            model,
             messages,
             temperature: options.temperature || 0.7,
             max_tokens: options.max_tokens || 1000,
