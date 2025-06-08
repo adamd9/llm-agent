@@ -394,19 +394,10 @@ function showStatus(message, options = {}) {
     systemMessagesContainer.appendChild(statusDiv);
     statusDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     
-    // Auto-hide non-persistent messages after 5 seconds
-    if (!isPersistent) {
-        setTimeout(() => {
-            if (statusDiv && statusDiv.isConnected) {
-                statusDiv.style.opacity = '0';
-                setTimeout(() => statusDiv.remove(), 300);
-            }
-        }, 5000);
-    }
-    
     // Update processing state
     if (!options.noSpinner && !isPersistent) {
         isProcessing = true;
+        updateProcessingUI();
     }
     
     // Store reference to the current status div if needed
@@ -564,18 +555,18 @@ function showFinalizingMessage() {
     
     // Add the message and get the message element
     const messageId = 'msg-' + Date.now();
-    addMessage(workingMessage.type, workingMessage.content, workingMessage.format, messageId);
-    
-    // Add data attribute to identify this message
-    const messageElement = document.getElementById(messageId);
-    if (messageElement) {
-        messageElement.setAttribute('data-type', 'finalizing');
-    }
-    
+    const messageElement = addMessage(
+        workingMessage.type,
+        workingMessage.content,
+        workingMessage.format,
+        messageId,
+        { noAutoRemove: true, dataType: 'finalizing' }
+    );
+
     return messageElement || workingMessage;
 }
 
-function addMessage(type, content, format = 'basic', messageId = null) {
+function addMessage(type, content, format = 'basic', messageId = null, options = {}) {
     console.log('Adding message:', { type, content });
     
     // Handle object content (e.g., from WebSocket)
@@ -621,18 +612,23 @@ function addMessage(type, content, format = 'basic', messageId = null) {
         if (systemMessagesContainer) {
             const messageDiv = document.createElement('div');
             messageDiv.className = 'system-message';
+            if (options.dataType) {
+                messageDiv.setAttribute('data-type', options.dataType);
+            }
             messageDiv.innerHTML = messageContent.replace(/\n/g, '<br>');
             systemMessagesContainer.appendChild(messageDiv);
-            
-            // Auto-remove after 5 seconds for non-critical messages
-            if (!messageContent.toLowerCase().includes('error')) {
+
+            // Auto-remove after 5 seconds for non-critical messages unless disabled
+            if (!options.noAutoRemove && !messageContent.toLowerCase().includes('error')) {
                 setTimeout(() => {
                     messageDiv.style.opacity = '0';
                     setTimeout(() => messageDiv.remove(), 300);
                 }, 5000);
             }
+
+            return messageDiv;
         }
-        return;
+        return null;
     }
     
     // For non-system messages, add them to the messages container
@@ -670,6 +666,8 @@ function addMessage(type, content, format = 'basic', messageId = null) {
     if (canvasContent) {
         updateCanvas(canvasContent);
     }
+
+    return messageDiv;
 }
 
 function connect() {
