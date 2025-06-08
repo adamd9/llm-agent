@@ -43,4 +43,21 @@ describe('/settings page', () => {
     expect(saved.sttSampleRate).toBe(8000);
     expect(saved.sttFormattedFinals).toBe(true);
   });
+
+  test('POST /settings clears to default when blank', async () => {
+    // Set a custom model first
+    await request(app)
+      .post('/settings')
+      .type('form')
+      .send({ llmModel: 'custom-model' });
+
+    // Clear the model
+    await request(app)
+      .post('/settings')
+      .type('form')
+      .send({ llmModel: '' });
+
+    const saved = loadSettings();
+    expect(saved.llmModel).toBe('gpt-4.1');
+  });
 });

@@ -8,7 +8,7 @@ const logger = require("./utils/logger");
 const sharedEventEmitter = require("./utils/eventEmitter");
 const { ElevenLabsClient } = require('@elevenlabs/elevenlabs-js');
 const safeStringify = require('./utils/safeStringify');
-const { loadSettings, saveSettings } = require('./utils/settings');
+const { loadSettings, saveSettings, loadRawSettings, defaultSettings } = require('./utils/settings');
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -16,20 +16,23 @@ app.use(express.static("public"));
 
 // Simple settings page
 app.get('/settings', (req, res) => {
-    const settings = loadSettings();
+    const raw = loadRawSettings();
+    const effective = loadSettings();
+    const defaults = defaultSettings;
+    const baseModel = defaults.llmModel;
     const html = `<!DOCTYPE html>
 <html><head><title>Settings</title></head><body>
 <h1>App Settings</h1>
 <form method="POST" action="/settings">
-  <label>LLM Model:<input type="text" name="llmModel" value="${settings.llmModel}" placeholder="default" /></label><br/>
-  <label>Planner Model:<input type="text" name="plannerModel" value="${settings.plannerModel}" placeholder="default" /></label><br/>
-  <label>Evaluator Model:<input type="text" name="evaluatorModel" value="${settings.evaluatorModel}" placeholder="default" /></label><br/>
-  <label>Query Model:<input type="text" name="queryModel" value="${settings.queryModel}" placeholder="default" /></label><br/>
-  <label>Bubble Model:<input type="text" name="bubbleModel" value="${settings.bubbleModel}" placeholder="default" /></label><br/>
-  <label>TTS Voice ID:<input type="text" name="ttsVoiceId" value="${settings.ttsVoiceId}" /></label><br/>
-  <label>TTS Model ID:<input type="text" name="ttsModelId" value="${settings.ttsModelId}" /></label><br/>
-  <label>STT Sample Rate:<input type="number" name="sttSampleRate" value="${settings.sttSampleRate}" /></label><br/>
-  <label>STT Formatted Finals:<input type="checkbox" name="sttFormattedFinals" ${settings.sttFormattedFinals ? 'checked' : ''} /></label><br/>
+  <label>LLM Model:<input type="text" name="llmModel" value="${raw.llmModel ?? ''}" placeholder="${defaults.llmModel}" /></label><br/>
+  <label>Planner Model:<input type="text" name="plannerModel" value="${raw.plannerModel ?? ''}" placeholder="${defaults.plannerModel || baseModel}" /></label><br/>
+  <label>Evaluator Model:<input type="text" name="evaluatorModel" value="${raw.evaluatorModel ?? ''}" placeholder="${defaults.evaluatorModel || baseModel}" /></label><br/>
+  <label>Query Model:<input type="text" name="queryModel" value="${raw.queryModel ?? ''}" placeholder="${defaults.queryModel || baseModel}" /></label><br/>
+  <label>Bubble Model:<input type="text" name="bubbleModel" value="${raw.bubbleModel ?? ''}" placeholder="${defaults.bubbleModel || baseModel}" /></label><br/>
+  <label>TTS Voice ID:<input type="text" name="ttsVoiceId" value="${raw.ttsVoiceId ?? ''}" placeholder="${defaults.ttsVoiceId}" /></label><br/>
+  <label>TTS Model ID:<input type="text" name="ttsModelId" value="${raw.ttsModelId ?? ''}" placeholder="${defaults.ttsModelId}" /></label><br/>
+  <label>STT Sample Rate:<input type="number" name="sttSampleRate" value="${raw.sttSampleRate ?? ''}" placeholder="${defaults.sttSampleRate}" /></label><br/>
+  <label>STT Formatted Finals:<input type="checkbox" name="sttFormattedFinals" ${effective.sttFormattedFinals ? 'checked' : ''} /></label><br/>
   <button type="submit">Save</button>
 </form>
 </body></html>`;
@@ -37,18 +40,23 @@ app.get('/settings', (req, res) => {
 });
 
 app.post('/settings', (req, res) => {
-    const current = loadSettings();
-    const newSettings = {
-        llmModel: req.body.llmModel || current.llmModel,
-        plannerModel: req.body.plannerModel || current.plannerModel,
-        evaluatorModel: req.body.evaluatorModel || current.evaluatorModel,
-        queryModel: req.body.queryModel || current.queryModel,
-        bubbleModel: req.body.bubbleModel || current.bubbleModel,
-        ttsVoiceId: req.body.ttsVoiceId || current.ttsVoiceId,
-        ttsModelId: req.body.ttsModelId || current.ttsModelId,
-        sttSampleRate: parseInt(req.body.sttSampleRate, 10) || current.sttSampleRate,
-        sttFormattedFinals: req.body.sttFormattedFinals ? true : false
+    const newSettings = {};
+    const assign = (field, transform) => {
+        const val = req.body[field];
+        if (val === undefined) return;
+        if (val !== '') newSettings[field] = transform ? transform(val) : val;
     };
+
+    assign('llmModel');
+    assign('plannerModel');
+    assign('evaluatorModel');
+    assign('queryModel');
+    assign('bubbleModel');
+    assign('ttsVoiceId');
+    assign('ttsModelId');
+    assign('sttSampleRate', v => parseInt(v, 10));
+    newSettings.sttFormattedFinals = req.body.sttFormattedFinals ? true : false;
+
     saveSettings(newSettings);
     res.redirect('/settings');
 });
