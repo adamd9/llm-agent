@@ -394,29 +394,22 @@ function showStatus(message, options = {}) {
     systemMessagesContainer.appendChild(statusDiv);
     statusDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     
-    // Auto-hide non-persistent messages after 5 seconds
-    if (!isPersistent) {
-        setTimeout(() => {
-            if (statusDiv && statusDiv.isConnected) {
-                statusDiv.style.opacity = '0';
-                setTimeout(() => statusDiv.remove(), 300);
-            }
-        }, 5000);
-    }
-    
+    // Keep reference so it can be cleared when needed
+    systemMessageDiv = statusDiv;
+
     // Update processing state
     if (!options.noSpinner && !isPersistent) {
         isProcessing = true;
     }
-    
+
     // Store reference to the current status div if needed
     if (isPersistent) {
         currentMessagePersistent = true;
-        systemMessageDiv = statusDiv;
+        // persistent messages manage their own removal
     }
 }
 
-function clearStatus() {
+function clearStatus(immediate = false) {
     console.log('[clearStatus] isProcessing before:', isProcessing);
     isProcessing = false; // Agent is no longer busy
     pendingUserAction = false; // Reset pending user action flag
@@ -425,15 +418,20 @@ function clearStatus() {
     // Update UI based on processing state
     updateProcessingUI();
     
-    // Clear any system messages after a delay
+    // Clear any system messages
     if (systemMessageDiv) {
-        setTimeout(() => {
-            if (systemMessageDiv) {
-                systemMessageDiv.remove();
-                systemMessageDiv = null;
-            }
-        }, 3000);
-        systemMessageDiv = null;
+        if (immediate) {
+            systemMessageDiv.remove();
+            systemMessageDiv = null;
+        } else {
+            setTimeout(() => {
+                if (systemMessageDiv) {
+                    systemMessageDiv.remove();
+                    systemMessageDiv = null;
+                }
+            }, 3000);
+            systemMessageDiv = null;
+        }
     }
 }
 
@@ -555,7 +553,7 @@ function showFinalizingMessage() {
     }
     
     const workingMessage = {
-        type: 'system',
+        type: 'assistant',
         content: 'finalizing',
         format: 'working',
         timestamp: new Date().toISOString(),
@@ -818,7 +816,7 @@ function connect() {
                     console.warn('No valid text found for TTS in response:', responseData);
                 }
                 
-                clearStatus();
+                clearStatus(true);
                 break;
                 
             case 'working':

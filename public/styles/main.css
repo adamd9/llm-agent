@@ -17,10 +17,23 @@ body {
     width: 100%;
 }
 
+.app-top-bar {
+    display: flex;
+    align-items: center;
+    padding: 10px 20px;
+    border-bottom: 1px solid #ccc;
+}
+
+.app-title {
+    font-size: 18px;
+    font-weight: bold;
+}
+
 header {
     padding: 10px 20px;
     text-align: right;
     background: transparent;
+    margin-top: auto;
 }
 
 .header-buttons {
