@@ -9,24 +9,6 @@
 </head>
 <body>
     <div id="app-container">
-        <header class="main-header">
-            <div class="header-buttons">
-                <button onclick="toggleDebug()" class="debug-toggle">Debug ▼</button>
-                <button onclick="toggleSubsystem('planner')" class="subsystem-toggle planner-toggle">
-                    Planner <span class="message-count planner-count">0</span> ▼
-                </button>
-                <button onclick="toggleSubsystem('coordinator')" class="subsystem-toggle coordinator-toggle">
-                    Coordinator <span class="message-count coordinator-count">0</span> ▼
-                </button>
-                <button onclick="toggleSubsystem('ego')" class="subsystem-toggle ego-toggle">
-                    Ego <span class="message-count ego-count">0</span> ▼
-                </button>
-                <button onclick="toggleSystemErrors()" class="subsystem-toggle system-error-toggle">
-                    System Errors <span class="message-count system-error-count">0</span> ▼
-                </button>
-            </div>
-        </header>
-
         <div class="main-content">
             <div id="chat-container" class="chat-panel">
                 <div id="messages"></div>
@@ -77,6 +59,23 @@
                 </div>
             </div>
         </div>
+        <header class="main-header">
+            <div class="header-buttons">
+                <button onclick="toggleDebug()" class="debug-toggle">Debug ▼</button>
+                <button onclick="toggleSubsystem('planner')" class="subsystem-toggle planner-toggle">
+                    Planner <span class="message-count planner-count">0</span> ▼
+                </button>
+                <button onclick="toggleSubsystem('coordinator')" class="subsystem-toggle coordinator-toggle">
+                    Coordinator <span class="message-count coordinator-count">0</span> ▼
+                </button>
+                <button onclick="toggleSubsystem('ego')" class="subsystem-toggle ego-toggle">
+                    Ego <span class="message-count ego-count">0</span> ▼
+                </button>
+                <button onclick="toggleSystemErrors()" class="subsystem-toggle system-error-toggle">
+                    System Errors <span class="message-count system-error-count">0</span> ▼
+                </button>
+            </div>
+        </header>
     </div>
 
     <!-- Debug Modal -->

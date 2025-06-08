@@ -21,6 +21,7 @@ header {
     padding: 10px 20px;
     text-align: right;
     background: transparent;
+    margin-top: auto;
 }
 
 .header-buttons {
