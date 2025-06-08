@@ -333,15 +333,19 @@ function toggleStatus(messageDiv) {
 
 function showStatus(message, options = {}) {
     console.log('Showing status:', message, options);
-    
-    // Process message
-    let messageText, isPersistent;
+
+    // Process message and track data type if needed
+    let messageText, isPersistent, dataType;
     if (typeof message === 'string') {
         messageText = message;
         isPersistent = false;
     } else {
         messageText = message.message || '';
         isPersistent = message.persistent || false;
+    }
+
+    if (messageText === 'finalizing') {
+        dataType = 'finalizing';
     }
     
     // Humanize the message
@@ -362,6 +366,9 @@ function showStatus(message, options = {}) {
     // Create status div
     const statusDiv = document.createElement('div');
     statusDiv.className = 'system-message status-message';
+    if (dataType) {
+        statusDiv.setAttribute('data-type', dataType);
+    }
     
     // Add spinner if needed
     const spinner = options.noSpinner ? '' : '<span class="spinner"></span>';
