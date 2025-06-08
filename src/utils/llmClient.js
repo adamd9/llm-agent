@@ -1,4 +1,5 @@
 const { OpenAI } = require('openai');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 const logger = require('./logger');
 require('dotenv').config();
 
@@ -18,9 +19,16 @@ class OpenAIClient extends LLMClient {
         if (!process.env.OPENAI_API_KEY) {
             throw new Error('OPENAI_API_KEY environment variable is not set');
         }
-        this.client = new OpenAI({
+        const options = {
             apiKey: process.env.OPENAI_API_KEY
-        });
+        };
+
+        if (process.env.CODEX_CLI === 'true' && process.env.HTTPS_PROXY) {
+            options.httpAgent = new HttpsProxyAgent(process.env.HTTPS_PROXY);
+            logger.debug('OpenAI Client', 'Using proxy agent for Codex environment');
+        }
+
+        this.client = new OpenAI(options);
         this.defaultModel = process.env.OPENAI_DEFAULT_MODEL;
         logger.debug('OpenAI Client', 'Client initialized', { client: this.client.baseURL });
     }
