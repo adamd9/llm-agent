@@ -1838,7 +1838,12 @@ function simpleMarkdownToHtml(text) {
         }
         
         // Handle headers
-        if (line.startsWith('### ')) {
+        if (line.startsWith('#### ')) {
+            closeParagraph();
+            closeList();
+            result.push(`<h4>${escapeHtml(line.substring(5))}</h4>`);
+            continue;
+        } else if (line.startsWith('### ')) {
             closeParagraph();
             closeList();
             result.push(`<h3>${escapeHtml(line.substring(4))}</h3>`);
@@ -1852,6 +1857,31 @@ function simpleMarkdownToHtml(text) {
             closeParagraph();
             closeList();
             result.push(`<h1>${escapeHtml(line.substring(2))}</h1>`);
+            continue;
+        }
+
+        // Handle tables (simple pipe-delimited)
+        const nextLine = lines[i + 1] ? lines[i + 1].trim() : '';
+        if (line.includes('|') && /^\|?\s*[-:| ]+\|?$/.test(nextLine)) {
+            closeParagraph();
+            closeList();
+
+            const headers = line.split('|').filter(c => c.trim()).map(c => `<th>${escapeHtml(c.trim())}</th>`).join('');
+            let tableHtml = `<table><thead><tr>${headers}</tr></thead><tbody>`;
+
+            i += 2; // Skip header and separator
+            while (i < lines.length) {
+                const rowLine = lines[i].trim();
+                if (!rowLine || !rowLine.includes('|')) {
+                    i--; // adjust for for-loop increment
+                    break;
+                }
+                const cells = rowLine.split('|').filter(c => c.trim()).map(c => `<td>${processInlineMarkdown(c.trim())}</td>`).join('');
+                tableHtml += `<tr>${cells}</tr>`;
+                i++;
+            }
+            tableHtml += '</tbody></table>';
+            result.push(tableHtml);
             continue;
         }
         
@@ -1991,17 +2021,21 @@ function updateCanvas(canvasData) {
                         padding-bottom: 0.3em;
                         margin: 1em 0 0.5em 0;
                     }
-                    .markdown-content h3 { 
+                    .markdown-content h3 {
                         font-size: 1.25em;
                         margin: 1em 0 0.5em 0;
                     }
-                    .markdown-content p { 
+                    .markdown-content h4 {
+                        font-size: 1.1em;
+                        margin: 1em 0 0.5em 0;
+                    }
+                    .markdown-content p {
                         margin: 0 0 1em 0;
                     }
-                    .markdown-content ul, 
-                    .markdown-content ol { 
-                        padding-left: 2em; 
-                        margin: 0 0 1em 0; 
+                    .markdown-content ul,
+                    .markdown-content ol {
+                        padding-left: 2em;
+                        margin: 0 0 1em 0;
                     }
                     .markdown-content li { 
                         margin: 0.25em 0; 
@@ -2016,8 +2050,20 @@ function updateCanvas(canvasData) {
                     .markdown-content strong { 
                         font-weight: 600;
                     }
-                    .markdown-content em { 
+                    .markdown-content em {
                         font-style: italic;
+                    }
+                    .markdown-content table {
+                        border-collapse: collapse;
+                        margin: 1em 0;
+                    }
+                    .markdown-content th,
+                    .markdown-content td {
+                        border: 1px solid #ddd;
+                        padding: 6px 13px;
+                    }
+                    .markdown-content th {
+                        background-color: #f6f8fa;
                     }
                 `;
                 document.head.appendChild(style);
