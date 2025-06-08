@@ -20,23 +20,34 @@ const defaultSettings = {
   sttFormattedFinals: true
 };
 
-function loadSettings() {
+function loadRawSettings() {
   try {
     const data = fs.readFileSync(SETTINGS_PATH, 'utf8');
-    return { ...defaultSettings, ...JSON.parse(data) };
+    return JSON.parse(data);
   } catch (err) {
-    return { ...defaultSettings };
+    return {};
   }
 }
 
+function loadSettings() {
+  const raw = loadRawSettings();
+  const settings = { ...defaultSettings };
+  for (const key of Object.keys(defaultSettings)) {
+    if (raw[key] !== undefined && raw[key] !== '') {
+      settings[key] = raw[key];
+    }
+  }
+  return settings;
+}
+
 function saveSettings(settings) {
-  const data = { ...defaultSettings, ...settings };
-  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(data, null, 2));
+  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2));
 }
 
 module.exports = {
   SETTINGS_PATH,
   defaultSettings,
+  loadRawSettings,
   loadSettings,
   saveSettings
 };
