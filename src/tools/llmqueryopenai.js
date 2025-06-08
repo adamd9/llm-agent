@@ -1,5 +1,6 @@
 const OpenAI = require('openai');
 const logger = require('../utils/logger');
+const { loadSettings } = require('../utils/settings');
 const fs = require('fs').promises;
 const path = require('path');
 const memory = require('../core/memory');
@@ -34,6 +35,12 @@ class LLMQueryOpenAITool {
             throw new Error('OPENAI_API_KEY environment variable is required');
         }
         this.client = new OpenAI();
+        const settings = loadSettings();
+        if (settings.queryModel) {
+            this.defaultModel = settings.queryModel;
+        } else if (settings.llmModel) {
+            this.defaultModel = settings.llmModel;
+        }
         logger.debug('llmqueryopenai.initialize', 'OpenAI client initialized');
     }
 
@@ -77,8 +84,10 @@ class LLMQueryOpenAITool {
             `;
 
             // Call OpenAI responses API
+            const settings = loadSettings();
+            const model = settings.queryModel || settings.llmModel || this.defaultModel;
             const response = await this.client.responses.create({
-                model: this.defaultModel,
+                model,
                 tools: [{ type: "web_search_preview" }],
                 input: input
             });

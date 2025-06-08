@@ -8,9 +8,50 @@ const logger = require("./utils/logger");
 const sharedEventEmitter = require("./utils/eventEmitter");
 const { ElevenLabsClient } = require('@elevenlabs/elevenlabs-js');
 const safeStringify = require('./utils/safeStringify');
+const { loadSettings, saveSettings } = require('./utils/settings');
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
+
+// Simple settings page
+app.get('/settings', (req, res) => {
+    const settings = loadSettings();
+    const html = `<!DOCTYPE html>
+<html><head><title>Settings</title></head><body>
+<h1>App Settings</h1>
+<form method="POST" action="/settings">
+  <label>LLM Model:<input type="text" name="llmModel" value="${settings.llmModel}" placeholder="default" /></label><br/>
+  <label>Planner Model:<input type="text" name="plannerModel" value="${settings.plannerModel}" placeholder="default" /></label><br/>
+  <label>Evaluator Model:<input type="text" name="evaluatorModel" value="${settings.evaluatorModel}" placeholder="default" /></label><br/>
+  <label>Query Model:<input type="text" name="queryModel" value="${settings.queryModel}" placeholder="default" /></label><br/>
+  <label>Bubble Model:<input type="text" name="bubbleModel" value="${settings.bubbleModel}" placeholder="default" /></label><br/>
+  <label>TTS Voice ID:<input type="text" name="ttsVoiceId" value="${settings.ttsVoiceId}" /></label><br/>
+  <label>TTS Model ID:<input type="text" name="ttsModelId" value="${settings.ttsModelId}" /></label><br/>
+  <label>STT Sample Rate:<input type="number" name="sttSampleRate" value="${settings.sttSampleRate}" /></label><br/>
+  <label>STT Formatted Finals:<input type="checkbox" name="sttFormattedFinals" ${settings.sttFormattedFinals ? 'checked' : ''} /></label><br/>
+  <button type="submit">Save</button>
+</form>
+</body></html>`;
+    res.send(html);
+});
+
+app.post('/settings', (req, res) => {
+    const current = loadSettings();
+    const newSettings = {
+        llmModel: req.body.llmModel || current.llmModel,
+        plannerModel: req.body.plannerModel || current.plannerModel,
+        evaluatorModel: req.body.evaluatorModel || current.evaluatorModel,
+        queryModel: req.body.queryModel || current.queryModel,
+        bubbleModel: req.body.bubbleModel || current.bubbleModel,
+        ttsVoiceId: req.body.ttsVoiceId || current.ttsVoiceId,
+        ttsModelId: req.body.ttsModelId || current.ttsModelId,
+        sttSampleRate: parseInt(req.body.sttSampleRate, 10) || current.sttSampleRate,
+        sttFormattedFinals: req.body.sttFormattedFinals ? true : false
+    };
+    saveSettings(newSettings);
+    res.redirect('/settings');
+});
 
 // Ensure .env variables are loaded
 require('dotenv').config();
@@ -25,13 +66,23 @@ app.get('/api/assemblyai-token', (req, res) => {
   // For actual AssemblyAI V3, this should be exchanged for a temporary session token.
   // For now, returning the API key directly for testing.
   logger.debug('assemblyai-token', 'Returning AssemblyAI API key (for temporary testing).');
-  res.json({ token: apiKey });
+  const settings = loadSettings();
+  res.json({
+    token: apiKey,
+    sampleRate: settings.sttSampleRate,
+    formattedFinals: settings.sttFormattedFinals
+  });
 });
 // --- End AssemblyAI Endpoint ---
 
 // +++ Start ElevenLabs TTS Streaming Endpoint +++
 app.post('/api/tts/elevenlabs-stream', async (req, res) => {
-    const { text, voice_id = 'D38z5RcWu1voky8WS1ja', model_id = 'eleven_flash_v2_5' } = req.body; // Default voice 'Rachel' and a common model
+    const settings = loadSettings();
+    const {
+        text,
+        voice_id = settings.ttsVoiceId,
+        model_id = settings.ttsModelId
+    } = req.body;
 
     if (!text) {
         logger.error('elevenlabs-tts', 'Text is required for TTS.');
@@ -371,6 +422,8 @@ async function startServer() {
     }
 }
 
-startServer();
+if (require.main === module) {
+    startServer();
+}
 
-module.exports = { app };
+module.exports = { app, startServer };

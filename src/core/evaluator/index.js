@@ -2,6 +2,7 @@ const { getOpenAIClient } = require('../../utils/openaiClient');
 const logger = require('../../utils/logger');
 const sharedEventEmitter = require('../../utils/eventEmitter');
 const prompts = require('./prompts');
+const { loadSettings } = require('../../utils/settings');
 
 /**
  * Evaluates the execution results against the original request
@@ -76,8 +77,9 @@ async function getEvaluation(prompt) {
         role: "user",
         content: prompt
     }];
+    const settings = loadSettings();
     const response = await openai.chat(messages, {
-        model: 'gpt-4.1-mini',
+        model: settings.evaluatorModel || settings.llmModel,
         response_format: prompts.EVALUATION_SCHEMA,
         temperature: 0.7,
         max_tokens: 1000

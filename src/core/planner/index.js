@@ -5,6 +5,7 @@ const logger = require('../../utils/logger.js');
 const memory = require('../memory');
 const sharedEventEmitter = require('../../utils/eventEmitter');
 const prompts = require('./prompts');
+const { loadSettings } = require('../../utils/settings');
 
 const openai = getOpenAIClient();
 
@@ -117,7 +118,9 @@ async function planner(enrichedMessage, client = null) {
             }
         });
 
+        const settings = loadSettings();
         const planningResponse = await openai.chat(planningPrompts, {
+            model: settings.plannerModel || settings.llmModel,
             response_format: prompts.PLAN_SCHEMA,
             temperature: 0.7,
             max_tokens: 2000
