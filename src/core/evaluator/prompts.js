@@ -7,11 +7,15 @@
  * - {{executionResult}}: The JSON representation of the execution results
  */
 
+const { loadPrompt } = require('../../utils/promptManager');
+const MODULE = 'evaluator';
+
 // System prompt for the evaluator
-const EVALUATOR_SYSTEM = "You are an expert evaluator that assesses task execution results. You must respond with valid JSON. Always respond in valid JSON format.";
+const EVALUATOR_SYSTEM_DEFAULT = "You are an expert evaluator that assesses task execution results. You must respond with valid JSON. Always respond in valid JSON format.";
+const EVALUATOR_SYSTEM = loadPrompt(MODULE, 'EVALUATOR_SYSTEM', EVALUATOR_SYSTEM_DEFAULT);
 
 // User prompt for the evaluator
-const EVALUATOR_USER = `You are an expert evaluator assessing if a task's execution matches its intended outcome.
+const EVALUATOR_USER_DEFAULT = `You are an expert evaluator assessing if a task's execution matches its intended outcome.
 
 Original Request:
 {{originalRequest}}
@@ -37,6 +41,7 @@ Format your response as JSON:
     "analysis": "detailed analysis here",
     "recommendations": ["recommendation1", "recommendation2", ...]
 }`;
+const EVALUATOR_USER = loadPrompt(MODULE, 'EVALUATOR_USER', EVALUATOR_USER_DEFAULT);
 
 // JSON schema for evaluation response
 const EVALUATION_SCHEMA = {
