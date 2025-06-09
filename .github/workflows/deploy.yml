@@ -1,23 +1,36 @@
-name: Deploy to Production
+name: Deploy
 
 on:
   push:
     branches:
       - main
+      - dev
 
 jobs:
   trigger-deployment:
     runs-on: ubuntu-latest
-    environment: production
+    environment: ${{ github.ref_name == 'main' && 'production' || 'dev' }}
     
     steps:
+      - name: Set environment variables
+        id: env
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "DOMAIN=assistant.greatmachineinthesky.com" >> $GITHUB_ENV
+            echo "GIT_REF=main" >> $GITHUB_ENV
+          elif [ "${{ github.ref_name }}" = "dev" ]; then
+            echo "DOMAIN=assistant-dev.greatmachineinthesky.com" >> $GITHUB_ENV
+            echo "GIT_REF=dev" >> $GITHUB_ENV
+          fi
+          
       - name: Trigger Docker Redeploy
         env:
-          DOMAIN: "assistant.greatmachineinthesky.com"
+          DOMAIN: ${{ env.DOMAIN }}
+          GIT_REF: ${{ env.GIT_REF }}
           TOKEN: ${{ secrets.GITLAB_TRIGGER_TOKEN }}
         run: |
           curl --fail --request POST \
           -F "variables[DOMAIN]=$DOMAIN" \
           -F "token=$TOKEN" \
-          -F "ref=main" \
+          -F "ref=$GIT_REF" \
           "https://gitlab.com/api/v4/projects/32860755/trigger/pipeline"
