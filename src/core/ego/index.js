@@ -543,55 +543,45 @@ class Ego {
     async reflection() {
         try {
             logger.debug('reflection', 'Starting reflection process');
-            
-            // Use direct file operations with the new consolidated tag format
-            const fs = require('fs');
-            const path = require('path');
-            const timestamp = Math.floor(Date.now() / 1000);
-            const longTermPath = path.join(DATA_DIR_PATH, 'memory', 'long', 'long_term.txt');
-            
-            // Create a single reflection entry with all components
-            const reflectionEntry = `<MEMORY module="ego" timestamp="${timestamp}">
-[ReflectionMarker] Starting reflection process at ${new Date().toISOString()}
 
-[Insight] interaction: The system successfully processed a factual query and provided a direct answer.
+            const shortTermMemory = await memory.retrieveShortTerm();
+            const messages = [
+                { role: 'system', content: reflectionPrompts.REFLECTION_SYSTEM },
+                { role: 'user', content: reflectionPrompts.REFLECTION_USER.replace('{{short_term_memory}}', shortTermMemory || '') }
+            ];
 
-[Lesson] Maintain a balance between factual accuracy and conversational tone. - Application: Continue to provide accurate information while adapting tone based on user preferences.
+            const settings = loadSettings();
 
-[FollowUp] Questions to ask in future interactions: Would you like more detailed information about this topic?; Do you prefer a more conversational or direct response style?
+            if (!this.openaiClient || typeof this.openaiClient.chat !== 'function') {
+                logger.error('reflection', 'OpenAI client is not available');
+                return;
+            }
 
-[ReflectionMarker] Completed reflection process at ${new Date().toISOString()}
-</MEMORY>
-`;
-            fs.appendFileSync(longTermPath, reflectionEntry);
-            
-            logger.debug('reflection', 'Successfully stored simple reflection results in long-term memory');
-            
-            // Emit a simple subsystem message
+            const response = await this.openaiClient.chat(messages, {
+                model: settings.reflectionModel || settings.llmModel,
+                response_format: reflectionPrompts.REFLECTION_SCHEMA,
+                temperature: 0.7,
+                max_tokens: 1000
+            });
+
+            let reflectionResults;
+            try {
+                reflectionResults = JSON.parse(response.content);
+            } catch (parseError) {
+                logger.error('reflection', 'Failed to parse reflection response', {
+                    error: { message: parseError.message, stack: parseError.stack },
+                    content: response.content
+                });
+                return;
+            }
+
+            await this.processReflectionResults(reflectionResults);
+
             await sharedEventEmitter.emit('subsystemMessage', {
                 module: 'ego',
-                content: {
-                    type: 'reflection',
-                    insights: [
-                        {
-                            category: "interaction",
-                            description: "The system successfully processed a factual query and provided a direct answer.",
-                            importance: 4
-                        }
-                    ],
-                    lessons_learned: [
-                        {
-                            lesson: "Maintain a balance between factual accuracy and conversational tone.",
-                            application: "Continue to provide accurate information while adapting tone based on user preferences."
-                        }
-                    ],
-                    follow_up_questions: [
-                        "Would you like more detailed information about this topic?",
-                        "Do you prefer a more conversational or direct response style?"
-                    ]
-                }
+                content: { type: 'reflection', ...reflectionResults }
             });
-            
+
             logger.debug('reflection', 'Reflection process completed successfully');
         } catch (error) {
             logger.error('reflection', 'Error during reflection process', {

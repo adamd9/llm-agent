@@ -12,6 +12,7 @@ const defaultSettings = {
   evaluatorModel: '',
   queryModel: '',
   bubbleModel: '',
+  reflectionModel: '',
   // Default ElevenLabs voice and model for TTS
   ttsVoiceId: 'D38z5RcWu1voky8WS1ja', // "Rachel"
   ttsModelId: 'eleven_flash_v2_5',
