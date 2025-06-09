@@ -87,6 +87,30 @@ app.get('/api/assemblyai-token', (req, res) => {
 });
 // --- End AssemblyAI Endpoint ---
 
+// --- Start Utterance Check Endpoint ---
+app.post('/api/utterance-check', async (req, res) => {
+  const { text } = req.body;
+  if (!text) {
+    return res.status(400).json({ error: 'Text is required' });
+  }
+  try {
+    const { getClient } = require('./utils/llmClient');
+    const client = getClient('openai');
+    const result = await client.chat([
+      { role: 'system', content: 'Respond with JSON {"complete":true|false}. Determine if the user text represents a complete question or request.' },
+      { role: 'user', content: text }
+    ], {
+      model: 'gpt-4.1-nano',
+      response_format: { type: 'json_object' }
+    });
+    const parsed = JSON.parse(result.content);
+    res.json({ complete: !!parsed.complete });
+  } catch (err) {
+    logger.error('utterance-check', 'LLM check failed', err);
+    res.status(500).json({ error: 'LLM check failed' });
+  }
+});
+
 // +++ Start ElevenLabs TTS Streaming Endpoint +++
 app.post('/api/tts/elevenlabs-stream', async (req, res) => {
     const settings = loadSettings();
