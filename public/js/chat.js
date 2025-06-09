@@ -9,6 +9,9 @@ let subsystemMessages = {
     ego: [],
     systemError: []
 };
+let debugMessages = [];
+let messageCounters = { planner: 0, coordinator: 0, ego: 0, systemError: 0, debug: 0 };
+let filterKeywords = { planner: '', coordinator: '', ego: '', systemError: '', debug: '' };
 let connectionError = false; // Track connection error state
 let interruptButton = null; // Reference to the interrupt button
 let pendingUserAction = false; // Track if we're waiting for user action on interrupt
@@ -64,9 +67,13 @@ function toggleDebug() {
     const modal = document.getElementById('debug-modal');
     const button = document.querySelector('.debug-toggle');
     const isHidden = modal.classList.contains('hidden');
-    
+
     modal.classList.toggle('hidden');
     button.textContent = isHidden ? 'Debug ▲' : 'Debug ▼';
+
+    if (isHidden) {
+        updateDebugOutput();
+    }
     
     // Prevent body scroll when modal is open
     document.body.style.overflow = isHidden ? 'hidden' : '';
@@ -170,22 +177,30 @@ function updateSubsystemOutput(module) {
     }
     
     if (subsystemMessages[module] && subsystemMessages[module].length > 0) {
-        // Add "Expand All" and "Collapse All" buttons at the top
+        const keyword = filterKeywords[module];
+        let messages = subsystemMessages[module];
+        if (keyword) {
+            messages = messages.filter(m => {
+                const text = typeof m.content === 'object' ? JSON.stringify(m.content) : (m.content || '');
+                return text.toLowerCase().includes(keyword);
+            });
+        }
+
         output.innerHTML = `<div class="expand-all-container">
             <button class="expand-all-button" onclick="expandAllMessages('${module}')">Expand All</button>
             <button class="collapse-all-button" onclick="collapseAllMessages('${module}')">Collapse All</button>
         </div>`;
-        
-        // Append all messages in collapsed state
-        output.innerHTML += subsystemMessages[module].map((msg, index) => {
-            const messageId = `${module}-message-${index}`;
+
+        output.innerHTML += messages.map((msg) => {
+            const messageId = `${module}-message-${msg.id}`;
             const timestamp = new Date(msg.timestamp).toLocaleTimeString();
             const messageTitle = typeof msg.content === 'object' ? (msg.content.type || 'Message') : 'Message';
-            
+
             return `<div class="subsystem-message collapsed" id="${messageId}">
                 <div class="subsystem-header" onclick="toggleMessage('${messageId}')">
                     <span class="subsystem-timestamp">${timestamp}</span>
                     <span class="subsystem-title">${messageTitle}</span>
+                    <button class="copy-button" onclick="event.stopPropagation(); copyMessage('${module}', ${msg.id});">Copy</button>
                     <span class="expand-icon">▼</span>
                 </div>
                 <div class="subsystem-content hidden">
@@ -253,6 +268,61 @@ function collapseAllMessages(module) {
             expandIcon.textContent = '▼';
         }
     });
+}
+
+function copyMessage(module, id) {
+    let msg;
+    if (module === 'debug') {
+        msg = debugMessages.find(m => m.id === id);
+    } else if (subsystemMessages[module]) {
+        msg = subsystemMessages[module].find(m => m.id === id);
+    }
+    if (!msg) return;
+    const text = typeof msg.content === 'object'
+        ? JSON.stringify(msg.content, null, 2)
+        : (msg.content || '');
+    navigator.clipboard.writeText(text);
+}
+
+function filterMessages(module, keyword) {
+    filterKeywords[module] = keyword.toLowerCase();
+    if (module === 'debug') {
+        updateDebugOutput();
+    } else {
+        updateSubsystemOutput(module);
+    }
+}
+
+function updateDebugOutput() {
+    const output = document.getElementById('debug-output');
+    if (!output) return;
+
+    const keyword = filterKeywords.debug;
+    let messages = debugMessages;
+    if (keyword) {
+        messages = messages.filter(m => (m.content || '').toLowerCase().includes(keyword));
+    }
+
+    if (messages.length === 0) {
+        output.innerHTML = '<div class="no-messages">No debug messages</div>';
+        return;
+    }
+
+    output.innerHTML = messages.map((msg, idx) => {
+        const messageId = `debug-message-${msg.id}`;
+        const timestamp = new Date(msg.timestamp).toLocaleTimeString();
+        return `<div class="subsystem-message collapsed" id="${messageId}">
+            <div class="subsystem-header" onclick="toggleMessage('${messageId}')">
+                <span class="subsystem-timestamp">${timestamp}</span>
+                <span class="subsystem-title">Debug</span>
+                <button class="copy-button" onclick="event.stopPropagation(); copyMessage('debug', ${msg.id});">Copy</button>
+                <span class="expand-icon">▼</span>
+            </div>
+            <div class="subsystem-content hidden">
+                <pre style="white-space: pre-wrap;">${(msg.content || '').replace(/\n/g, '<br>')}</pre>
+            </div>
+        </div>`;
+    }).join('');
 }
 
 function formatSubsystemContent(msg) {
@@ -859,6 +929,7 @@ function connect() {
                 // Store the message with timestamp
                 if (subsystemMessages[module]) {
                     subsystemMessages[module].push({
+                        id: messageCounters[module]++,
                         content: content,
                         timestamp: new Date().toISOString()
                     });
@@ -891,6 +962,7 @@ function connect() {
                 // Store the error with timestamp
                 if (subsystemMessages.systemError) {
                     subsystemMessages.systemError.push({
+                        id: messageCounters.systemError++,
                         content: errorContent,
                         timestamp: new Date().toISOString()
                     });
@@ -914,12 +986,18 @@ function connect() {
                 break;
                 
             case 'debug':
-                const debugOutput = document.getElementById('debug-output');
-                const debugMessage = typeof data.data === 'object' ? 
-                    JSON.stringify(data.data, null, 2) : 
-                    data.data;
-                debugOutput.textContent += debugMessage + '\n';
-                debugOutput.scrollTop = debugOutput.scrollHeight;
+                const dbgMsg = typeof data.data === 'object'
+                    ? JSON.stringify(data.data, null, 2)
+                    : data.data;
+                debugMessages.push({
+                    id: messageCounters.debug++,
+                    content: dbgMsg,
+                    timestamp: data.timestamp || new Date().toISOString()
+                });
+                const debugModal = document.getElementById('debug-modal');
+                if (debugModal && !debugModal.classList.contains('hidden')) {
+                    updateDebugOutput();
+                }
                 break;
                 
             case 'error':
@@ -928,6 +1006,7 @@ function connect() {
                 // Also add the error to the system errors
                 if (subsystemMessages.systemError) {
                     subsystemMessages.systemError.push({
+                        id: messageCounters.systemError++,
                         content: {
                             type: 'system_error',
                             error: data.data?.message || (typeof data.error === 'string' ? data.error : data.error?.message) || 'Unknown server error',
