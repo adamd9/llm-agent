@@ -1,4 +1,4 @@
-# Agent Internal Model
+# Architecture
 
 This document describes the internal architecture and operational flow of the LLM Agent. It is intended to provide context for understanding how the agent processes requests, makes decisions, and interacts with its environment and tools.
 
@@ -33,6 +33,22 @@ A typical interaction follows this general flow:
 
 Throughout this process, status updates and detailed logs are generated, and events are emitted via the `sharedEventEmitter`.
 
+### Message Flow Diagram
+
+```mermaid
+graph TD
+    A(User Message) --> B(Server receives via WebSocket)
+    B --> C(Ego.processMessage)
+    C --> D[Ego.executeWithEvaluation]
+    D --> E[Planner]
+    E --> F[Coordinator]
+    F --> G[Evaluator]
+    G --> H[Ego.handleBubble]
+    H --> I[Message Queue]
+    I --> J(WebSocket Response)
+    J --> A
+```
+
 ## 3. Ego Layer (`src/core/ego/index.js`)
 
 The Ego is the central orchestrator. Key responsibilities:
@@ -44,6 +60,15 @@ The Ego is the central orchestrator. Key responsibilities:
 *   **Evaluation Loop**: Drives the retry mechanism based on feedback from the `Evaluator`.
 *   **Memory Interaction**: Stores user messages and execution results in short-term memory; retrieves relevant memories.
 *   **Event Emission**: Emits `subsystemMessage` (e.g., `original_user_query`, `execution_start`, `evaluation_result`) and `systemStatusMessage` events.
+
+### Reflection Subprocess
+
+`Ego.handleBubble` triggers a reflection step after sending each response. The prompts in
+`src/core/ego/reflection-prompts.js` instruct the LLM to analyse the latest
+short‑term memory together with relevant long‑term memory and produce a JSON
+object containing insights, lessons, follow-up questions and directives. These
+results are stored in long‑term memory so the agent can adapt its future
+behaviour.
 
 ## 4. Coordinator Layer (`src/core/coordinator/index.js`)
 
