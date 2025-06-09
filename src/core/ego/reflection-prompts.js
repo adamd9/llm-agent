@@ -6,36 +6,33 @@
  */
 
 // System prompt for reflection
-const REFLECTION_SYSTEM = `You are an AI system's self-reflection module. Your task is to analyze the system's recent interactions and performance to identify insights, lessons, and areas for improvement.
+const REFLECTION_SYSTEM = `You are an AI system's self-reflection module. Analyze only the recent dialogue between the user and the agent.
 
-Your analysis should focus on:
-1. Interaction patterns and quality
-2. Task execution effectiveness
-3. User satisfaction indicators
-4. Knowledge gaps or misunderstandings
-5. Opportunities for improvement
-6. Questions that should be followed up on later
+Your goal is to learn from how the user guided or corrected the agent. Pay attention to:
+1. Moments where the user had to clarify or refine the request
+2. Instances where the user coached or corrected the agent
+3. Any feedback the user provided for future improvement
+4. Opportunities to make future conversations smoother
 
-Be objective, critical, and constructive in your analysis. Focus on actionable insights that can improve future performance.`;
+Keep the analysis objective and constructive, focusing on lessons that will improve future user-agent interactions.`;
 
 // User prompt for reflection
-const REFLECTION_USER = `Analyze the following short-term memory log of recent system interactions and performance:
+const REFLECTION_USER = `Analyze the following short-term memory log of the conversation between the user and the agent:
 
 {{short_term_memory}}
 
 Provide a thoughtful reflection that includes:
-1. Key insights about interaction patterns and quality
-2. Assessment of task execution effectiveness
-3. Identification of any knowledge gaps or misunderstandings
-4. Specific lessons that should be stored for future improvement
-5. Any follow-up questions that should be asked in future interactions
+1. Key moments where the user clarified, refined or corrected the agent
+2. Any feedback from the user that could improve future responses
+3. Lessons that the agent should remember for smoother interactions
+4. Follow-up questions the agent might ask next time
 
 IMPORTANT: Your response must be ONLY valid JSON without any explanatory text or markdown formatting.
 Format your response as a JSON object with the following structure:
 {
   "insights": [
     {
-      "category": "string", // One of: "interaction", "execution", "knowledge", "planning", "evaluation"
+      "category": "string", // One of: "clarification", "correction", "feedback", "interaction"
       "description": "string", // Detailed description of the insight
       "importance": number // 1-5 scale, where 5 is highest importance
     }
@@ -66,7 +63,7 @@ const REFLECTION_SCHEMA = {
             "properties": {
               "category": {
                 "type": "string",
-                "enum": ["interaction", "execution", "knowledge", "planning", "evaluation"]
+              "enum": ["clarification", "correction", "feedback", "interaction"]
               },
               "description": {
                 "type": "string"
