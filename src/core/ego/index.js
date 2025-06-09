@@ -138,7 +138,7 @@ class Ego {
             await memory.storeShortTerm('User message', externalUserMessageToInternal);
 
             const shortTermMemory = await memory.retrieveShortTerm();
-            const longTermRelevantMemory = await memory.retrieveLongTerm('ego', message);
+            const longTermRelevantMemory = await memory.retrieveLongTerm('ego', message, shortTermMemory);
             const enrichedMessage = {
                 original_message: externalUserMessageToInternal,
                 context: {
@@ -332,7 +332,7 @@ class Ego {
         logger.debug('handleBubble', 'Handling bubble', { result, extraInstruction });
         try {
             const shortTermMemory = await memory.retrieveShortTerm();
-            const longTermRelevantMemory = await memory.retrieveLongTerm('ego', 'retrieve anything relevant to responding to the user');
+            const longTermRelevantMemory = await memory.retrieveLongTerm('ego', 'retrieve anything relevant to responding to the user', shortTermMemory);
 
             // Prepare the message for the ego
             let message = '';
@@ -556,7 +556,7 @@ class Ego {
                 model: settings.reflectionModel || settings.llmModel,
                 response_format: reflectionPrompts.REFLECTION_SCHEMA,
                 temperature: 0.7,
-                max_tokens: 1000
+                max_tokens: settings.maxTokens || 1000
             });
 
             let reflectionResults;

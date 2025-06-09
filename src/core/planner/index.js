@@ -67,7 +67,7 @@ async function planner(enrichedMessage, client = null) {
         if (!longTermMemory) {
             // Create a more specific query based on the user's message
             const memoryQuery = `Retrieve any information relevant to: ${enrichedMessage.original_message}`;
-            longTermMemory = (await memory.retrieveLongTerm('ego', memoryQuery)) || '';
+            longTermMemory = (await memory.retrieveLongTerm('ego', memoryQuery, shortTermMemory)) || '';
             logger.debug('memory', 'Retrieved long-term memory directly:', {
                 length: longTermMemory.length,
                 query: memoryQuery

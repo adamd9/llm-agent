@@ -78,10 +78,11 @@ class LongTermMemoryTool {
             throw new Error('Missing required parameter: question');
         }
         try {
-            const result = await memory.retrieveLongTerm(contextParam ? contextParam.value : null, questionParam.value);
+            const shortTermMemory = await memory.retrieveShortTerm();
+            const result = await memory.retrieveLongTerm(contextParam ? contextParam.value : null, questionParam.value, shortTermMemory);
             return {
                 status: 'success',
-                result: result.analysis
+                result: result
             };
         } catch (error) {
             return {

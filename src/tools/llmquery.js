@@ -1,6 +1,7 @@
 const logger = require('../utils/logger.js');
 const memory = require('../core/memory');
 const { getOpenAIClient } = require("../utils/openaiClient.js");
+const { loadSettings } = require("../utils/settings");
 const { validateToolResponse } = require('../validation/toolValidator');
 
 /** @implements {import('../types/tool').Tool} */
@@ -53,7 +54,7 @@ class LLMQueryTool {
         }
 
         const shortTermMemory = await memory.retrieveShortTerm();
-        const longTermRelevantMemory = await memory.retrieveLongTerm('ego', query);
+        const longTermRelevantMemory = await memory.retrieveLongTerm('ego', query, shortTermMemory);
 
         let userPrompt = `
         ${query}
@@ -73,9 +74,10 @@ class LLMQueryTool {
 
         logger.debug('llmquery', 'messages being sent to OpenAI', { messages }, false);
         const openai = getOpenAIClient();
+        const settings = loadSettings();
         const response = await openai.chat(messages, {
             temperature: 0.7,
-            max_tokens: 1000
+            max_tokens: settings.maxTokens || 1000
         });
 
         logger.debug('llmquery', 'OpenAI response', { response }, false);

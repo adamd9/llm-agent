@@ -13,6 +13,8 @@ const defaultSettings = {
   queryModel: '',
   bubbleModel: '',
   reflectionModel: '',
+  // Default maximum tokens for LLM responses
+  maxTokens: 1000,
   // Default ElevenLabs voice and model for TTS
   ttsVoiceId: 'D38z5RcWu1voky8WS1ja', // "Rachel"
   ttsModelId: 'eleven_flash_v2_5',
