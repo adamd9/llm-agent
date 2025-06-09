@@ -439,11 +439,11 @@ ${memory.content}
   }
 
   // Retrieve long term memory by context
-  async retrieveLongTerm(context = "ego", question) {
+  async retrieveLongTerm(context = "ego", question, shortTermMemory = '') {
     if (context == null) {
       context = "ego";
     }
-    logger.debug("Memory", "Retrieving long term memory for question", { context, question });
+    logger.debug("Memory", "Retrieving long term memory for question", { context, question, shortTermMemoryIncluded: shortTermMemory && shortTermMemory.length });
     
     const filePath = path.join(longTermPath, LONG_TERM_FILE);
     if (!fs.existsSync(filePath)) {
@@ -461,8 +461,13 @@ ${memory.content}
     const formattedMemories = memoryContent;
 
     // Use LLM to find the most relevant memories for the question
+    let queryWithContext = question;
+    if (shortTermMemory && typeof shortTermMemory === 'string' && shortTermMemory.trim() !== '') {
+      queryWithContext += `\nConversation context:\n${shortTermMemory}`;
+    }
+
     const prompt = prompts.RETRIEVE_MEMORY_USER
-      .replace('{{question}}', question)
+      .replace('{{question}}', queryWithContext)
       .replace('{{memories}}', formattedMemories);
 
     try {
@@ -482,7 +487,7 @@ ${memory.content}
           memoryType: 'long-term',
           result: response.content,
           context,
-          question,
+          question: queryWithContext,
           timestamp: new Date().toISOString()
         }
       });

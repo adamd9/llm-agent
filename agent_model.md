@@ -112,7 +112,7 @@ The Memory system allows the agent to retain and recall information.
 *   **Long-Term Memory (`long_term.txt`)**:
     *   Stores information intended for persistence across sessions.
     *   When storing, an LLM analyzes the content to generate a summary and relevant tags (`prompts.MEMORY_ANALYSIS_PROMPT`).
-    *   When retrieving, an LLM selects the most relevant memories based on the query (`prompts.MEMORY_RETRIEVAL_PROMPT`).
+    *   When retrieving, an LLM selects the most relevant memories based on the query (`prompts.MEMORY_RETRIEVAL_PROMPT`). If short-term memory is available, it is appended to the question so retrieval considers the recent conversation context.
 *   **Event Emission**: Emits `subsystemMessage` events (with module ID 'ego') for memory operations like retrieval, analysis, and categorization, providing transparency into its workings.
 
 ## 9. Event System (`src/utils/eventEmitter.js`)

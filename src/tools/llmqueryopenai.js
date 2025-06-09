@@ -70,8 +70,8 @@ class LLMQueryOpenAITool {
         try {
             // Retrieve memory
             const shortTermMemory = await memory.retrieveShortTerm();
-            // Pass the actual user query to the retrieveLongTerm function for better context
-            const longTermRelevantMemory = await memory.retrieveLongTerm('ego', queryParam.value);
+            // Pass the actual user query and conversation context to the retrieveLongTerm function for better context
+            const longTermRelevantMemory = await memory.retrieveLongTerm('ego', queryParam.value, shortTermMemory);
 
             // Construct input with memory context
             const input = `
