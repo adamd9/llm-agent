@@ -30,6 +30,7 @@ app.get('/settings', (req, res) => {
   <label>Query Model:<input type="text" name="queryModel" value="${raw.queryModel ?? ''}" placeholder="${defaults.queryModel || baseModel}" /></label><br/>
   <label>Bubble Model:<input type="text" name="bubbleModel" value="${raw.bubbleModel ?? ''}" placeholder="${defaults.bubbleModel || baseModel}" /></label><br/>
   <label>Reflection Model:<input type="text" name="reflectionModel" value="${raw.reflectionModel ?? ''}" placeholder="${defaults.reflectionModel || baseModel}" /></label><br/>
+  <label>Utterance Check Model:<input type="text" name="utteranceCheckModel" value="${raw.utteranceCheckModel ?? ''}" placeholder="${defaults.utteranceCheckModel}" /></label><br/>
   <label>LLM Max Tokens:<input type="number" name="maxTokens" value="${raw.maxTokens ?? ''}" placeholder="${defaults.maxTokens}" /></label><br/>
   <label>TTS Voice ID:<input type="text" name="ttsVoiceId" value="${raw.ttsVoiceId ?? ''}" placeholder="${defaults.ttsVoiceId}" /></label><br/>
   <label>TTS Model ID:<input type="text" name="ttsModelId" value="${raw.ttsModelId ?? ''}" placeholder="${defaults.ttsModelId}" /></label><br/>
@@ -55,6 +56,7 @@ app.post('/settings', (req, res) => {
     assign('queryModel');
     assign('bubbleModel');
     assign('reflectionModel');
+    assign('utteranceCheckModel');
     assign('maxTokens', v => parseInt(v, 10));
     assign('ttsVoiceId');
     assign('ttsModelId');
@@ -86,6 +88,31 @@ app.get('/api/assemblyai-token', (req, res) => {
   });
 });
 // --- End AssemblyAI Endpoint ---
+
+// --- Start Utterance Check Endpoint ---
+app.post('/api/utterance-check', async (req, res) => {
+  const { text } = req.body;
+  if (!text) {
+    return res.status(400).json({ error: 'Text is required' });
+  }
+  try {
+    const { getClient } = require('./utils/llmClient');
+    const client = getClient('openai');
+    const settings = loadSettings();
+    const result = await client.chat([
+      { role: 'system', content: 'Respond with JSON {"complete":true|false}. Determine if the user text represents a complete question or request.' },
+      { role: 'user', content: text }
+    ], {
+      model: settings.utteranceCheckModel || 'gpt-4.1-nano',
+      response_format: { type: 'json_object' }
+    });
+    const parsed = JSON.parse(result.content);
+    res.json({ complete: !!parsed.complete });
+  } catch (err) {
+    logger.error('utterance-check', 'LLM check failed', err);
+    res.status(500).json({ error: 'LLM check failed' });
+  }
+});
 
 // +++ Start ElevenLabs TTS Streaming Endpoint +++
 app.post('/api/tts/elevenlabs-stream', async (req, res) => {
