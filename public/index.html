@@ -85,9 +85,10 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Debug Output</h3>
+                <input type="text" class="filter-input" placeholder="Filter..." oninput="filterMessages('debug', this.value)">
                 <button onclick="toggleDebug()" class="close-button">&times;</button>
             </div>
-            <pre id="debug-output"></pre>
+            <div id="debug-output" class="modal-body"></div>
         </div>
     </div>
 
@@ -96,9 +97,10 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Planner Output</h3>
+                <input type="text" class="filter-input" placeholder="Filter..." oninput="filterMessages('planner', this.value)">
                 <button onclick="toggleSubsystem('planner')" class="close-button">&times;</button>
             </div>
-            <pre id="planner-output"></pre>
+            <div id="planner-output" class="modal-body"></div>
         </div>
     </div>
 
@@ -107,9 +109,10 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Coordinator Output</h3>
+                <input type="text" class="filter-input" placeholder="Filter..." oninput="filterMessages('coordinator', this.value)">
                 <button onclick="toggleSubsystem('coordinator')" class="close-button">&times;</button>
             </div>
-            <pre id="coordinator-output"></pre>
+            <div id="coordinator-output" class="modal-body"></div>
         </div>
     </div>
 
@@ -118,9 +121,10 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Ego Output</h3>
+                <input type="text" class="filter-input" placeholder="Filter..." oninput="filterMessages('ego', this.value)">
                 <button onclick="toggleSubsystem('ego')" class="close-button">&times;</button>
             </div>
-            <pre id="ego-output"></pre>
+            <div id="ego-output" class="modal-body"></div>
         </div>
     </div>
 
@@ -129,9 +133,10 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>System Errors</h3>
+                <input type="text" class="filter-input" placeholder="Filter..." oninput="filterMessages('systemError', this.value)">
                 <button onclick="toggleSystemErrors()" class="close-button">&times;</button>
             </div>
-            <pre id="system-error-output"></pre>
+            <div id="system-error-output" class="modal-body"></div>
         </div>
     </div>
 
