@@ -21,8 +21,13 @@ app.get('/settings', (req, res) => {
     const defaults = defaultSettings;
     const baseModel = defaults.llmModel;
     const html = `<!DOCTYPE html>
-<html><head><title>Settings</title></head><body>
+<html><head><title>Settings</title>
+<style>.tab{display:none;} .tab.active{display:block;}</style>
+<script>function showTab(id){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.getElementById(id).classList.add('active');}</script>
+</head><body>
 <h1>App Settings</h1>
+<div><button onclick="showTab('general')">General</button><button onclick="showTab('prompts')">Prompts</button></div>
+<div id="general" class="tab active">
 <form method="POST" action="/settings">
   <label>LLM Model:<input type="text" name="llmModel" value="${raw.llmModel ?? ''}" placeholder="${defaults.llmModel}" /></label><br/>
   <label>Planner Model:<input type="text" name="plannerModel" value="${raw.plannerModel ?? ''}" placeholder="${defaults.plannerModel || baseModel}" /></label><br/>
@@ -37,8 +42,13 @@ app.get('/settings', (req, res) => {
   <label>STT Sample Rate:<input type="number" name="sttSampleRate" value="${raw.sttSampleRate ?? ''}" placeholder="${defaults.sttSampleRate}" /></label><br/>
   <label>STT Formatted Finals:<input type="checkbox" name="sttFormattedFinals" ${effective.sttFormattedFinals ? 'checked' : ''} /></label><br/>
   <label>Auto-send Delay (ms):<input type="number" name="autoSendDelayMs" value="${raw.autoSendDelayMs ?? ''}" placeholder="${defaults.autoSendDelayMs}" /></label><br/>
+  <label>Use Prompt Overrides:<input type="checkbox" name="usePromptOverrides" ${effective.usePromptOverrides ? 'checked' : ''} /></label><br/>
   <button type="submit">Save</button>
 </form>
+</div>
+<div id="prompts" class="tab">
+  <p>Place prompt override files in <code>data/prompts/&lt;module&gt;/&lt;PROMPTNAME&gt;.txt</code>.</p>
+</div>
 </body></html>`;
     res.send(html);
 });
@@ -64,6 +74,7 @@ app.post('/settings', (req, res) => {
     assign('sttSampleRate', v => parseInt(v, 10));
     newSettings.sttFormattedFinals = req.body.sttFormattedFinals ? true : false;
     assign('autoSendDelayMs', v => parseInt(v, 10));
+    newSettings.usePromptOverrides = req.body.usePromptOverrides ? true : false;
 
     saveSettings(newSettings);
     res.redirect('/settings');

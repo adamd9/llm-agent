@@ -670,6 +670,14 @@ To add a new personality:
 3. The personality will be automatically loaded on next startup
 4. If it's the only personality file present, it will become the default
 
+### Prompt Overrides
+
+You can override any built-in prompt template by placing a text file in
+`data/prompts/<module>/<PROMPT_NAME>.txt`. When `usePromptOverrides` is enabled
+in `data/settings.json`, the system will load these files instead of the baked
+in versions. If an override is missing or fails to load, the default prompt will
+be used automatically.
+
 ### System Architecture
 
 The system is designed with clear separation of concerns:

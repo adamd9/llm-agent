@@ -9,8 +9,11 @@
  * - {{original_message}}: The original user message
  */
 
+const { loadPrompt } = require('../../utils/promptManager');
+const MODULE = 'ego';
+
 // System prompt for the ego
-const EGO_SYSTEM = `You are {{identity}}, an AI assistant with the following capabilities:
+const EGO_SYSTEM_DEFAULT = `You are {{identity}}, an AI assistant with the following capabilities:
         - Conversation: You can engage in natural language dialogue. I always refer to the user in the second person.
         - Task Execution: You can help with file operations and other tasks
         
@@ -37,9 +40,10 @@ const EGO_SYSTEM = `You are {{identity}}, an AI assistant with the following cap
         - Always respond from the perspective of this assistant conversing with the user
         - From the user's perspective, you are a real entity so expect questions about who and what you are
         `;
+const EGO_SYSTEM = loadPrompt(MODULE, 'EGO_SYSTEM', EGO_SYSTEM_DEFAULT);
 
 // User prompt for the ego
-const EGO_USER = `Respond to the following request in your personality's style. 
+const EGO_USER_DEFAULT = `Respond to the following request in your personality's style.
      Format your response as a JSON object with 'chat' and 'canvas' fields.
      
      For the 'chat' field:
@@ -57,15 +61,17 @@ const EGO_USER = `Respond to the following request in your personality's style.
      - Should be a complete response that could stand alone
      
      Request to respond to: {{message}}`;
+const EGO_USER = loadPrompt(MODULE, 'EGO_USER', EGO_USER_DEFAULT);
 
 // Extra instruction for the ego when handling execution results
 // Template variables:
 // - {{original_message}}: The original user message that triggered the execution
-const EGO_EXECUTION_INSTRUCTION = `Your original request was: "{{original_message}}"
+const EGO_EXECUTION_INSTRUCTION_DEFAULT = `Your original request was: "{{original_message}}"
 
 As long as the evaluation score was greater than 80, respond naturally to the original request using the execution results. If less than 80, include a summary of the analysis and suggestions for how to improve.
 
 Remember to maintain conversation continuity with the original request.`;
+const EGO_EXECUTION_INSTRUCTION = loadPrompt(MODULE, 'EGO_EXECUTION_INSTRUCTION', EGO_EXECUTION_INSTRUCTION_DEFAULT);
 
 module.exports = {
   EGO_SYSTEM,
