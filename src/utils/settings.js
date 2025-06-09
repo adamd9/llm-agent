@@ -21,7 +21,9 @@ const defaultSettings = {
   ttsModelId: 'eleven_flash_v2_5',
   // Streaming STT defaults
   sttSampleRate: 16000,
-  sttFormattedFinals: true
+  sttFormattedFinals: true,
+  // Delay before auto-sending speech input (ms)
+  autoSendDelayMs: 2000
 };
 
 function loadRawSettings() {

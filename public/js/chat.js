@@ -24,6 +24,9 @@ let microphone;
 let isAutoSendEnabled = localStorage.getItem('autoSendEnabled') !== 'false'; // Default to true if not set
 let hasSentFinalForCurrentUtterance = false;
 let inputFieldJustClearedBySend = false; // Flag to prevent repopulation after send
+let autoSendTimer = null; // Timer for delayed auto-send
+let autoSendDelayMs = 2000; // Wait time after final before sending
+let pendingAutoSendTranscript = '';
 
 // UI Elements for STT
 let voiceInputToggleBtn = null;
@@ -1090,6 +1093,37 @@ function sendMessage() {
     }
 }
 
+function attemptAutoSend(transcript) {
+    if (chatInputField) {
+        chatInputField.value = transcript;
+    }
+
+    if (isAutoSendEnabled && transcript.trim().length > 0 && !hasSentFinalForCurrentUtterance) {
+        console.log('[attemptAutoSend] Checking isProcessing. Value:', isProcessing, 'Transcript:', transcript);
+        if (isProcessing) {
+            pendingUserAction = true;
+            updateProcessingUI();
+            if (voiceStatusIndicator) {
+                voiceStatusIndicator.textContent = 'Agent busy. Click Interrupt to send new query.';
+            }
+        } else {
+            sendMessage();
+            if (chatInputField) chatInputField.value = '';
+            hasSentFinalForCurrentUtterance = true;
+            if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
+        }
+    } else if (!hasSentFinalForCurrentUtterance) {
+        if (isAutoSendEnabled) {
+            sendMessage();
+            if (chatInputField) chatInputField.value = '';
+            hasSentFinalForCurrentUtterance = true;
+            if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
+        } else if (transcript.trim().length > 0) {
+            if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Ready to send. Click Send or press Enter.';
+        }
+    }
+}
+
 // --- New STT Functions Start ---
 
 function createMicrophone() {
@@ -1180,6 +1214,11 @@ async function toggleVoiceSTT() {
     // turns is re-initialized within toggleVoiceSTT when starting
     hasSentFinalForCurrentUtterance = false;
     inputFieldJustClearedBySend = false;
+    if (autoSendTimer) {
+        clearTimeout(autoSendTimer);
+        autoSendTimer = null;
+    }
+    pendingAutoSendTranscript = '';
     // sttWs is nulled in the calling context (toggleVoiceSTT's stop branch)
 
     if(voiceInputToggleBtn) voiceInputToggleBtn.textContent = '🎤 Start Voice';
@@ -1211,6 +1250,9 @@ async function toggleVoiceSTT() {
       }
       const data = await response.json();
       token = data.token;
+      if (data.autoSendDelayMs !== undefined) {
+        autoSendDelayMs = data.autoSendDelayMs;
+      }
       if (!token) {
         throw new Error('Token not found in response from /api/assemblyai-token');
       }
@@ -1230,6 +1272,11 @@ async function toggleVoiceSTT() {
     const endpoint = `wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&formatted_finals=true&token=${token}`;
     sttWs = new WebSocket(endpoint);
     inputFieldJustClearedBySend = false; // Reset for a new WebSocket session
+    if (autoSendTimer) {
+        clearTimeout(autoSendTimer);
+        autoSendTimer = null;
+    }
+    pendingAutoSendTranscript = '';
 
     let turns = {}; // keyed by turn_order
     // let fullTranscript = ''; // This variable seems unused now, can be removed if confirmed.
@@ -1251,9 +1298,13 @@ async function toggleVoiceSTT() {
       });
     };
 
-    sttWs.onmessage = async (event) => {
+  sttWs.onmessage = async (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === 'Turn') {
+        if (autoSendTimer) {
+            clearTimeout(autoSendTimer);
+            autoSendTimer = null;
+        }
 
         // Logic for handling new speech or continued speech after a final has been sent.
         if (hasSentFinalForCurrentUtterance && !msg.end_of_turn && msg.transcript.trim() !== '') {
@@ -1297,41 +1348,14 @@ async function toggleVoiceSTT() {
             }
             console.log('Received end_of_turn. Current transcript:', orderedTurnsText, 'Has already sent:', hasSentFinalForCurrentUtterance, 'InputJustCleared:', inputFieldJustClearedBySend);
 
-            if (isAutoSendEnabled && orderedTurnsText.trim().length > 0 && !hasSentFinalForCurrentUtterance) {
-                // This is the first final of an utterance, and auto-send is on.
-                console.log('[toggleVoiceSTT - end_of_turn] Checking isProcessing. Value:', isProcessing, 'Transcript:', orderedTurnsText);
-                if (isProcessing) {
-                    // Show the interrupt button and update UI
-                    pendingUserAction = true;
-                    updateProcessingUI();
-                    
-                    // Update status to inform user they can interrupt
-                    if (voiceStatusIndicator) {
-                        voiceStatusIndicator.textContent = 'Agent busy. Click Interrupt to send new query.';
-                    }
-                    // We don't send automatically anymore, user must click interrupt
-                    // The interrupt handler will call sendMessage() if needed
-                } else {
-                    // Not processing, safe to send
-                    sendMessage();
-                    if (chatInputField) chatInputField.value = '';
-                    hasSentFinalForCurrentUtterance = true;
-                    if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
-                }
-            } else if (!hasSentFinalForCurrentUtterance) {
-                // Handle the case when auto-send is off or it's a subsequent final
-                if (isAutoSendEnabled) {
-                    // Auto-send is on, send the message
-                    sendMessage();
-                    if (chatInputField) chatInputField.value = '';
-                    hasSentFinalForCurrentUtterance = true;
-                    if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
-                } else if (orderedTurnsText.trim().length > 0) {
-                    // Auto-send is off, just update the UI to show the message is ready to send
-                    if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Ready to send. Click Send or press Enter.';
-                    // Don't set hasSentFinalForCurrentUtterance to true so the user can send it manually
-                }
-            }
+            pendingAutoSendTranscript = orderedTurnsText;
+            autoSendTimer = setTimeout(() => {
+                attemptAutoSend(pendingAutoSendTranscript);
+                pendingAutoSendTranscript = '';
+                autoSendTimer = null;
+            }, autoSendDelayMs);
+
+            if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Waiting...';
             // inputFieldJustClearedBySend remains true to guard against its own formatted final if message was sent.
         } else {
             // This 'else' covers all non-end_of_turn messages (partial transcripts, etc.)

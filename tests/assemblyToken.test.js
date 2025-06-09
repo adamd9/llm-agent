@@ -9,12 +9,13 @@ describe('/api/assemblyai-token', () => {
   });
 
   test('returns token and stt settings', async () => {
-    saveSettings({ sttSampleRate: 1234, sttFormattedFinals: false });
+    saveSettings({ sttSampleRate: 1234, sttFormattedFinals: false, autoSendDelayMs: 2500 });
     process.env.ASSEMBLY_AI_KEY = 'abc';
     const res = await request(app).get('/api/assemblyai-token');
     expect(res.status).toBe(200);
     expect(res.body.sampleRate).toBe(1234);
     expect(res.body.formattedFinals).toBe(false);
+    expect(res.body.autoSendDelayMs).toBe(2500);
     expect(res.body.token).toBe('abc');
   });
 });
