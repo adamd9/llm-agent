@@ -546,6 +546,7 @@ The script will show test results and help catch any issues early.
 
 4. After the first run, edit `data/settings.json` to customize runtime options.
    Set `maxTokens` to control the default token limit for LLM responses.
+   Adjust `autoSendDelayMs` to change the delay before speech input is auto-sent.
 
 ### Testing
 Run the test suite:

@@ -13,6 +13,7 @@ describe('/settings page', () => {
   test('default settings provide maxTokens', () => {
     const settings = loadSettings();
     expect(settings.maxTokens).toBe(1000);
+    expect(settings.autoSendDelayMs).toBe(2000);
   });
 
   test('GET /settings returns page', async () => {
@@ -36,7 +37,8 @@ describe('/settings page', () => {
         ttsVoiceId: 'voiceX',
         ttsModelId: 'modelY',
         sttSampleRate: 8000,
-        sttFormattedFinals: 'on'
+        sttFormattedFinals: 'on',
+        autoSendDelayMs: 3000
       });
     expect(res.status).toBe(302);
     const saved = loadSettings();
@@ -51,6 +53,7 @@ describe('/settings page', () => {
     expect(saved.ttsModelId).toBe('modelY');
     expect(saved.sttSampleRate).toBe(8000);
     expect(saved.sttFormattedFinals).toBe(true);
+    expect(saved.autoSendDelayMs).toBe(3000);
   });
 
   test('POST /settings clears to default when blank', async () => {

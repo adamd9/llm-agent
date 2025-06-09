@@ -36,6 +36,7 @@ app.get('/settings', (req, res) => {
   <label>TTS Model ID:<input type="text" name="ttsModelId" value="${raw.ttsModelId ?? ''}" placeholder="${defaults.ttsModelId}" /></label><br/>
   <label>STT Sample Rate:<input type="number" name="sttSampleRate" value="${raw.sttSampleRate ?? ''}" placeholder="${defaults.sttSampleRate}" /></label><br/>
   <label>STT Formatted Finals:<input type="checkbox" name="sttFormattedFinals" ${effective.sttFormattedFinals ? 'checked' : ''} /></label><br/>
+  <label>Auto-send Delay (ms):<input type="number" name="autoSendDelayMs" value="${raw.autoSendDelayMs ?? ''}" placeholder="${defaults.autoSendDelayMs}" /></label><br/>
   <button type="submit">Save</button>
 </form>
 </body></html>`;
@@ -62,6 +63,7 @@ app.post('/settings', (req, res) => {
     assign('ttsModelId');
     assign('sttSampleRate', v => parseInt(v, 10));
     newSettings.sttFormattedFinals = req.body.sttFormattedFinals ? true : false;
+    assign('autoSendDelayMs', v => parseInt(v, 10));
 
     saveSettings(newSettings);
     res.redirect('/settings');
@@ -84,7 +86,8 @@ app.get('/api/assemblyai-token', (req, res) => {
   res.json({
     token: apiKey,
     sampleRate: settings.sttSampleRate,
-    formattedFinals: settings.sttFormattedFinals
+    formattedFinals: settings.sttFormattedFinals,
+    autoSendDelayMs: settings.autoSendDelayMs
   });
 });
 // --- End AssemblyAI Endpoint ---
