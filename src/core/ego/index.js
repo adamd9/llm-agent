@@ -551,13 +551,8 @@ class Ego {
             ];
 
             const settings = loadSettings();
-
-            if (!this.openaiClient || typeof this.openaiClient.chat !== 'function') {
-                logger.error('reflection', 'OpenAI client is not available');
-                return;
-            }
-
-            const response = await this.openaiClient.chat(messages, {
+            const openai = getOpenAIClient();
+            const response = await openai.chat(messages, {
                 model: settings.reflectionModel || settings.llmModel,
                 response_format: reflectionPrompts.REFLECTION_SCHEMA,
                 temperature: 0.7,

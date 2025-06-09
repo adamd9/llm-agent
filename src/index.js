@@ -194,7 +194,8 @@ async function processInitialMessage() {
         const messages = await messagePromise;
         
         // Give a small delay to ensure all async operations complete
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Wait a bit longer so reflection has time to finish
+        await new Promise(resolve => setTimeout(resolve, 4000));
         
         // Log final message location if we got any messages
         if (messages.length > 0) {
