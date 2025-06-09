@@ -31,6 +31,7 @@ describe('/settings page', () => {
         evaluatorModel: 'evalModel',
         queryModel: 'queryModel',
         bubbleModel: 'bubbleModel',
+        utteranceCheckModel: 'nano-model',
         maxTokens: 1500,
         ttsVoiceId: 'voiceX',
         ttsModelId: 'modelY',
@@ -44,6 +45,7 @@ describe('/settings page', () => {
     expect(saved.evaluatorModel).toBe('evalModel');
     expect(saved.queryModel).toBe('queryModel');
     expect(saved.bubbleModel).toBe('bubbleModel');
+    expect(saved.utteranceCheckModel).toBe('nano-model');
     expect(saved.maxTokens).toBe(1500);
     expect(saved.ttsVoiceId).toBe('voiceX');
     expect(saved.ttsModelId).toBe('modelY');

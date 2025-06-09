@@ -1251,7 +1251,7 @@ async function toggleVoiceSTT() {
       });
     };
 
-    sttWs.onmessage = (event) => {
+    sttWs.onmessage = async (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === 'Turn') {
 
@@ -1277,6 +1277,24 @@ async function toggleVoiceSTT() {
         }
 
         if (msg.end_of_turn) {
+            // Use GPT-4.1-nano via server proxy to validate if the utterance is complete
+            let gptCheck = { complete: true };
+            try {
+                const resp = await fetch('/api/utterance-check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: orderedTurnsText })
+                });
+                if (resp.ok) gptCheck = await resp.json();
+            } catch (err) {
+                console.error('Utterance check failed', err);
+            }
+
+            if (!gptCheck.complete) {
+                console.log('Utterance deemed incomplete, waiting for more input');
+                if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Listening...';
+                return;
+            }
             console.log('Received end_of_turn. Current transcript:', orderedTurnsText, 'Has already sent:', hasSentFinalForCurrentUtterance, 'InputJustCleared:', inputFieldJustClearedBySend);
 
             if (isAutoSendEnabled && orderedTurnsText.trim().length > 0 && !hasSentFinalForCurrentUtterance) {
@@ -1296,6 +1314,7 @@ async function toggleVoiceSTT() {
                 } else {
                     // Not processing, safe to send
                     sendMessage();
+                    if (chatInputField) chatInputField.value = '';
                     hasSentFinalForCurrentUtterance = true;
                     if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
                 }
@@ -1304,6 +1323,7 @@ async function toggleVoiceSTT() {
                 if (isAutoSendEnabled) {
                     // Auto-send is on, send the message
                     sendMessage();
+                    if (chatInputField) chatInputField.value = '';
                     hasSentFinalForCurrentUtterance = true;
                     if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
                 } else if (orderedTurnsText.trim().length > 0) {

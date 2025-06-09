@@ -13,6 +13,7 @@ const defaultSettings = {
   queryModel: '',
   bubbleModel: '',
   reflectionModel: '',
+  utteranceCheckModel: 'gpt-4.1-nano',
   // Default maximum tokens for LLM responses
   maxTokens: 1000,
   // Default ElevenLabs voice and model for TTS
