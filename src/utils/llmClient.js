@@ -38,12 +38,13 @@ class OpenAIClient extends LLMClient {
     async chat(messages, options = {}) {
         const settings = loadSettings();
         const model = options.model || settings.llmModel || this.defaultModel;
-        logger.debug('OpenAI Client', 'Chatting', { messages, options, model });
+        const maxTokens = options.max_tokens || settings.maxTokens || 1000;
+        logger.debug('OpenAI Client', 'Chatting', { messages, options, model, maxTokens });
         const response = await this.client.chat.completions.create({
             model,
             messages,
             temperature: options.temperature || 0.7,
-            max_tokens: options.max_tokens || 1000,
+            max_tokens: maxTokens,
             response_format: options.response_format
         });
         return {

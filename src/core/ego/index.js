@@ -556,7 +556,7 @@ class Ego {
                 model: settings.reflectionModel || settings.llmModel,
                 response_format: reflectionPrompts.REFLECTION_SCHEMA,
                 temperature: 0.7,
-                max_tokens: 1000
+                max_tokens: settings.maxTokens || 1000
             });
 
             let reflectionResults;

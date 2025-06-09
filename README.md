@@ -32,6 +32,7 @@ The application includes a comprehensive system error tracking mechanism:
 
 1. **Error Collection**: All errors across modules are captured with:
    - Module name and location
+   - Specific component that triggered the error (e.g., which module exceeded a token limit)
    - Full error message and stack trace
    - Error context and status
    - Timestamp of occurrence
@@ -543,6 +544,9 @@ The script will show test results and help catch any issues early.
    docker-compose up --build
    ```
 
+4. After the first run, edit `data/settings.json` to customize runtime options.
+   Set `maxTokens` to control the default token limit for LLM responses.
+
 ### Testing
 Run the test suite:
 ```bash
@@ -841,6 +845,7 @@ The `resetMemory` function allows the user to reset the current memory by transf
 
 ### Changes in Functionality
 - The `retrieveLongTerm` method now defaults the `context` parameter to 'ego' if it is null, ensuring consistent behavior when retrieving long-term memory.
+- When retrieving, any available short-term memory is appended to the question so that long-term memory results account for recent conversation context.
 
 ## Updates
 

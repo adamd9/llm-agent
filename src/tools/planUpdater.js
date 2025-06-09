@@ -1,6 +1,7 @@
 const logger = require('../utils/logger.js');
 const memory = require('../core/memory');
 const { getOpenAIClient } = require("../utils/openaiClient.js");
+const { loadSettings } = require("../utils/settings");
 
 class PlanUpdaterTool {
     constructor() {
@@ -64,6 +65,7 @@ Remember:
 
         try {
             const openai = getOpenAIClient();
+            const settings = loadSettings();
             const response = await openai.chat(messages, {
                 response_format: {
                     type: "json_schema",
@@ -124,7 +126,7 @@ Remember:
                     }
                 },
                 temperature: 0.7,
-                max_tokens: 1000
+                max_tokens: settings.maxTokens || 1000
             });
 
             const evaluation = JSON.parse(response.content);

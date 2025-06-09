@@ -82,7 +82,7 @@ async function getEvaluation(prompt) {
         model: settings.evaluatorModel || settings.llmModel,
         response_format: prompts.EVALUATION_SCHEMA,
         temperature: 0.7,
-        max_tokens: 1000
+        max_tokens: settings.maxTokens || 1000
     });
 
     return response.content;

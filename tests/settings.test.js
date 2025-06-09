@@ -10,6 +10,11 @@ describe('/settings page', () => {
     }
   });
 
+  test('default settings provide maxTokens', () => {
+    const settings = loadSettings();
+    expect(settings.maxTokens).toBe(1000);
+  });
+
   test('GET /settings returns page', async () => {
     const res = await request(app).get('/settings');
     expect(res.status).toBe(200);
@@ -26,6 +31,7 @@ describe('/settings page', () => {
         evaluatorModel: 'evalModel',
         queryModel: 'queryModel',
         bubbleModel: 'bubbleModel',
+        maxTokens: 1500,
         ttsVoiceId: 'voiceX',
         ttsModelId: 'modelY',
         sttSampleRate: 8000,
@@ -38,6 +44,7 @@ describe('/settings page', () => {
     expect(saved.evaluatorModel).toBe('evalModel');
     expect(saved.queryModel).toBe('queryModel');
     expect(saved.bubbleModel).toBe('bubbleModel');
+    expect(saved.maxTokens).toBe(1500);
     expect(saved.ttsVoiceId).toBe('voiceX');
     expect(saved.ttsModelId).toBe('modelY');
     expect(saved.sttSampleRate).toBe(8000);
@@ -59,5 +66,6 @@ describe('/settings page', () => {
 
     const saved = loadSettings();
     expect(saved.llmModel).toBe('gpt-4.1');
+    expect(saved.maxTokens).toBe(1000);
   });
 });
