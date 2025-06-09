@@ -822,14 +822,15 @@ Content here
 
 ### Reflection Process
 
-The reflection step now examines the most recent short‑term memory and uses the LLM to generate insights, lessons learned, and follow‑up questions. Each reflection is based on the current conversation history and the results are stored in long‑term memory for later use.
+The reflection step now examines the most recent short‑term memory **and** any relevant long‑term memory describing how the agent believes it works. This includes operational guidelines and the agent's own internal model. The combined context is sent to the LLM to generate insights, lessons learned, follow‑up questions, and actionable directives. These directives are stored as long‑term memories so the agent can adapt its future behavior based on past interactions.
 
 Example reflection output:
 ```
-{
+{ 
   "insights": [ ... ],
   "lessons_learned": [ ... ],
-  "follow_up_questions": [ ... ]
+  "follow_up_questions": [ ... ],
+  "directives": [ ... ]
 }
 ```
 
