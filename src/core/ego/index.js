@@ -545,9 +545,20 @@ class Ego {
             logger.debug('reflection', 'Starting reflection process');
 
             const shortTermMemory = await memory.retrieveShortTerm();
+            const longTermContext = await memory.retrieveLongTerm(
+                'ego',
+                'everything the agent knows about how it works, including its own internal model and operational guidelines',
+                shortTermMemory
+            );
+
             const messages = [
                 { role: 'system', content: reflectionPrompts.REFLECTION_SYSTEM },
-                { role: 'user', content: reflectionPrompts.REFLECTION_USER.replace('{{short_term_memory}}', shortTermMemory || '') }
+                {
+                    role: 'user',
+                    content: reflectionPrompts.REFLECTION_USER
+                        .replace('{{short_term_memory}}', shortTermMemory || '')
+                        .replace('{{long_term_memory}}', longTermContext || '')
+                }
             ];
 
             const settings = loadSettings();
@@ -603,7 +614,9 @@ class Ego {
                 hasLessons: !!reflectionResults.lessons_learned,
                 lessonsLength: reflectionResults.lessons_learned?.length || 0,
                 hasQuestions: !!reflectionResults.follow_up_questions,
-                questionsLength: reflectionResults.follow_up_questions?.length || 0
+                questionsLength: reflectionResults.follow_up_questions?.length || 0,
+                hasDirectives: !!reflectionResults.directives,
+                directivesLength: reflectionResults.directives?.length || 0
             });
             
             // Store important insights in long-term memory
@@ -659,8 +672,8 @@ class Ego {
             }
             
             // Store follow-up questions for future interactions
-            if (reflectionResults.follow_up_questions && 
-                Array.isArray(reflectionResults.follow_up_questions) && 
+            if (reflectionResults.follow_up_questions &&
+                Array.isArray(reflectionResults.follow_up_questions) &&
                 reflectionResults.follow_up_questions.length > 0) {
                 
                 logger.debug('reflection', 'Storing follow-up questions in long-term memory', { 
@@ -678,6 +691,28 @@ class Ego {
                         },
                         questions: reflectionResults.follow_up_questions
                     });
+                }
+            }
+
+            // Store directives that should influence future behavior
+            if (reflectionResults.directives && Array.isArray(reflectionResults.directives)) {
+                for (const directive of reflectionResults.directives) {
+                    if (directive && directive.instruction) {
+                        logger.debug('reflection', 'Storing directive in long-term memory', { directive });
+
+                        try {
+                            const result = await memory.storeLongTerm(`[Directive] ${directive.instruction}`);
+                            logger.debug('reflection', 'Successfully stored directive in long-term memory', { result });
+                        } catch (error) {
+                            logger.error('reflection', 'Error storing directive in long-term memory', {
+                                error: {
+                                    message: error.message,
+                                    stack: error.stack
+                                },
+                                directive
+                            });
+                        }
+                    }
                 }
             }
         } catch (error) {

@@ -3,6 +3,7 @@
  * 
  * Template variables:
  * - {{short_term_memory}}: The short-term memory content to be analyzed
+ * - {{long_term_memory}}: Relevant long-term memory about how the agent thinks it works
  */
 
 // System prompt for reflection
@@ -20,6 +21,10 @@ Keep the analysis objective and constructive, focusing on lessons that will impr
 const REFLECTION_USER = `Analyze the following short-term memory log of the conversation between the user and the agent:
 
 {{short_term_memory}}
+
+Relevant long-term memory about how the agent thinks it works and its internal model:
+
+{{long_term_memory}}
 
 Provide a thoughtful reflection that includes:
 1. Key moments where the user clarified, refined or corrected the agent
@@ -45,6 +50,12 @@ Format your response as a JSON object with the following structure:
   ],
   "follow_up_questions": [
     "string" // Questions to ask in future interactions
+  ],
+  "directives": [
+    {
+      "instruction": "string", // Instruction or memory to store
+      "reason": "string" // Why this directive is important
+    }
   ]
 }`;
 
@@ -99,9 +110,21 @@ const REFLECTION_SCHEMA = {
           "items": {
             "type": "string"
           }
+        },
+        "directives": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "instruction": { "type": "string" },
+              "reason": { "type": "string" }
+            },
+            "required": ["instruction", "reason"],
+            "additionalProperties": false
+          }
         }
       },
-      "required": ["insights", "lessons_learned", "follow_up_questions"],
+      "required": ["insights", "lessons_learned", "follow_up_questions", "directives"],
       "additionalProperties": false
     },
     "strict": true
