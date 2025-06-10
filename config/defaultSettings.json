@@ -1,0 +1,16 @@
+{
+  "llmModel": "gpt-4.1",
+  "plannerModel": "",
+  "evaluatorModel": "",
+  "queryModel": "",
+  "bubbleModel": "",
+  "reflectionModel": "",
+  "utteranceCheckModel": "gpt-4.1-nano",
+  "maxTokens": 1000,
+  "ttsVoiceId": "D38z5RcWu1voky8WS1ja",
+  "ttsModelId": "eleven_flash_v2_5",
+  "sttSampleRate": 16000,
+  "sttFormattedFinals": true,
+  "autoSendDelayMs": 2000,
+  "usePromptOverrides": true
+}

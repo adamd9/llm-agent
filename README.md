@@ -24,11 +24,13 @@ An AI agent that chats and executes tasks using OpenAI models and a flexible too
    docker-compose up --build
    ```
 
-The first run generates `data/settings.json` which can be edited to adjust defaults.
+Default configuration is loaded from `config/defaultSettings.json`. The first run
+generates `data/settings.json` which stores any runtime/user overrides.
 
 ## Configuration
 
-Set `LLM_AGENT_DATA_DIR` to choose where the `data` directory lives. See `data/settings.json` for other runtime options after the first start.
+Set `LLM_AGENT_DATA_DIR` to choose where the `data` directory lives. See
+`data/settings.json` for runtime options saved after the first start.
 
 ## Development
 
