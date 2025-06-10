@@ -1365,11 +1365,6 @@ async function toggleVoiceSTT() {
         }
 
         console.log('[TURNS] Before update - turns:', JSON.parse(JSON.stringify(turns)), 'adding turn:', msg.turn_order, 'with text:', msg.transcript);
-        // Store current input as turn[0] if it doesn't exist
-        if (!turns[0] && chatInputField && chatInputField.value) {
-            turns[0] = chatInputField.value;
-            console.log('[TURNS] Stored current input as turn[0]:', turns[0]);
-        }
 
         // Update the current turn
         turns[msg.turn_order] = msg.transcript;
@@ -2408,18 +2403,18 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (isNewTypingSession) {
                 console.log('[TURNS] New typing session detected, clearing turns object');
-                turns = {};
-                // Store current input as turn[0]
-                if (chatInputField && chatInputField.value) {
-                    turns[0] = chatInputField.value;
-                    console.log('[TURNS] Stored current input as turn[0]:', turns[0]);
-                }
-                hasSentFinalForCurrentUtterance = false;
             }
             
             lastInputTime = now;
         };
-        chatInputField.addEventListener('input', handleInput);
+        chatInputField.addEventListener('input', (event) => {
+            if (!event.detail?.fromSTT) {
+                // Clear turns object and store current input as turn[0]
+                turns = { 0: event.target.value };
+                console.log('[TURNS] Manual input detected, cleared turns and stored as turn[0]:', turns[0]);
+            }
+            handleInput(event);
+        });
         
         // Also log when the input is focused
         chatInputField.addEventListener('focus', () => {
