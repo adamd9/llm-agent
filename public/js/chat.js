@@ -1330,8 +1330,15 @@ async function toggleVoiceSTT() {
         }
 
         // Debug log the current state before any changes
-        console.log('[TURNS] Before processing message - turns:', JSON.parse(JSON.stringify(turns)), 
-                  'msg:', {end_of_turn: msg.end_of_turn, turn_order: msg.turn_order, transcript: msg.transcript});
+        console.log('[TURNS] Before processing message - turns:', JSON.parse(JSON.stringify(turns)), 'msg:', msg);
+
+        // If we get any new speech with content, reset the cleared flag
+        if (msg.transcript.trim() !== '') {
+            if (inputFieldJustClearedBySend) {
+                console.log('[TURNS] New speech detected after send, resetting inputFieldJustClearedBySend');
+                inputFieldJustClearedBySend = false;
+            }
+        }
 
         // Logic for handling new speech or continued speech after a final has been sent.
         if (hasSentFinalForCurrentUtterance && !msg.end_of_turn && msg.transcript.trim() !== '') {
