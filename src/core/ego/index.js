@@ -11,6 +11,7 @@ const sharedEventEmitter = require('../../utils/eventEmitter');
 const prompts = require('./prompts');
 const reflectionPrompts = require('./reflection-prompts');
 const { loadSettings } = require('../../utils/settings');
+const promptCache = require('../../utils/promptCache');
 
 /**
  * Escapes HTML special characters to prevent XSS
@@ -473,12 +474,16 @@ class Ego {
             await sharedEventEmitter.emit('assistantResponse', frontendResponse);
             await sharedEventEmitter.emit('assistantComplete');
             
-            logger.debug('handleBubble', 'Response sent to frontend', { 
+            logger.debug('handleBubble', 'Response sent to frontend', {
                 chatLength: frontendResponse.chat?.length || 0,
                 hasCanvas: !!frontendResponse.canvas,
                 canvasType: frontendResponse.canvas?.type,
                 response: JSON.stringify(frontendResponse, null, 2)
             });
+
+            const cacheStats = promptCache.getStats();
+            logger.debug('promptCache', 'Usage summary', cacheStats);
+            promptCache.resetStats();
             
             // Perform reflection after the response is sent to the user
             // Run it asynchronously to avoid blocking
