@@ -1387,7 +1387,15 @@ async function toggleVoiceSTT() {
         
         if (!inputFieldJustClearedBySend) {
             if (chatInputField) {
-                chatInputField.value = orderedTurnsText;
+                // Get the base text (either existing input or empty)
+                const baseText = turns[0] || '';
+                // Get all turns except turn[0], sorted by order
+                const newSpeech = Object.keys(turns)
+                    .filter(k => k !== '0')
+                    .sort((a, b) => Number(a) - Number(b))
+                    .map(k => turns[k])
+                    .join('');
+                chatInputField.value = baseText + newSpeech;
                 console.log("[UTTERANCE] Updated chat input field. Length:", chatInputField.value.length, 
                            "Value (first 50 chars):", chatInputField.value.substring(0, 50) + (chatInputField.value.length > 50 ? '...' : ''));
             }
@@ -1402,7 +1410,7 @@ async function toggleVoiceSTT() {
                 const resp = await fetch('/api/utterance-check', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: orderedTurnsText })
+                    body: JSON.stringify({ text: chatInputField.value })
                 });
                 if (resp.ok) gptCheck = await resp.json();
             } catch (err) {
@@ -1414,7 +1422,7 @@ async function toggleVoiceSTT() {
                 if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Listening...';
                 return;
             }
-            console.log('Received end_of_turn. Current transcript:', orderedTurnsText, 'Has already sent:', hasSentFinalForCurrentUtterance, 'InputJustCleared:', inputFieldJustClearedBySend);
+            console.log('Received end_of_turn. Current transcript:', chatInputField.value, 'Has already sent:', hasSentFinalForCurrentUtterance, 'InputJustCleared:', inputFieldJustClearedBySend);
 
             console.log("[UTTERANCE] End of turn detected. Setting auto-send timer. Current input length:", 
                        chatInputField ? chatInputField.value.length : 'N/A',
@@ -1448,9 +1456,9 @@ async function toggleVoiceSTT() {
             
             // If input was just cleared by send, AND this new partial has text,
             // AND a final has NOT yet been sent for the current logical utterance
-            if (inputFieldJustClearedBySend && orderedTurnsText.trim().length > 0 && !hasSentFinalForCurrentUtterance) {
+            if (inputFieldJustClearedBySend && chatInputField && chatInputField.value.trim().length > 0 && !hasSentFinalForCurrentUtterance) {
                 console.log('[UTTERANCE] Clearing inputFieldJustClearedBySend flag. New partial text available:', 
-                           orderedTurnsText.trim().substring(0, 50) + (orderedTurnsText.length > 50 ? '...' : ''));
+                           chatInputField.value.trim().substring(0, 50) + (chatInputField.value.length > 50 ? '...' : ''));
                 inputFieldJustClearedBySend = false; // Allow this new partial to update the input
             }
             
@@ -1465,7 +1473,15 @@ async function toggleVoiceSTT() {
             
             // Update input field with current transcript if not just cleared by send
             if (!inputFieldJustClearedBySend && chatInputField) {
-                chatInputField.value = orderedTurnsText;
+                // Get the base text (either existing input or empty)
+                const baseText = turns[0] || '';
+                // Get all turns except turn[0], sorted by order
+                const newSpeech = Object.keys(turns)
+                    .filter(k => k !== '0')
+                    .sort((a, b) => Number(a) - Number(b))
+                    .map(k => turns[k])
+                    .join('');
+                chatInputField.value = baseText + newSpeech;
             }
         }
       } else if (msg.type === 'Error') {
