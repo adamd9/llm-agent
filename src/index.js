@@ -114,7 +114,7 @@ app.post('/api/utterance-check', async (req, res) => {
     const client = getClient('openai');
     const settings = loadSettings();
     const result = await client.chat([
-      { role: 'system', content: 'Respond with JSON {"complete":true|false}. Determine if the user text represents a complete question or request.' },
+      { role: 'system', content: 'Respond with JSON {"complete":true|false}. Determine if the user content is a complete question or sentence and does not appear cut off.' },
       { role: 'user', content: text }
     ], {
       model: settings.utteranceCheckModel || 'gpt-4.1-nano',
