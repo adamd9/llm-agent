@@ -23,7 +23,9 @@ const defaultSettings = {
   sttSampleRate: 16000,
   sttFormattedFinals: true,
   // Delay before auto-sending speech input (ms)
-  autoSendDelayMs: 2000
+  autoSendDelayMs: 2000,
+  // Whether to load prompt overrides from the data directory
+  usePromptOverrides: true
 };
 
 function loadRawSettings() {

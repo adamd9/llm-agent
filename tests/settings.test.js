@@ -14,6 +14,7 @@ describe('/settings page', () => {
     const settings = loadSettings();
     expect(settings.maxTokens).toBe(1000);
     expect(settings.autoSendDelayMs).toBe(2000);
+    expect(settings.usePromptOverrides).toBe(true);
   });
 
   test('GET /settings returns page', async () => {
@@ -38,7 +39,8 @@ describe('/settings page', () => {
         ttsModelId: 'modelY',
         sttSampleRate: 8000,
         sttFormattedFinals: 'on',
-        autoSendDelayMs: 3000
+        autoSendDelayMs: 3000,
+        usePromptOverrides: 'on'
       });
     expect(res.status).toBe(302);
     const saved = loadSettings();
@@ -54,6 +56,7 @@ describe('/settings page', () => {
     expect(saved.sttSampleRate).toBe(8000);
     expect(saved.sttFormattedFinals).toBe(true);
     expect(saved.autoSendDelayMs).toBe(3000);
+    expect(saved.usePromptOverrides).toBe(true);
   });
 
   test('POST /settings clears to default when blank', async () => {
@@ -72,5 +75,6 @@ describe('/settings page', () => {
     const saved = loadSettings();
     expect(saved.llmModel).toBe('gpt-4.1');
     expect(saved.maxTokens).toBe(1000);
+    expect(saved.usePromptOverrides).toBe(false);
   });
 });
