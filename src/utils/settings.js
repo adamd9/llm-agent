@@ -3,8 +3,9 @@ const path = require('path');
 const { DATA_DIR_PATH } = require('./dataDir');
 
 const SETTINGS_PATH = path.join(DATA_DIR_PATH, 'settings.json');
+const DEFAULTS_PATH = path.resolve(__dirname, '../../config/defaultSettings.json');
 
-const defaultSettings = {
+const fallbackDefaults = {
   // Base OpenAI model used if a specific one is not provided
   llmModel: 'gpt-4.1',
   // Optional specialised models for different subsystems
@@ -27,6 +28,16 @@ const defaultSettings = {
   // Whether to load prompt overrides from the data directory
   usePromptOverrides: true
 };
+
+let fileDefaults = {};
+try {
+  const data = fs.readFileSync(DEFAULTS_PATH, 'utf8');
+  fileDefaults = JSON.parse(data);
+} catch (err) {
+  // If the file is missing or invalid, fall back to built-in defaults
+}
+
+const defaultSettings = { ...fallbackDefaults, ...fileDefaults };
 
 function loadRawSettings() {
   try {
