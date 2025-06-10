@@ -20,6 +20,7 @@ let pendingUserAction = false; // Track if we're waiting for user action on inte
 let isRecording = false;
 let sttWs; // WebSocket for AssemblyAI STT
 let microphone;
+let turns = {}; // keyed by turn_order for STT
 // Load auto-send preference from localStorage or default to true
 let isAutoSendEnabled = localStorage.getItem('autoSendEnabled') !== 'false'; // Default to true if not set
 let hasSentFinalForCurrentUtterance = false;
@@ -1093,13 +1094,21 @@ function sendMessage() {
     }
 }
 
-function attemptAutoSend(transcript) {
-    if (chatInputField) {
-        chatInputField.value = transcript;
+function attemptAutoSend() {
+    if (!chatInputField) {
+        console.log('[UTTERANCE] attemptAutoSend: No chat input field found');
+        return;
     }
-
-    if (isAutoSendEnabled && transcript.trim().length > 0 && !hasSentFinalForCurrentUtterance) {
-        console.log('[attemptAutoSend] Checking isProcessing. Value:', isProcessing, 'Transcript:', transcript);
+    
+    const currentInput = chatInputField.value.trim();
+    console.log('[UTTERANCE] attemptAutoSend - Current input:', 
+               currentInput.length > 50 ? currentInput.substring(0, 50) + '...' : currentInput,
+               'Length:', currentInput.length,
+               'isAutoSendEnabled:', isAutoSendEnabled,
+               'hasSentFinalForCurrentUtterance:', hasSentFinalForCurrentUtterance);
+    
+    if (isAutoSendEnabled && currentInput.length > 0 && !hasSentFinalForCurrentUtterance) {
+        console.log('[attemptAutoSend] Checking isProcessing. Value:', isProcessing, 'Current input:', currentInput);
         if (isProcessing) {
             pendingUserAction = true;
             updateProcessingUI();
@@ -1108,17 +1117,23 @@ function attemptAutoSend(transcript) {
             }
         } else {
             sendMessage();
-            if (chatInputField) chatInputField.value = '';
+            // Reset state after sending
+            chatInputField.value = '';
+            turns = {};
             hasSentFinalForCurrentUtterance = true;
+            inputFieldJustClearedBySend = true;
             if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
         }
     } else if (!hasSentFinalForCurrentUtterance) {
         if (isAutoSendEnabled) {
             sendMessage();
-            if (chatInputField) chatInputField.value = '';
+            // Reset state after sending
+            chatInputField.value = '';
+            turns = {};
             hasSentFinalForCurrentUtterance = true;
+            inputFieldJustClearedBySend = true;
             if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Sent. Listening...';
-        } else if (transcript.trim().length > 0) {
+        } else if (currentInput.length > 0) {
             if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Ready to send. Click Send or press Enter.';
         }
     }
@@ -1278,8 +1293,16 @@ async function toggleVoiceSTT() {
     }
     pendingAutoSendTranscript = '';
 
-    let turns = {}; // keyed by turn_order
+    // Reset turns at the start of a new recording session
+    turns = {};
     // let fullTranscript = ''; // This variable seems unused now, can be removed if confirmed.
+
+    // Initialize turns with current input value as turn 0
+    turns = {};
+    if (chatInputField) {
+        turns[0] = chatInputField.value;
+        console.log('[TURNS] Initialized turns with current input:', turns[0]);
+    }
 
     sttWs.onopen = async () => {
       console.log('AssemblyAI WebSocket connected!');
@@ -1306,25 +1329,70 @@ async function toggleVoiceSTT() {
             autoSendTimer = null;
         }
 
+        // Debug log the current state before any changes
+        console.log('[TURNS] Before processing message - turns:', JSON.parse(JSON.stringify(turns)), 
+                  'msg:', {end_of_turn: msg.end_of_turn, turn_order: msg.turn_order, transcript: msg.transcript});
+
         // Logic for handling new speech or continued speech after a final has been sent.
         if (hasSentFinalForCurrentUtterance && !msg.end_of_turn && msg.transcript.trim() !== '') {
             // A final for a previous utterance was sent, and this is a new partial.
-            console.log("Partial received after a final. InputJustCleared:", inputFieldJustClearedBySend, "Transcript:", msg.transcript);
+            console.log("[UTTERANCE] Partial received after a final. Current state - hasSentFinal:", hasSentFinalForCurrentUtterance, 
+                        "InputJustCleared:", inputFieldJustClearedBySend, 
+                        "Turns count:", Object.keys(turns).length);
             // This partial indicates either continued speech or the start of formatting for the previous utterance.
             // In either case, we are starting a 'new' logical segment from the user's perspective for the input field.
+            console.log('[TURNS] Resetting turns object - was:', JSON.parse(JSON.stringify(turns)));
             turns = {}; // Reset turns for this new segment.
+            
+            // If there's existing content in the input, use it as the first turn
+            if (chatInputField && chatInputField.value.trim()) {
+                turns[0] = chatInputField.value.trim();
+                console.log('[TURNS] Reset turns with existing input as first turn:', turns[0]);
+            }
+            
             hasSentFinalForCurrentUtterance = false; // This new segment can be sent.
             inputFieldJustClearedBySend = false; // Allow the input field to be updated with this new segment.
-            // chatInputField.value will be cleared by the subsequent `turns[msg.turn_order] = msg.transcript;` if turns is empty
-            // or will start fresh with this transcript.
-            console.log("State reset for new/continued speech segment. Turns cleared, hasSentFinal=false, inputFieldJustClearedBySend=false.");
+            console.log("[UTTERANCE] State reset for new speech segment. New state - hasSentFinal:", hasSentFinalForCurrentUtterance, 
+                       "InputJustCleared:", inputFieldJustClearedBySend, 
+                       "Turns reset with", Object.keys(turns).length, "initial turns");
         }
 
+        console.log('[TURNS] Before update - turns:', JSON.parse(JSON.stringify(turns)), 'adding turn:', msg.turn_order, 'with text:', msg.transcript);
+        // Store current input as turn[0] if it doesn't exist
+        if (!turns[0] && chatInputField && chatInputField.value) {
+            turns[0] = chatInputField.value;
+            console.log('[TURNS] Stored current input as turn[0]:', turns[0]);
+        }
+
+        // Update the current turn
         turns[msg.turn_order] = msg.transcript;
-        const orderedTurnsText = Object.keys(turns).sort((a, b) => Number(a) - Number(b)).map(k => turns[k]).join('');
+        console.log('[TURNS] After update - turns:', JSON.parse(JSON.stringify(turns)));
+
+        if (!inputFieldJustClearedBySend && chatInputField) {
+            // Get the base text (either existing input or empty)
+            const baseText = turns[0] || '';
+            // Get all turns except turn[0], sorted by order
+            const newSpeech = Object.keys(turns)
+                .filter(k => k !== '0')
+                .sort((a, b) => Number(a) - Number(b))
+                .map(k => turns[k])
+                .join('');
+            chatInputField.value = baseText + newSpeech;
+            console.log('[TURNS] Updated input - base:', baseText, 'new speech:', newSpeech);
+        }
+        
+        console.log("[UTTERANCE] Updated turns. Turn order:", msg.turn_order, 
+                   "Current turns:", Object.keys(turns).sort((a, b) => Number(a) - Number(b)).join(','), 
+                   "InputJustCleared:", inputFieldJustClearedBySend);
         
         if (!inputFieldJustClearedBySend) {
-            if (chatInputField) chatInputField.value = orderedTurnsText;
+            if (chatInputField) {
+                chatInputField.value = orderedTurnsText;
+                console.log("[UTTERANCE] Updated chat input field. Length:", chatInputField.value.length, 
+                           "Value (first 50 chars):", chatInputField.value.substring(0, 50) + (chatInputField.value.length > 50 ? '...' : ''));
+            }
+        } else {
+            console.log("[UTTERANCE] Skipped updating chat input field because inputFieldJustClearedBySend is true");
         }
 
         if (msg.end_of_turn) {
@@ -1348,15 +1416,21 @@ async function toggleVoiceSTT() {
             }
             console.log('Received end_of_turn. Current transcript:', orderedTurnsText, 'Has already sent:', hasSentFinalForCurrentUtterance, 'InputJustCleared:', inputFieldJustClearedBySend);
 
-            pendingAutoSendTranscript = orderedTurnsText;
+            console.log("[UTTERANCE] End of turn detected. Setting auto-send timer. Current input length:", 
+                       chatInputField ? chatInputField.value.length : 'N/A',
+                       "hasSentFinal:", hasSentFinalForCurrentUtterance);
+            
+            // Set a timer to auto-send the current input value
             autoSendTimer = setTimeout(() => {
-                attemptAutoSend(pendingAutoSendTranscript);
-                pendingAutoSendTranscript = '';
+                console.log("[UTTERANCE] Auto-send timer fired. Current input length:", 
+                           chatInputField ? chatInputField.value.length : 'N/A');
+                if (chatInputField) {
+                    attemptAutoSend();
+                }
                 autoSendTimer = null;
             }, autoSendDelayMs);
 
             if (voiceStatusIndicator) voiceStatusIndicator.textContent = 'Waiting...';
-            // inputFieldJustClearedBySend remains true to guard against its own formatted final if message was sent.
         } else {
             // This 'else' covers all non-end_of_turn messages (partial transcripts, etc.)
             
@@ -1365,13 +1439,18 @@ async function toggleVoiceSTT() {
             
             // If this is a new utterance, reset the flag
             if (isNewUtterance) {
+                const oldState = hasSentFinalForCurrentUtterance;
                 hasSentFinalForCurrentUtterance = false;
-                console.log('Detected start of new utterance, resetting hasSentFinalForCurrentUtterance');
+                console.log('[UTTERANCE] New utterance detected. State change - hasSentFinal:', 
+                           oldState, '->', hasSentFinalForCurrentUtterance, 
+                           'Turns count:', Object.keys(turns).length);
             }
             
             // If input was just cleared by send, AND this new partial has text,
             // AND a final has NOT yet been sent for the current logical utterance
             if (inputFieldJustClearedBySend && orderedTurnsText.trim().length > 0 && !hasSentFinalForCurrentUtterance) {
+                console.log('[UTTERANCE] Clearing inputFieldJustClearedBySend flag. New partial text available:', 
+                           orderedTurnsText.trim().substring(0, 50) + (orderedTurnsText.length > 50 ? '...' : ''));
                 inputFieldJustClearedBySend = false; // Allow this new partial to update the input
             }
             
@@ -2275,6 +2354,65 @@ document.addEventListener('DOMContentLoaded', () => {
     chatInputField = document.getElementById('chatInput');
     sendButton = document.getElementById('send-button'); // Assign sendButton globally
     voiceInputToggleBtn = document.getElementById('voiceInputToggle');
+    
+    // Debug log to verify chatInputField is found
+    console.log('[DEBUG] chatInputField found:', chatInputField !== null);
+    
+    // Clear turns object when user starts typing
+    if (chatInputField) {
+        console.log('[DEBUG] Adding input event listener to chatInputField');
+        let lastInputTime = 0;
+        
+        const handleInput = (e) => {
+            const now = Date.now();
+            const inputType = e.inputType || '';
+            const isUserInput = e.isTrusted || 
+                             inputType.startsWith('insert') || 
+                             inputType.startsWith('delete');
+            
+            console.log('[TURNS] Input event fired. isRecording:', isRecording, 
+                      'isUserInput:', isUserInput, 
+                      'inputType:', inputType,
+                      'value length:', e.target.value.length);
+            
+            // Skip if this is not a user input
+            if (!isUserInput) {
+                return;
+            }
+            
+            // Check if this is a new typing session (first input in 1 second)
+            const isNewTypingSession = (now - lastInputTime) > 1000;
+            
+            if (isNewTypingSession) {
+                console.log('[TURNS] New typing session detected, clearing turns object');
+                turns = {};
+                // Store current input as turn[0]
+                if (chatInputField && chatInputField.value) {
+                    turns[0] = chatInputField.value;
+                    console.log('[TURNS] Stored current input as turn[0]:', turns[0]);
+                }
+                hasSentFinalForCurrentUtterance = false;
+            }
+            
+            lastInputTime = now;
+        };
+        chatInputField.addEventListener('input', handleInput);
+        
+        // Also log when the input is focused
+        chatInputField.addEventListener('focus', () => {
+            console.log('[DEBUG] chatInputField received focus');
+        });
+        
+        // And log when the input value is changed programmatically
+        const originalValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        Object.defineProperty(chatInputField, 'value', {
+            set: function(val) {
+                console.log('[DEBUG] chatInputField value changed programmatically to:', val);
+                return originalValue.set.call(this, val);
+            },
+            get: originalValue.get
+        });
+    }
     autoSendToggleCheckbox = document.getElementById('autoSendToggle');
     voiceStatusIndicator = document.getElementById('voiceStatusIndicator');
     interruptTTSButton = document.getElementById('interrupt-tts-button'); // Assign TTS interrupt button
