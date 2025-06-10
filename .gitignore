@@ -19,3 +19,6 @@ data/*
 !data/tools/
 !data/prompt-cache/
 !data/prompt-cache/**
+
+# Cache usage logs
+data/prompt-cache-usage.log

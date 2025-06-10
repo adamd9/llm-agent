@@ -1,16 +1,38 @@
 {
-  "content": "{\"complete\": true}",
+  "_cacheMetadata": {
+    "key": "6f1af4e5262cfa8cefbfe8ee761546a232dc0a67",
+    "timestamp": "2025-06-10T13:19:24.419Z",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Respond with JSON {\"complete\":true|false}. Determine if the user text represents a complete question or request."
+      },
+      {
+        "role": "user",
+        "content": "Hello.What's your name?"
+      }
+    ],
+    "options": {
+      "model": "gpt-4.1-nano",
+      "max_tokens": 5000,
+      "temperature": 0.7,
+      "response_format": {
+        "type": "json_object"
+      }
+    }
+  },
+  "content": "{\"complete\":false}",
   "raw": {
-    "id": "chatcmpl-BghJKO0Y8UNdODjp0hpTcoqiqMdTL",
+    "id": "chatcmpl-BgtAqbHozd9X2gJ3nIfxD2fLBmVTX",
     "object": "chat.completion",
-    "created": 1749515962,
+    "created": 1749561564,
     "model": "gpt-4.1-nano-2025-04-14",
     "choices": [
       {
         "index": 0,
         "message": {
           "role": "assistant",
-          "content": "{\"complete\": true}",
+          "content": "{\"complete\":false}",
           "refusal": null,
           "annotations": []
         },

@@ -65,7 +65,12 @@ class OpenAIClient extends LLMClient {
         };
 
         if (promptCache.isEnabled()) {
-            promptCache.writeCache(cacheKey, result);
+            promptCache.writeCache(cacheKey, result, messages, { 
+                model,
+                max_tokens: maxTokens,
+                temperature: options.temperature || 0.7,
+                response_format: options.response_format
+            });
         }
 
         return result;

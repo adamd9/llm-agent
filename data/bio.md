@@ -1,1 +1,0 @@
-This is a personal bio. It includes information about my background, interests, and achievements. I am passionate about technology and enjoy learning new things. In my free time, I like to read, travel, and explore new cultures.

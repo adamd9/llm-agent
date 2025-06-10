@@ -337,6 +337,36 @@ class Ego {
 
             // Prepare the message for the ego
             let message = '';
+            let userQuery = ''; // To store the original user query for cache logging
+            
+            // Extract the original user query from the result
+            if (result.enriched_message?.content) {
+                // Try to get the last user message from the conversation
+                userQuery = result.enriched_message.content;
+            } else if (result.content) {
+                // If no enriched message, try to get the content directly
+                try {
+                    const content = typeof result.content === 'string' ? JSON.parse(result.content) : result.content;
+                    if (content.steps && Array.isArray(content.steps)) {
+                        // Try to find a user message in the steps
+                        const userStep = content.steps.find(step => step.role === 'user');
+                        if (userStep && userStep.content) {
+                            userQuery = userStep.content;
+                        }
+                    } else if (content.query) {
+                        userQuery = content.query;
+                    }
+                } catch (e) {
+                    // If parsing fails, use the raw content
+                    userQuery = result.content;
+                }
+            }
+            
+            // Set the last user query for cache logging
+            if (userQuery) {
+                logger.debug('handleBubble', 'Extracted user query', { userQuery });
+                promptCache.setLastUserQuery(userQuery);
+            }
             if (result.type === 'error') {
                 message = `Error: ${result.error.message}`;
             } else if (result.type === 'success') {
@@ -481,7 +511,9 @@ class Ego {
                 response: JSON.stringify(frontendResponse, null, 2)
             });
 
+            // Log cache usage with the user query
             const cacheStats = promptCache.getStats();
+            promptCache.logCacheUsage(cacheStats, userQuery);
             logger.debug('promptCache', 'Usage summary', cacheStats);
             promptCache.resetStats();
             

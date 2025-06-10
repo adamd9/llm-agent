@@ -32,11 +32,52 @@ generates `data/settings.json` which stores any runtime/user overrides.
 Set `LLM_AGENT_DATA_DIR` to choose where the `data` directory lives. See
 `data/settings.json` for runtime options saved after the first start.
 
+### Prompt Caching
+
+The system includes a prompt caching mechanism to improve performance and reduce API calls:
+
+- **Cache Location**: `data/prompt-cache/`
+- **Cache Logs**: `data/prompt-cache-usage.log`
+- **Cache TTL**: 24 hours (automatic cleanup of older entries)
+
+#### Cache Management
+
+- Cache entries include metadata about the original query and parameters
+- Cache keys are generated based on message content and model parameters
+- The system automatically cleans up cache files older than 24 hours on startup
+
+#### Environment Variables
+
+- `ENABLE_PROMPT_CACHE` - Set to `true` to enable the prompt cache (default: `true`)
+- `DISABLE_PROMPT_CACHE` - Set to `true` to disable the prompt cache
+- `CACHE_TTL_MS` - Override the default 24-hour TTL (in milliseconds)
+
+#### Cache Inspection
+
+You can inspect the cache contents programmatically:
+
+```javascript
+const promptCache = require('./src/utils/promptCache');
+
+// List all cache entries
+const entries = promptCache.listCacheEntries();
+console.log(entries);
+
+// Inspect a specific cache entry
+const entry = promptCache.inspectCache('cache-key-here');
+console.log(entry);
+
+// Clean up old cache files manually
+const { deleted, errors } = await promptCache.cleanupOldCacheFiles();
+console.log(`Deleted ${deleted} old cache files, ${errors} errors`);
+```
+
 ## Development
 
 - Hot reloading with `npm run dev`
 - Logs stored under `data/logs`
 - Run tests with `npm test`
+- Cache debug logs are available in the main application logs with the `promptCache` prefix
 
 ## Documentation
 
