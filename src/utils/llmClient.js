@@ -2,6 +2,7 @@ const { OpenAI } = require('openai');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const logger = require('./logger');
 const { loadSettings } = require('./settings');
+const promptCache = require('./promptCache');
 require('dotenv').config();
 
 class LLMClient {
@@ -40,6 +41,16 @@ class OpenAIClient extends LLMClient {
         const model = options.model || settings.llmModel || this.defaultModel;
         const maxTokens = options.max_tokens || settings.maxTokens || 1000;
         logger.debug('OpenAI Client', 'Chatting', { messages, options, model, maxTokens });
+
+        const cacheKey = promptCache.getCacheKey(messages, { ...options, model, maxTokens, client: 'openai' });
+        if (promptCache.isEnabled()) {
+            const cached = promptCache.readCache(cacheKey);
+            if (cached) {
+                logger.debug('OpenAI Client', 'Using cached response');
+                return cached;
+            }
+        }
+
         const response = await this.client.chat.completions.create({
             model,
             messages,
@@ -47,10 +58,17 @@ class OpenAIClient extends LLMClient {
             max_tokens: maxTokens,
             response_format: options.response_format
         });
-        return {
+
+        const result = {
             content: response.choices[0].message.content,
             raw: response
         };
+
+        if (promptCache.isEnabled()) {
+            promptCache.writeCache(cacheKey, result);
+        }
+
+        return result;
     }
 }
 
@@ -90,6 +108,15 @@ class OllamaClient extends LLMClient {
         }
 
         const prompt = this._convertMessagesToPrompt(messages, options);
+
+        const cacheKey = promptCache.getCacheKey(messages, { ...options, model: options.model || this.model, client: 'ollama' });
+        if (promptCache.isEnabled()) {
+            const cached = promptCache.readCache(cacheKey);
+            if (cached) {
+                logger.debug('Ollama Client', 'Using cached response');
+                return cached;
+            }
+        }
         
         const response = await fetch(`${this.baseUrl}/api/generate`, {
             method: 'POST',
@@ -114,16 +141,24 @@ class OllamaClient extends LLMClient {
                 // Check if response is wrapped in code blocks
                 const codeBlockMatch = result.response.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
                 if (codeBlockMatch) {
-                    return {
+                    const out = {
                         content: codeBlockMatch[1],
                         raw: result
                     };
+                    if (promptCache.isEnabled()) {
+                        promptCache.writeCache(cacheKey, out);
+                    }
+                    return out;
                 }
                 // If no code blocks, return the response as is
-                return {
+                const out = {
                     content: result.response,
                     raw: result
                 };
+                if (promptCache.isEnabled()) {
+                    promptCache.writeCache(cacheKey, out);
+                }
+                return out;
             } catch (e) {
                 // Emit system error message
                 const sharedEventEmitter = require('./eventEmitter');
@@ -141,10 +176,14 @@ class OllamaClient extends LLMClient {
                 throw new Error(`Failed to process JSON schema response: ${e.message}`);
             }
         } else {
-            return {
+            const out = {
                 content: result.response,
                 raw: result
             };
+            if (promptCache.isEnabled()) {
+                promptCache.writeCache(cacheKey, out);
+            }
+            return out;
         }
     }
 

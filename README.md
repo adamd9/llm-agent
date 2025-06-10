@@ -554,6 +554,12 @@ Run the test suite:
 npm test
 ```
 
+During testing and development, LLM responses are cached under
+`data/prompt-cache`. The cache is enabled automatically when
+`NODE_ENV` is not `production`. Set `DISABLE_PROMPT_CACHE=true` to
+force live requests or `ENABLE_PROMPT_CACHE=true` to override in other
+environments.
+
 #### Testing OpenAI Implementations
 When testing components that use the OpenAI API, follow these best practices:
 

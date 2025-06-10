@@ -17,3 +17,5 @@ dist/
 # Data directory (except tools)
 data/*
 !data/tools/
+!data/prompt-cache/
+!data/prompt-cache/**
