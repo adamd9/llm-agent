@@ -9,6 +9,7 @@ const sharedEventEmitter = require("./utils/eventEmitter");
 const { ElevenLabsClient } = require('@elevenlabs/elevenlabs-js');
 const safeStringify = require('./utils/safeStringify');
 const { loadSettings, saveSettings, loadRawSettings, defaultSettings } = require('./utils/settings');
+const toolManager = require('./mcp');
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -20,13 +21,20 @@ app.get('/settings', (req, res) => {
     const effective = loadSettings();
     const defaults = defaultSettings;
     const baseModel = defaults.llmModel;
+
+    const tools = toolManager.getAllTools().map(t => `${t.name} (${t.source})`);
+    const failedTools = toolManager.getFailedTools();
+    const personalityInfo = ego.personality ? `${ego.personality.name} (${ego.personality.source})` : 'None';
+    const shortMem = core.memory.getShortTermMemory();
+    const longMem = core.memory.getLongTermMemory();
+
     const html = `<!DOCTYPE html>
 <html><head><title>Settings</title>
 <style>.tab{display:none;} .tab.active{display:block;}</style>
 <script>function showTab(id){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.getElementById(id).classList.add('active');}</script>
 </head><body>
 <h1>App Settings</h1>
-<div><button onclick="showTab('general')">General</button><button onclick="showTab('prompts')">Prompts</button></div>
+<div><button onclick="showTab('general')">General</button><button onclick="showTab('prompts')">Prompts</button><button onclick="showTab('stats')">Stats</button></div>
 <div id="general" class="tab active">
 <form method="POST" action="/settings">
   <label>LLM Model:<input type="text" name="llmModel" value="${raw.llmModel ?? ''}" placeholder="${defaults.llmModel}" /></label><br/>
@@ -48,6 +56,22 @@ app.get('/settings', (req, res) => {
 </div>
 <div id="prompts" class="tab">
   <p>Place prompt override files in <code>data/prompts/&lt;module&gt;/&lt;PROMPTNAME&gt;.txt</code>.</p>
+</div>
+<div id="stats" class="tab">
+  <h3>Loaded Tools</h3>
+  <ul>
+    ${tools.map(t => `<li>${t}</li>`).join('') || '<li>None</li>'}
+  </ul>
+  <h3>Failed Tools</h3>
+  <ul>
+    ${failedTools.map(t => `<li>${t.name}: ${t.error}</li>`).join('') || '<li>None</li>'}
+  </ul>
+  <h3>Personality</h3>
+  <p>${personalityInfo}</p>
+  <h3>Short Term Memory</h3>
+  <pre>${shortMem.replace(/</g,'&lt;')}</pre>
+  <h3>Long Term Memory</h3>
+  <pre>${longMem.replace(/</g,'&lt;')}</pre>
 </div>
 </body></html>`;
     res.send(html);
@@ -480,4 +504,4 @@ if (require.main === module) {
     startServer();
 }
 
-module.exports = { app, startServer };
+module.exports = { app, startServer, ego, toolManager };
