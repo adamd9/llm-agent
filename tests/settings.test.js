@@ -1,7 +1,7 @@
 const request = require('supertest');
 const fs = require('fs');
 const { app } = require('../src/index');
-const { SETTINGS_PATH, loadSettings } = require('../src/utils/settings');
+const { SETTINGS_PATH, loadSettings, defaultSettings } = require('../src/utils/settings');
 
 describe('/settings page', () => {
   afterEach(() => {
@@ -12,8 +12,8 @@ describe('/settings page', () => {
 
   test('default settings provide maxTokens', () => {
     const settings = loadSettings();
-    expect(settings.maxTokens).toBe(1000);
-    expect(settings.autoSendDelayMs).toBe(2000);
+    expect(settings.maxTokens).toBe(defaultSettings.maxTokens);
+    expect(settings.autoSendDelayMs).toBe(defaultSettings.autoSendDelayMs);
     expect(settings.usePromptOverrides).toBe(true);
   });
 
@@ -21,6 +21,7 @@ describe('/settings page', () => {
     const res = await request(app).get('/settings');
     expect(res.status).toBe(200);
     expect(res.text).toMatch(/App Settings/);
+    expect(res.text).toMatch(/Stats/);
   });
 
   test('POST /settings saves file', async () => {
@@ -73,8 +74,8 @@ describe('/settings page', () => {
       .send({ llmModel: '' });
 
     const saved = loadSettings();
-    expect(saved.llmModel).toBe('gpt-4.1');
-    expect(saved.maxTokens).toBe(1000);
+    expect(saved.llmModel).toBe(defaultSettings.llmModel);
+    expect(saved.maxTokens).toBe(defaultSettings.maxTokens);
     expect(saved.usePromptOverrides).toBe(false);
   });
 });

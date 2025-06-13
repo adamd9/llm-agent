@@ -502,6 +502,24 @@ ${memory.content}
       throw error;
     }
   }
+
+  // Read raw short term memory file
+  getShortTermMemory() {
+    const filePath = path.join(shortTermPath, SHORT_TERM_FILE);
+    if (!fs.existsSync(filePath)) {
+      return '';
+    }
+    return fs.readFileSync(filePath, 'utf-8');
+  }
+
+  // Read raw long term memory file
+  getLongTermMemory() {
+    const filePath = path.join(longTermPath, LONG_TERM_FILE);
+    if (!fs.existsSync(filePath)) {
+      return '';
+    }
+    return fs.readFileSync(filePath, 'utf-8');
+  }
 }
 
 module.exports = new Memory();

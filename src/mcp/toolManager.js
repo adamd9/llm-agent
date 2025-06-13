@@ -12,6 +12,7 @@ const sharedEventEmitter = require('../utils/eventEmitter');
 class MCPToolManager {
   constructor() {
     this.tools = new Map();
+    this.failedTools = [];
     this.coreToolsDir = path.join(__dirname, '../tools');
     this.dataToolsDir = path.join(DATA_DIR_PATH, 'tools');
     this.mcpServersDir = path.join(DATA_DIR_PATH, 'mcp-servers');
@@ -148,6 +149,7 @@ class MCPToolManager {
                 hasExecute: typeof tool?.execute === 'function',
                 hasCapabilities: typeof tool?.getCapabilities === 'function'
               });
+              this.recordFailedTool(file, 'invalid tool');
             }
           } catch (error) {
             logger.error('mcpToolManager', `Error loading tool ${file}:`, {
@@ -156,6 +158,8 @@ class MCPToolManager {
               code: error.code,
               details: error
             });
+
+            this.recordFailedTool(file, error.message);
             
             // Emit system error message
             await sharedEventEmitter.emit('systemError', {
@@ -178,6 +182,8 @@ class MCPToolManager {
         code: error.code,
         details: error
       });
+
+      this.recordFailedTool(directory, error.message);
       
       // Emit system error message
       await sharedEventEmitter.emit('systemError', {
@@ -228,14 +234,16 @@ class MCPToolManager {
             
             if (result.status === 'success') {
               logger.debug('mcpToolManager', `Successfully connected to MCP server: ${file}`, result);
-              
+
               // Register tools from this server
               await this.registerMCPServerTools(result.serverId);
             } else {
               logger.error('mcpToolManager', `Failed to connect to MCP server: ${file}`, result);
+              this.recordFailedTool(file, 'connection failed');
             }
           } catch (error) {
             logger.error('mcpToolManager', `Error connecting to MCP server ${serverPath}:`, { error: connectionResult.error });
+            this.recordFailedTool(file, error.message);
           }
         }
       }
@@ -312,13 +320,16 @@ class MCPToolManager {
                   logger.debug('mcpToolManager', `Successfully loaded and registered remote MCP tool: ${adaptedTool.name}`);
                 } else {
                   logger.error('mcpToolManager', `Invalid adapted remote MCP tool: ${tool.name}`);
+                  this.recordFailedTool(tool.name, 'invalid remote tool');
                 }
               }
             } else {
               logger.error('mcpToolManager', `Error connecting to remote HTTP MCP server ${serverConfig.name}:`, { error: connectionResult?.error });
+              this.recordFailedTool(serverConfig.name, 'connection failed');
             }
           } catch (err) {
             logger.error('mcpToolManager', `Error processing remote MCP server config ${file}:`, { error: err.message, stack: err.stack });
+            this.recordFailedTool(serverConfig?.name || file, err.message);
             await sharedEventEmitter.emit('systemError', {
               module: 'toolManager',
               content: {
@@ -574,6 +585,14 @@ class MCPToolManager {
       
       return false;
     }
+  }
+
+  recordFailedTool(name, error) {
+    this.failedTools.push({ name, error });
+  }
+
+  getFailedTools() {
+    return this.failedTools;
   }
 
   /**
