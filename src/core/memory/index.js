@@ -520,6 +520,18 @@ ${memory.content}
     }
     return fs.readFileSync(filePath, 'utf-8');
   }
+
+  // Move short term memory into long term storage and clear short term file
+  async consolidateShortTermToLongTerm() {
+    try {
+      const shortContent = this.getShortTermMemory();
+      if (!shortContent.trim()) return;
+      await this.storeLongTerm({ transcript: shortContent });
+      await this.resetMemory();
+    } catch (err) {
+      logger.error('Memory', 'Failed to consolidate short term memory', { error: err.message });
+    }
+  }
 }
 
 module.exports = new Memory();
