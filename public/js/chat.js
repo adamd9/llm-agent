@@ -770,10 +770,29 @@ function addMessage(type, content, format = 'basic', messageId = null, options =
     return messageDiv;
 }
 
+async function fetchHistory() {
+    try {
+        const res = await fetch('/chat/history');
+        if (!res.ok) return;
+        const history = await res.json();
+        const messagesDiv = document.getElementById('messages');
+        if (messagesDiv) messagesDiv.innerHTML = '';
+        history.forEach(ev => {
+            if (ev.role === 'user') {
+                addMessage('user', ev.content);
+            } else if (ev.role === 'assistant') {
+                addMessage('assistant', ev.content);
+            }
+        });
+    } catch (err) {
+        console.error('Failed to fetch history', err);
+    }
+}
+
 function connect() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
-    
+
     ws = new WebSocket(wsUrl);
     
     ws.onopen = () => {
@@ -1040,8 +1059,30 @@ function connect() {
                 clearStatus();
                 break;
 
-            case 'session':
+            case 'user':
+                if (data.data && data.data.content) {
+                    // Avoid duplicate if same as last sent
+                    if (window.lastSentMessage === data.data.content) {
+                        window.lastSentMessage = null;
+                    } else {
+                        addMessage('user', data.data.content);
+                    }
+                }
+                break;
+
+            case 'busy':
+                showStatus('Assistant is busy with another request', { noSpinner: true });
+                break;
+
+            case 'reset':
+                const messagesDiv = document.getElementById('messages');
+                if (messagesDiv) messagesDiv.innerHTML = '';
+                showStatus('Conversation context reset due to inactivity', { persistent: true, noSpinner: true });
+                break;
+
+            case 'connected':
                 console.log('Session ID:', data.sessionId);
+                fetchHistory();
                 break;
         }
     };
@@ -1085,10 +1126,9 @@ function sendMessage() {
         ws.send(JSON.stringify({
             message: message
         }));
-        
-        // Update UI and clear input
-        addMessage('user', message);
-        if (chatInputField) chatInputField.value = ''; // Clear the global chatInputField
+
+        window.lastSentMessage = message;
+        if (chatInputField) chatInputField.value = '';
         
         console.log('Message sent, reset utterance tracking state');
     }
