@@ -36,6 +36,7 @@ let autoSendToggle = null;
 let voiceStatusIndicator = null;
 let chatInputField = null; // Will be assigned in DOMContentLoaded
 let sendButton = null; // Will be assigned in DOMContentLoaded
+let scrollToInputBtn = null; // Floating button for small screens
 
 // ElevenLabs TTS Variables
 let elevenLabsAudioContext = null;
@@ -783,6 +784,7 @@ function addMessage(type, content, format = 'basic', messageId = null, options =
     
     messagesDiv.appendChild(messageDiv);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    updateScrollButton();
     
     // If there's canvas content, update the canvas
     if (canvasContent) {
@@ -813,9 +815,34 @@ async function fetchHistory() {
         
         // Reset the flag after loading history
         isLoadingHistory = false;
+        updateScrollButton();
     } catch (err) {
         console.error('Failed to fetch history', err);
         isLoadingHistory = false; // Reset flag on error too
+    }
+}
+
+// Show or hide the floating scroll button based on message scroll position
+function updateScrollButton() {
+    if (!scrollToInputBtn || !chatInputField) return;
+    const rect = chatInputField.getBoundingClientRect();
+    const fullyVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+    if (fullyVisible) {
+        scrollToInputBtn.classList.remove('visible');
+    } else {
+        scrollToInputBtn.classList.add('visible');
+    }
+}
+
+function scrollToInput() {
+    const messagesDiv = document.getElementById('messages');
+    if (messagesDiv) {
+        messagesDiv.scrollTo({ top: messagesDiv.scrollHeight, behavior: 'smooth' });
+    }
+    if (chatInputField) {
+        const top = chatInputField.getBoundingClientRect().top + window.pageYOffset - 20;
+        window.scrollTo({ top, behavior: 'smooth' });
+        chatInputField.focus();
     }
 }
 
@@ -843,10 +870,12 @@ function connect() {
 
         if (sendButton) {
             sendButton.disabled = false;
+            sendButton.innerHTML = 'Send';
         } else {
             console.error('Send button not found in ws.onopen');
         }
 
+        clearStatus();
         showStatus('Connected to server', { noSpinner: true });
     };
     
@@ -2523,6 +2552,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chatInputField = document.getElementById('chatInput');
     sendButton = document.getElementById('send-button'); // Assign sendButton globally
     voiceInputToggleBtn = document.getElementById('voiceInputToggle');
+    scrollToInputBtn = document.getElementById('scroll-to-input');
     
     // Debug log to verify chatInputField is found
     console.log('[DEBUG] chatInputField found:', chatInputField !== null);
@@ -2665,6 +2695,16 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize message counts
     updateMessageCounts();
+
+    // Setup scroll-to-input button functionality
+    const messagesDiv = document.getElementById('messages');
+    if (scrollToInputBtn) {
+        scrollToInputBtn.addEventListener('click', scrollToInput);
+        window.addEventListener('scroll', updateScrollButton, { passive: true });
+        window.addEventListener('resize', updateScrollButton);
+        if (messagesDiv) messagesDiv.addEventListener('scroll', updateScrollButton);
+        updateScrollButton();
+    }
 
     if (chatInputField) {
         chatInputField.addEventListener('keypress', function(event) {
