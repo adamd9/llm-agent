@@ -39,7 +39,7 @@
                 </div>
                 <div id="input-container">
                     <div class="input-row">
-                        <input type="text" id="chatInput" placeholder="Type your message or use voice..." disabled>
+                        <textarea id="chatInput" placeholder="Type your message or use voice..." rows="1" disabled></textarea>
                         <div class="button-group">
                             <button id="send-button" disabled>Send</button>
                             <button id="interrupt-button" class="interrupt-button" disabled>
@@ -53,15 +53,11 @@
             </div>
             <div id="canvas-container" class="canvas-panel">
                 <div id="canvas-content">
-                    <div class="canvas-placeholder">
-                        <p>Canvas content will appear here</p>
-                        <p><small>This area can display rich content like data visualizations, images, or formatted text.</small></p>
-                    </div>
                 </div>
             </div>
         </div>
         <header class="main-header">
-            <div class="header-buttons">
+            <div class="system-controls">
                 <button id="reset-button" class="reset-button" title="Reset Session">
                     <span class="reset-icon">🔄</span>
                     <span class="reset-text">Reset Session</span>

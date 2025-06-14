@@ -3,6 +3,7 @@ let currentMessagePersistent = false;
 let isProcessing = false; // Agent is no longer busy
 let systemMessageDiv = null;
 let currentResult = null;
+let isLoadingHistory = false; // Flag to track if messages are being loaded from history
 let subsystemMessages = {
     planner: [],
     coordinator: [],
@@ -688,7 +689,7 @@ function removeFinalizingMessage() {
 }
 
 function addMessage(type, content, format = 'basic', messageId = null, options = {}) {
-    console.log('Adding message:', { type, content });
+    console.log('Adding message:', { type, content, isLoadingHistory });
     
     // Handle object content (e.g., from WebSocket)
     let messageContent = content;
@@ -798,15 +799,23 @@ async function fetchHistory() {
         const history = await res.json();
         const messagesDiv = document.getElementById('messages');
         if (messagesDiv) messagesDiv.innerHTML = '';
+        
+        // Set the flag to indicate we're loading history
+        isLoadingHistory = true;
+        
         history.forEach(ev => {
             if (ev.role === 'user') {
                 addMessage('user', ev.content);
             } else if (ev.role === 'assistant') {
-                addMessage('assistant', ev.content);
+                addMessage('assistant', ev.content, 'basic', null, { skipTTS: true });
             }
         });
+        
+        // Reset the flag after loading history
+        isLoadingHistory = false;
     } catch (err) {
         console.error('Failed to fetch history', err);
+        isLoadingHistory = false; // Reset flag on error too
     }
 }
 
@@ -820,10 +829,14 @@ function connect() {
         console.log('Connected to server');
         connectionError = false; // Reset connection error state on successful connection
 
+        // Initialize chatInputField before using it
+        const chatInputField = document.getElementById('chatInput');
+        
         if (chatInputField) {
             chatInputField.disabled = false;
             // Auto-focus the chat input after connection is established
             chatInputField.focus();
+            // Don't add another event listener here - it's already added in DOMContentLoaded
         } else {
             console.error('Chat input field not found in ws.onopen');
         }
@@ -975,7 +988,7 @@ function connect() {
                 // Handle TTS - use the chat text if available, otherwise fall back to responseText
                 let ttsText = responseData.chat || responseText;
                 
-                if (ttsText) {
+                if (ttsText && !options.skipTTS) {
                     if (typeof ttsText !== 'string') {
                         console.warn('Invalid text for TTS, converting to string');
                         ttsText = String(ttsText);
@@ -998,8 +1011,10 @@ function connect() {
                     
                     // Start the new TTS
                     playElevenLabsTTS(ttsText);
-                } else {
+                } else if (!ttsText) {
                     console.warn('No valid text found for TTS in response:', responseData);
+                } else if (options.skipTTS) {
+                    console.log('Skipping TTS for this message (loaded from history or explicitly disabled)');
                 }
                 
                 clearStatus();
@@ -2549,6 +2564,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 turns = { 0: event.target.value };
                 console.log('[TURNS] Manual input detected, cleared turns and stored as turn[0]:', turns[0]);
             }
+            
+            // Auto-resize textarea based on content
+            event.target.style.height = 'auto';
+            event.target.style.height = Math.min(event.target.scrollHeight, 120) + 'px';
+            
             handleInput(event);
         });
         
@@ -2558,7 +2578,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         // And log when the input value is changed programmatically
-        const originalValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        const originalValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
         Object.defineProperty(chatInputField, 'value', {
             set: function(val) {
                 console.log('[DEBUG] chatInputField value changed programmatically to:', val);

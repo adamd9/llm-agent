@@ -34,10 +34,11 @@ header {
     margin-top: auto;
 }
 
-.header-buttons {
+.system-controls {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
+    flex-wrap: wrap;
 }
 
 #chat-container {
@@ -552,11 +553,11 @@ header {
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: #2196F3;
-    color: white;
-    border: none;
+    background-color: #f5f5f5;
+    color: #666;
+    border: 1px solid #e0e0e0;
     border-radius: 4px;
-    padding: 6px 10px;
+    padding: 8px 12px;
     cursor: pointer;
     font-size: 14px;
     transition: all 0.2s ease;
@@ -565,9 +566,9 @@ header {
 }
 
 #reset-button:hover {
-    background-color: #0b7dda;
+    background-color: #e0e0e0;
     transform: translateY(-1px);
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
 #reset-button:active {
@@ -613,6 +614,9 @@ header {
     min-height: 24px;
     max-height: 120px;
     overflow-y: auto;
+    display: block;
+    width: 100%;
+    font-family: inherit;
 }
 
 #chatInput:focus {
@@ -1263,6 +1267,21 @@ header {
 }
 
 /* Responsive styles */
+/* Mobile-first responsive styles for system-controls */
+@media (max-width: 600px) {
+    .system-controls {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .system-controls button,
+    .system-controls a {
+        width: 100%;
+        margin-bottom: 5px;
+        justify-content: center;
+    }
+}
+
 @media (min-width: 769px) {
     .main-content {
         flex-direction: row;
