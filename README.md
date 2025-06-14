@@ -33,7 +33,9 @@ generates `data/settings.json` which stores any runtime/user overrides.
 ## Configuration
 
 Set `LLM_AGENT_DATA_DIR` to choose where the `data` directory lives. See
-`data/settings.json` for runtime options saved after the first start.
+`data/settings.json` for runtime options saved after the first start. A
+web-based settings page is available at `/settings` with tabs for general
+options, prompt overrides and runtime statistics.
 
 ### Prompt Caching
 
