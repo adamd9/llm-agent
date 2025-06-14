@@ -1,4 +1,4 @@
-name: Deploy
+name: Deploy to Server
 
 on:
   push:
@@ -9,28 +9,21 @@ on:
 jobs:
   trigger-deployment:
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name == 'main' && 'production' || 'dev' }}
     
     steps:
-      - name: Set environment variables
-        id: env
+      - name: Set domain based on branch
+        id: set-domain
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
             echo "DOMAIN=assistant.greatmachineinthesky.com" >> $GITHUB_ENV
-            echo "GIT_REF=main" >> $GITHUB_ENV
           elif [ "${{ github.ref_name }}" = "dev" ]; then
             echo "DOMAIN=assistant-dev.greatmachineinthesky.com" >> $GITHUB_ENV
-            echo "GIT_REF=dev" >> $GITHUB_ENV
           fi
           
-      - name: Trigger Docker Redeploy
-        env:
-          DOMAIN: ${{ env.DOMAIN }}
-          GIT_REF: ${{ env.GIT_REF }}
-          TOKEN: ${{ secrets.GITLAB_TRIGGER_TOKEN }}
-        run: |
-          curl --fail --request POST \
-          -F "variables[DOMAIN]=$DOMAIN" \
-          -F "token=$TOKEN" \
-          -F "ref=$GIT_REF" \
-          "https://gitlab.com/api/v4/projects/32860755/trigger/pipeline"
+      - name: Trigger Docker Server Deployment
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.DOCKER_SERVER_ACTIONS_TOKEN }}
+          repository: adamd9/docker-server
+          event-type: deploy-service
+          client-payload: '{"domain": "${{ env.DOMAIN }}", "action": "down-up"}'
