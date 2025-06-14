@@ -548,8 +548,8 @@ header {
     animation: pulse 2s infinite;
 }
 
-/* Reset button styling */
-#reset-button {
+/* Sleep button styling */
+#sleep-button {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -565,25 +565,25 @@ header {
     min-width: 70px;
 }
 
-#reset-button:hover {
+#sleep-button:hover {
     background-color: #e0e0e0;
     transform: translateY(-1px);
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
-#reset-button:active {
+#sleep-button:active {
     transform: translateY(1px);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-#reset-button .reset-icon {
+#sleep-button .sleep-icon {
     margin-right: 6px;
     font-size: 16px;
     display: inline-flex;
     align-items: center;
 }
 
-#reset-button .reset-text {
+#sleep-button .sleep-text {
     font-weight: 600;
     letter-spacing: 0.3px;
 }

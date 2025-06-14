@@ -30,7 +30,7 @@ This plan outlines the implementation and improvements to the session management
 - WebSocket client handling is complete.
 - Local echo for user messages added and duplicate broadcast echoes suppressed.
 - Server-side tracking of system status messages implemented.
-- Reset button moved to system-controls div and relabelled to "Reset Session".
+- Sleep button added to system-controls div (replacing the old Reset Session button).
 
 ## Completed Tasks
 - [x] Review and document new session management architecture
@@ -58,7 +58,7 @@ This plan outlines the implementation and improvements to the session management
   - [x] Broadcast initial system status to new clients
   - [x] Update client to receive and display server-tracked system status messages
   - [x] Fix lint errors in SessionManager
-- [x] Rename reset button label/ID to "Reset Session"
+  - [x] Replace Reset Session button with Sleep button
 
 ## Pending Tasks
 - [ ] Implement multi-channel input (email, CLI/console)
