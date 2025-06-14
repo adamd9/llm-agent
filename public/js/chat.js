@@ -603,6 +603,10 @@ function handleSleep() {
             reason: 'user-requested'
         }));
 
+        if (clearHistory) {
+            clearCanvas();
+        }
+
         setStatus('Entering sleep mode...');
     } else {
         console.warn('WebSocket not connected, cannot send sleep request');
@@ -960,13 +964,14 @@ function connect() {
                     clearStatus();
                 }
                 
-                // If history was cleared, clear the messages container
+                // If history was cleared, clear the messages container and canvas
                 if (data.clearHistory) {
                     const messagesContainer = document.getElementById('messages');
                     if (messagesContainer) {
                         messagesContainer.innerHTML = '';
                     }
-                    
+                    clearCanvas();
+
                     // Add a system message about the cleanup
                     addMessage('system', `Session cleaned up (${data.reason || 'unknown reason'})`);
                 }
@@ -1213,6 +1218,7 @@ function connect() {
             case 'sleep':
                 const messagesDiv = document.getElementById('messages');
                 if (messagesDiv) messagesDiv.innerHTML = '';
+                clearCanvas();
                 showStatus('Conversation context trimmed due to inactivity', { persistent: true, noSpinner: true });
                 break;
 
@@ -2492,6 +2498,13 @@ function updateCanvas(canvasData) {
     
     // Scroll to top of canvas
     canvasContent.scrollTop = 0;
+}
+
+function clearCanvas() {
+    const canvasContent = document.getElementById('canvas-content');
+    if (canvasContent) {
+        canvasContent.innerHTML = '';
+    }
 }
 
 // --- Toggle UI Updates ---
