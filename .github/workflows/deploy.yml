@@ -21,9 +21,10 @@ jobs:
           fi
           
       - name: Trigger Docker Server Deployment
-        uses: peter-evans/repository-dispatch@v2
-        with:
-          token: ${{ secrets.DOCKER_SERVER_ACTIONS_TOKEN }}
-          repository: adamd9/docker-server
-          event-type: deploy-service
-          client-payload: '{"domain": "${{ env.DOMAIN }}", "action": "down-up"}'
+        run: |
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.DOCKER_SERVER_ACTIONS_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
+            https://api.github.com/repos/adamd9/docker-server/dispatches \
+            -d '{"event_type": "deploy-service", "client_payload": {"domain": "${{ env.DOMAIN }}", "action": "down-up"}}'
