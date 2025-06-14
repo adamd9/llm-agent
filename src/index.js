@@ -9,6 +9,7 @@ const SessionManager = require("./session/SessionManager");
 const ChatLogWriter = require("./session/ChatLogWriter");
 const { loadSettings, saveSettings, loadRawSettings, defaultSettings } = require('./utils/settings');
 const toolManager = require('./mcp');
+const scheduler = core.scheduler;
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -231,6 +232,7 @@ async function startServer() {
         retainExchanges: settings.session?.retain_exchanges,
         chatLogWriter
     });
+    await scheduler.initialize(sessionManager);
 
     if (initialMessage) {
         await sessionManager.handleMessage(initialMessage);
