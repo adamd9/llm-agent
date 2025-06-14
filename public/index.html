@@ -76,7 +76,7 @@
                 <button onclick="toggleSystemErrors()" class="subsystem-toggle system-error-toggle">
                     System Errors <span class="message-count system-error-count">0</span> ▼
                 </button>
-                <a href="/settings" class="settings-link">Settings</a>
+                <button onclick="toggleSettings()" class="subsystem-toggle settings-toggle">Settings ▼</button>
             </div>
         </header>
     </div>
@@ -149,6 +149,25 @@
                 <button onclick="toggleResults()" class="close-button">&times;</button>
             </div>
             <pre id="results-output"></pre>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>App Settings</h3>
+                <button onclick="toggleSettings()" class="close-button">&times;</button>
+                <div class="settings-tabs">
+                    <button data-tab="general" class="active" onclick="showSettingsTab('general')">General</button>
+                    <button data-tab="prompts" onclick="showSettingsTab('prompts')">Prompts</button>
+                    <button data-tab="stats" onclick="showSettingsTab('stats')">Stats</button>
+                </div>
+            </div>
+            <div class="modal-body" id="settings-output">
+                <!-- Settings content will be loaded here -->
+                <div class="loading-indicator">Loading settings...</div>
+            </div>
         </div>
     </div>
 

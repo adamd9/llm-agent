@@ -4,6 +4,138 @@ const { loadSettings, saveSettings, loadRawSettings, defaultSettings } = require
 
 function registerSettingsRoutes(app, { ego, toolManager }) {
   const router = express.Router();
+  
+  // Helper function to generate settings content
+  function generateSettingsContent() {
+    const raw = loadRawSettings();
+    const effective = loadSettings();
+    const defaults = defaultSettings;
+    const baseModel = defaults.llmModel;
+
+    const tools = toolManager.getAllTools().map(t => `${t.name} (${t.source})`);
+    const failedTools = toolManager.getFailedTools();
+    const personalityInfo = ego.personality ? `${ego.personality.name} (${ego.personality.source})` : 'None';
+    const shortMem = core.memory.getShortTermMemory();
+    const longMem = core.memory.getLongTermMemory();
+    
+    return {
+      raw,
+      effective,
+      defaults,
+      baseModel,
+      tools,
+      failedTools,
+      personalityInfo,
+      shortMem,
+      longMem
+    };
+  }
+  
+  // API endpoint for the overlay
+  router.get('/api', (req, res) => {
+    const content = generateSettingsContent();
+    const raw = content.raw;
+    const effective = content.effective;
+    const defaults = content.defaults;
+    const baseModel = content.baseModel;
+    const tools = content.tools;
+    const failedTools = content.failedTools;
+    const personalityInfo = content.personalityInfo;
+    const shortMem = content.shortMem;
+    const longMem = content.longMem;
+    
+    const generalContent = `
+      <form id="settings-form" method="POST" action="/settings">
+        <label>
+          <span class="setting-name">LLM Model:</span>
+          <span class="setting-input"><input type="text" name="llmModel" value="${raw.llmModel ?? ''}" placeholder="${defaults.llmModel}" /></span>
+        </label>
+        <label>
+          <span class="setting-name">Planner Model:</span>
+          <span class="setting-input"><input type="text" name="plannerModel" value="${raw.plannerModel ?? ''}" placeholder="${defaults.plannerModel || baseModel}" /></span>
+        </label>
+        <label>
+          <span class="setting-name">Evaluator Model:</span>
+          <span class="setting-input"><input type="text" name="evaluatorModel" value="${raw.evaluatorModel ?? ''}" placeholder="${defaults.evaluatorModel || baseModel}" /></span>
+        </label>
+        <label>
+          <span class="setting-name">Query Model:</span>
+          <span class="setting-input"><input type="text" name="queryModel" value="${raw.queryModel ?? ''}" placeholder="${defaults.queryModel || baseModel}" /></span>
+        </label>
+        <label>
+          <span class="setting-name">Bubble Model:</span>
+          <span class="setting-input"><input type="text" name="bubbleModel" value="${raw.bubbleModel ?? ''}" placeholder="${defaults.bubbleModel || baseModel}" /></span>
+        </label>
+        <label>
+          <span class="setting-name">Reflection Model:</span>
+          <span class="setting-input"><input type="text" name="reflectionModel" value="${raw.reflectionModel ?? ''}" placeholder="${defaults.reflectionModel || baseModel}" /></span>
+        </label>
+        <label>
+          <span class="setting-name">Utterance Check Model:</span>
+          <span class="setting-input"><input type="text" name="utteranceCheckModel" value="${raw.utteranceCheckModel ?? ''}" placeholder="${defaults.utteranceCheckModel}" /></span>
+        </label>
+        <label>
+          <span class="setting-name">LLM Max Tokens:</span>
+          <span class="setting-input"><input type="number" name="maxTokens" value="${raw.maxTokens ?? ''}" placeholder="${defaults.maxTokens}" /></span>
+        </label>
+        <label>
+          <span class="setting-name">TTS Voice ID:</span>
+          <span class="setting-input"><input type="text" name="ttsVoiceId" value="${raw.ttsVoiceId ?? ''}" placeholder="${defaults.ttsVoiceId}" /></span>
+        </label>
+        <label>
+          <span class="setting-name">TTS Model ID:</span>
+          <span class="setting-input"><input type="text" name="ttsModelId" value="${raw.ttsModelId ?? ''}" placeholder="${defaults.ttsModelId}" /></span>
+        </label>
+        <label>
+          <span class="setting-name">STT Sample Rate:</span>
+          <span class="setting-input"><input type="number" name="sttSampleRate" value="${raw.sttSampleRate ?? ''}" placeholder="${defaults.sttSampleRate}" /></span>
+        </label>
+        <label>
+          <span class="setting-name">STT Formatted Finals:</span>
+          <span class="setting-input"><input type="checkbox" name="sttFormattedFinals" ${effective.sttFormattedFinals ? 'checked' : ''} /></span>
+        </label>
+        <label>
+          <span class="setting-name">Auto-send Delay (ms):</span>
+          <span class="setting-input"><input type="number" name="autoSendDelayMs" value="${raw.autoSendDelayMs ?? ''}" placeholder="${defaults.autoSendDelayMs}" /></span>
+        </label>
+        <label>
+          <span class="setting-name">Use Prompt Overrides:</span>
+          <span class="setting-input"><input type="checkbox" name="usePromptOverrides" ${effective.usePromptOverrides ? 'checked' : ''} /></span>
+        </label>
+        <div class="settings-actions">
+          <button type="button" class="cancel-btn" onclick="toggleSettings()">Cancel</button>
+          <button type="submit" class="save-settings-btn">Save</button>
+        </div>
+      </form>
+    `;
+    
+    const promptsContent = `
+      <p>Place prompt override files in <code>data/prompts/&lt;module&gt;/&lt;PROMPTNAME&gt;.txt</code>.</p>
+    `;
+    
+    const statsContent = `
+      <h3>Loaded Tools</h3>
+      <ul>
+        ${tools.map(t => `<li>${t}</li>`).join('') || '<li>None</li>'}
+      </ul>
+      <h3>Failed Tools</h3>
+      <ul>
+        ${failedTools.map(t => `<li>${t.name}: ${t.error}</li>`).join('') || '<li>None</li>'}
+      </ul>
+      <h3>Personality</h3>
+      <p>${personalityInfo}</p>
+      <h3>Short Term Memory</h3>
+      <pre>${shortMem.replace(/</g,'&lt;')}</pre>
+      <h3>Long Term Memory</h3>
+      <pre>${longMem.replace(/</g,'&lt;')}</pre>
+    `;
+    
+    res.json({
+      general: generalContent,
+      prompts: promptsContent,
+      stats: statsContent
+    });
+  });
 
   router.get('/', (req, res) => {
     const raw = loadRawSettings();
@@ -110,7 +242,12 @@ var buttons=document.querySelectorAll('.settings-tabs button');buttons.forEach(b
     newSettings.usePromptOverrides = req.body.usePromptOverrides ? true : false;
 
     saveSettings(newSettings);
-    res.redirect('/settings');
+    // For AJAX requests, return JSON
+    if (req.xhr || req.headers.accept && req.headers.accept.includes('application/json')) {
+      res.json({ success: true });
+    } else {
+      res.redirect('/settings');
+    }
   });
 
   app.use('/settings', router);

@@ -81,5 +81,25 @@ Send messages like:
 }
 ```
 
+**Sleep Result Message**
+```json
+{
+  "type": "sleepResult",
+  "success": true,
+  "message": "Sleep successful"
+}
+```
+
+**Sleep Event Message**
+```json
+{
+  "type": "sleep",
+  "reason": "idle-timeout",
+  "clearHistory": true,
+  "kept": 0,
+  "timestamp": "ISO timestamp"
+}
+```
+
 ### Session History
 `GET /chat/:sessionId/history` returns the chat history for a session.

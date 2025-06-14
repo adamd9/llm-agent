@@ -10,7 +10,7 @@ An AI agent that chats and executes tasks using OpenAI models and a flexible too
 - WebSocket API for real-time interaction
 - Multiline chat input for longer messages
 - Text-to-Speech (TTS) for assistant responses (with smart playback)
-- Sleep mode for manual session cleanup (consolidates memory and trims history)
+- Sleep tool for manual or scheduled session cleanup (consolidates memory and trims history)
 
 ## Getting Started
 
@@ -34,8 +34,8 @@ generates `data/settings.json` which stores any runtime/user overrides.
 
 Set `LLM_AGENT_DATA_DIR` to choose where the `data` directory lives. See
 `data/settings.json` for runtime options saved after the first start. A
-web-based settings page is available at `/settings` with tabs for general
-options, prompt overrides and runtime statistics.
+web-based settings page is available as an overlay on the main page (via the Settings button)
+or directly at `/settings` with tabs for general options, prompt overrides and runtime statistics.
 
 ### Prompt Caching
 
@@ -83,7 +83,7 @@ console.log(`Deleted ${deleted} old cache files, ${errors} errors`);
 - Logs stored under `data/logs`
 - Run tests with `npm test`
 - Cache debug logs are available in the main application logs with the `promptCache` prefix
-- A scheduler tool allows tasks to be queued for periodic execution, viewed, or removed. Tasks are stored under `data/scheduler/tasks.json` and run as regular user messages.
+- Scheduler tool supports periodic and event-based tasks, including automatic tool execution. Tasks persist in `data/scheduler/tasks.json`.
 
 ## Documentation
 
@@ -91,6 +91,7 @@ console.log(`Deleted ${deleted} old cache files, ${errors} errors`);
 - [API](docs/api.md) – WebSocket messages and endpoints
 - [Testing](docs/testing.md) – running Jest and Puppeteer tests
 - [MCP Guides](docs/mcp/) – Model Context Protocol tool system
+- [Release Notes](docs/release-notes.md) – recent changes and usage tips
 
 ## License
 

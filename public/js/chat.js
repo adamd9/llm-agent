@@ -133,6 +133,115 @@ function toggleSystemErrors() {
     }
 }
 
+// Function to toggle settings modal
+function toggleSettings() {
+    const modal = document.getElementById('settings-modal');
+    const button = document.querySelector('.settings-toggle');
+    const isHidden = modal.classList.contains('hidden');
+    
+    modal.classList.toggle('hidden');
+    button.innerHTML = isHidden ? 'Settings ▲' : 'Settings ▼';
+    
+    // Prevent body scroll when modal is open
+    document.body.style.overflow = isHidden ? 'hidden' : '';
+    
+    // Load settings content when opening
+    if (isHidden) {
+        loadSettingsContent();
+        // Set active tab to general by default
+        showSettingsTab('general');
+    }
+}
+
+// Function to load settings content from API
+function loadSettingsContent() {
+    const output = document.getElementById('settings-output');
+    if (!output) return;
+    
+    // Show loading indicator
+    output.innerHTML = '<div class="loading-indicator">Loading settings...</div>';
+    
+    // Fetch settings content from API
+    fetch('/settings/api')
+        .then(response => response.json())
+        .then(data => {
+            // Create tab structure
+            output.innerHTML = `
+                <div id="settings-general" class="settings-tab active">${data.general}</div>
+                <div id="settings-prompts" class="settings-tab">${data.prompts}</div>
+                <div id="settings-stats" class="settings-tab">${data.stats}</div>
+            `;
+            
+            // Add event listener for the settings form
+            const form = document.getElementById('settings-form');
+            if (form) {
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    submitSettingsForm(form);
+                });
+            }
+        })
+        .catch(error => {
+            output.innerHTML = `<div class="error-message">Error loading settings: ${error.message}</div>`;
+        });
+}
+
+// Function to submit settings form via AJAX
+function submitSettingsForm(form) {
+    const formData = new FormData(form);
+    
+    fetch('/settings', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            const saveBtn = form.querySelector('.save-settings-btn');
+            const originalText = saveBtn.textContent;
+            saveBtn.textContent = 'Saved!';
+            saveBtn.disabled = true;
+            
+            // Reset button after a delay
+            setTimeout(() => {
+                saveBtn.textContent = originalText;
+                saveBtn.disabled = false;
+            }, 2000);
+        }
+    })
+    .catch(error => {
+        console.error('Error saving settings:', error);
+        alert('Error saving settings: ' + error.message);
+    });
+}
+
+// Function to switch between settings tabs
+function showSettingsTab(tabId) {
+    // Hide all tabs
+    document.querySelectorAll('#settings-output .settings-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Show selected tab
+    const selectedTab = document.getElementById('settings-' + tabId);
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+    }
+    
+    // Update tab buttons
+    document.querySelectorAll('#settings-modal .settings-tabs button').forEach(button => {
+        if (button.dataset.tab === tabId) {
+            button.classList.add('active');
+        } else {
+            button.classList.remove('active');
+        }
+    });
+}
+
 function capitalizeFirstLetter(string) {
     return string.charAt(0).toUpperCase() + string.slice(1);
 }
