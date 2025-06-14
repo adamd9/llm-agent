@@ -586,27 +586,27 @@ function handleInterrupt() {
 }
 
 /**
- * Handle reset button click
- * Prompts the user for confirmation before sending reset request
+ * Handle sleep button click
+ * Prompts the user for confirmation before sending sleep request
  */
-function handleReset() {
+function handleSleep() {
     // Show confirmation dialog
-    const clearHistory = confirm('Do you want to clear the chat history? Click OK to clear history or Cancel to keep history but reset the session.');
-    
-    console.log('Reset requested, clear history:', clearHistory);
-    
-    // Send reset request to server
+    const clearHistory = confirm('Do you want to clear the chat history? Click OK to clear history or Cancel to keep recent context.');
+
+    console.log('Sleep requested, clear history:', clearHistory);
+
+    // Send sleep request to server
     if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ 
-            type: 'reset',
+        ws.send(JSON.stringify({
+            type: 'sleep',
             clearHistory: clearHistory,
             reason: 'user-requested'
         }));
-        
-        setStatus('Resetting session...');
+
+        setStatus('Entering sleep mode...');
     } else {
-        console.warn('WebSocket not connected, cannot send reset request');
-        addMessage('system', 'Cannot reset session: WebSocket not connected');
+        console.warn('WebSocket not connected, cannot send sleep request');
+        addMessage('system', 'Cannot enter sleep mode: WebSocket not connected');
     }
 }
 
@@ -937,17 +937,17 @@ function connect() {
                 addMessage('system', `Operation cancelled: ${data.reason || 'user-requested'}`);
                 break;
                 
-            case 'resetResult':
-                console.log('Reset result received:', data);
-                
-                // Add a message about the reset
-                addMessage('system', data.success ? 
-                    'Session reset successfully.' : 
-                    `Failed to reset session: ${data.message || 'Unknown error'}`);
+            case 'sleepResult':
+                console.log('Sleep result received:', data);
+
+                // Add a message about the sleep cleanup
+                addMessage('system', data.success ?
+                    'Session cleaned up successfully.' :
+                    `Failed to enter sleep mode: ${data.message || 'Unknown error'}`);
                 break;
-                
-            case 'reset':
-                console.log('Session reset by server:', data);
+
+            case 'sleep':
+                console.log('Session cleanup by server:', data);
                 
                 // Clear the busy state if we were processing
                 if (isProcessing) {
@@ -963,8 +963,8 @@ function connect() {
                         messagesContainer.innerHTML = '';
                     }
                     
-                    // Add a system message about the reset
-                    addMessage('system', `Session has been reset (${data.reason || 'unknown reason'})`);
+                    // Add a system message about the cleanup
+                    addMessage('system', `Session cleaned up (${data.reason || 'unknown reason'})`);
                 }
                 break;
                 
@@ -1206,10 +1206,10 @@ function connect() {
                 showStatus('Assistant is busy with another request', { noSpinner: true });
                 break;
 
-            case 'reset':
+            case 'sleep':
                 const messagesDiv = document.getElementById('messages');
                 if (messagesDiv) messagesDiv.innerHTML = '';
-                showStatus('Conversation context reset due to inactivity', { persistent: true, noSpinner: true });
+                showStatus('Conversation context trimmed due to inactivity', { persistent: true, noSpinner: true });
                 break;
 
             case 'connected':
@@ -2625,12 +2625,12 @@ document.addEventListener('DOMContentLoaded', () => {
         console.warn('Interrupt button not found in the DOM.');
     }
     
-    // Initialize reset button
-    const resetButton = document.getElementById('reset-button');
-    if (resetButton) {
-        resetButton.addEventListener('click', handleReset);
+    // Initialize sleep button
+    const sleepButton = document.getElementById('sleep-button');
+    if (sleepButton) {
+        sleepButton.addEventListener('click', handleSleep);
     } else {
-        console.warn('Reset button not found. Reset functionality will not be available.');
+        console.warn('Sleep button not found. Sleep functionality will not be available.');
     }
 
     connect(); // Establishes WebSocket and might enable/disable inputs in ws.onopen

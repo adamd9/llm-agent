@@ -10,6 +10,7 @@ An AI agent that chats and executes tasks using OpenAI models and a flexible too
 - WebSocket API for real-time interaction
 - Multiline chat input for longer messages
 - Text-to-Speech (TTS) for assistant responses (with smart playback)
+- Sleep mode for manual session cleanup (consolidates memory and trims history)
 
 ## Getting Started
 

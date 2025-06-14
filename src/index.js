@@ -260,19 +260,19 @@ async function startServer() {
                     return;
                 }
                 
-                // Handle session reset request
-                if (data.type === 'reset') {
+                // Handle session sleep/cleanup request (legacy: reset)
+                if (data.type === 'sleep' || data.type === 'reset') {
                     const options = {
                         clearHistory: data.clearHistory === true,
                         consolidateMemory: data.consolidateMemory !== false,
                         reason: data.reason || 'user-requested'
                     };
-                    
-                    const result = await sessionManager.resetSession(options);
+
+                    const result = await sessionManager.sleep(options);
                     ws.send(JSON.stringify({
-                        type: 'resetResult',
+                        type: 'sleepResult',
                         success: !result.error,
-                        message: result.message || (result.error ? 'Failed to reset session' : 'Session reset successful')
+                        message: result.message || (result.error ? 'Failed to enter sleep mode' : 'Sleep successful')
                     }));
                     return;
                 }

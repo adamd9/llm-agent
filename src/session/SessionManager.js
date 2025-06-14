@@ -132,24 +132,63 @@ class SessionManager {
   }
 
   async _handleIdleTimeout() {
-    // keep only last N exchanges in memory
-    const exchanges = [];
-    let count = 0;
-    for (let i = this.history.length - 1; i >= 0 && count < this.retainExchanges * 2; i--) {
-      exchanges.unshift(this.history[i]);
-      if (this.history[i].role === 'assistant' || this.history[i].role === 'user') {
-        count++;
-      }
+    await this._performCleanup({ reason: 'idle-timeout' });
+    await logger.debug('session', 'Idle timeout triggered; history trimmed');
+  }
+
+  async _performCleanup({ reason = 'sleep', clearHistory = false, consolidateMemory = true } = {}) {
+    // Update system status
+    this.updateSystemStatus('processing', 'Cleaning up session...');
+
+    // Cancel any ongoing processing
+    if (this.busy) {
+      await this.cancelProcessing();
     }
-    this.history = exchanges;
-    if (this.chatLogWriter) {
-      this.chatLogWriter.append({ type: 'session-audit', history: exchanges });
-    }
-    if (core.memory && typeof core.memory.consolidateShortTermToLongTerm === 'function') {
+
+    // Consolidate memory if requested
+    if (consolidateMemory && core.memory && typeof core.memory.consolidateShortTermToLongTerm === 'function') {
       await core.memory.consolidateShortTermToLongTerm();
     }
-    this._broadcast({ type: 'reset', reason: 'idle-timeout', kept: this.retainExchanges });
-    await logger.debug('session', 'Idle timeout triggered; history trimmed');
+
+    let kept = this.retainExchanges;
+
+    if (clearHistory) {
+      this.history = [];
+      kept = 0;
+    } else {
+      // keep only last N exchanges in memory
+      const exchanges = [];
+      let count = 0;
+      for (let i = this.history.length - 1; i >= 0 && count < this.retainExchanges * 2; i--) {
+        exchanges.unshift(this.history[i]);
+        if (this.history[i].role === 'assistant' || this.history[i].role === 'user') {
+          count++;
+        }
+      }
+      this.history = exchanges;
+    }
+
+    if (this.chatLogWriter) {
+      this.chatLogWriter.append({
+        type: 'session-audit',
+        action: 'cleanup',
+        reason,
+        timestamp: new Date().toISOString(),
+        kept
+      });
+    }
+
+    this._broadcast({
+      type: 'sleep',
+      reason,
+      clearHistory,
+      kept,
+      timestamp: new Date().toISOString()
+    });
+
+    this.updateSystemStatus('ready', 'Session cleanup complete');
+
+    return { ok: true, message: 'Session cleanup successful' };
   }
 
   /**
@@ -293,73 +332,17 @@ class SessionManager {
    * @param {string} options.reason - Reason for the reset (default: 'user-requested')
    * @returns {Object} Result of the reset operation
    */
-  async resetSession(options = {}) {
+  async sleep(options = {}) {
     const clearHistory = options.clearHistory === true;
     const consolidateMemory = options.consolidateMemory !== false;
-    const reason = options.reason || 'user-requested';
-    
-    try {
-      // Update system status to indicate reset in progress
-      this.updateSystemStatus('processing', 'Resetting session...');
-      
-      // Cancel any ongoing processing first
-      if (this.busy) {
-        await this.cancelProcessing();
-      }
-      
-      // Consolidate memory if requested
-      if (consolidateMemory && core.memory && typeof core.memory.consolidateShortTermToLongTerm === 'function') {
-        await core.memory.consolidateShortTermToLongTerm();
-      }
-      
-      // Log the reset event
-      this._logEvent({ 
-        role: 'system', 
-        content: `Session reset (${reason})${clearHistory ? ' with history cleared' : ''}` 
-      });
-      
-      // Clear history if requested
-      if (clearHistory) {
-        const resetMessage = { 
-          role: 'system', 
-          content: `Session history cleared at ${new Date().toISOString()}` 
-        };
-        
-        // Keep only the reset message
-        this.history = [resetMessage];
-        
-        // Write audit to log
-        if (this.chatLogWriter) {
-          this.chatLogWriter.append({ 
-            type: 'session-audit', 
-            action: 'reset', 
-            reason, 
-            timestamp: new Date().toISOString() 
-          });
-        }
-      }
-      
-      // Broadcast the reset event to all clients
-      this._broadcast({ 
-        type: 'reset', 
-        reason, 
-        clearHistory,
-        timestamp: new Date().toISOString()
-      });
-      
-      // Update system status to ready after reset
-      this.updateSystemStatus('ready', 'Session reset complete');
-      
-      await logger.debug('session', `Session reset (${reason})`, { clearHistory });
-      
-      return { ok: true, message: 'Session reset successful' };
-    } catch (error) {
-      // Update system status to error
-      this.updateSystemStatus('error', `Reset failed: ${error.message}`);
-      
-      await logger.error('session', 'Error resetting session', { error: error.message });
-      return { error: 'reset-failed', message: error.message };
-    }
+    const reason = options.reason || 'user-sleep';
+
+    return this._performCleanup({ reason, clearHistory, consolidateMemory });
+  }
+
+  // Backwards compatibility
+  async resetSession(options = {}) {
+    return this.sleep(options);
   }
 }
 
