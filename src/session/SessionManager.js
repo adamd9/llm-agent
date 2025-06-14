@@ -132,6 +132,7 @@ class SessionManager {
   }
 
   async _handleIdleTimeout() {
+    await sharedEventEmitter.emit('idleTimeout');
     await this._performCleanup({ reason: 'idle-timeout' });
     await logger.debug('session', 'Idle timeout triggered; history trimmed');
   }
@@ -185,6 +186,8 @@ class SessionManager {
       kept,
       timestamp: new Date().toISOString()
     });
+
+    await sharedEventEmitter.emit('sleep', { reason });
 
     this.updateSystemStatus('ready', 'Session cleanup complete');
 
@@ -266,7 +269,9 @@ class SessionManager {
       
       // Update system status to ready
       this.updateSystemStatus('ready', 'Processing complete');
-      
+
+      await sharedEventEmitter.emit('conversationEnd');
+
       return { ok: true };
     } catch (error) {
       if (signal.aborted) {

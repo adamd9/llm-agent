@@ -14,10 +14,38 @@ class SchedulerTool {
             actions: [
                 {
                     name: 'addTask',
-                    description: 'Add a scheduled task',
+                    description: 'Add a scheduled message task',
                     parameters: [
                         { name: 'message', description: 'Message to process', type: 'string', required: true },
                         { name: 'frequencySec', description: 'How often to run in seconds', type: 'number', required: true }
+                    ]
+                },
+                {
+                    name: 'addToolTask',
+                    description: 'Add a scheduled tool task',
+                    parameters: [
+                        { name: 'toolName', description: 'Tool to execute', type: 'string', required: true },
+                        { name: 'action', description: 'Tool action', type: 'string', required: true },
+                        { name: 'parameters', description: 'Action parameters (JSON)', type: 'string', required: false },
+                        { name: 'frequencySec', description: 'How often to run in seconds', type: 'number', required: true }
+                    ]
+                },
+                {
+                    name: 'addEventTask',
+                    description: 'Trigger a message when an event occurs',
+                    parameters: [
+                        { name: 'eventName', description: 'Event to listen for', type: 'string', required: true },
+                        { name: 'message', description: 'Message to process', type: 'string', required: true }
+                    ]
+                },
+                {
+                    name: 'addEventToolTask',
+                    description: 'Trigger a tool when an event occurs',
+                    parameters: [
+                        { name: 'eventName', description: 'Event to listen for', type: 'string', required: true },
+                        { name: 'toolName', description: 'Tool to execute', type: 'string', required: true },
+                        { name: 'action', description: 'Tool action', type: 'string', required: true },
+                        { name: 'parameters', description: 'Action parameters (JSON)', type: 'string', required: false }
                     ]
                 },
                 {
@@ -49,6 +77,56 @@ class SchedulerTool {
         return { status: 'success', task };
     }
 
+    async addToolTask(params) {
+        const toolName = params.find(p => p.name === 'toolName');
+        const action = params.find(p => p.name === 'action');
+        const freq = params.find(p => p.name === 'frequencySec');
+        const paramStr = params.find(p => p.name === 'parameters');
+        if (!toolName || !action || !freq) {
+            throw new Error('toolName, action and frequencySec are required');
+        }
+        let parsedParams = [];
+        if (paramStr && paramStr.value) {
+            try {
+                parsedParams = JSON.parse(paramStr.value);
+            } catch (e) {
+                logger.error('SchedulerTool', 'Parameter parse error', { error: e.message });
+            }
+        }
+        const task = scheduler.registerToolTask(toolName.value, action.value, parsedParams, Number(freq.value));
+        return { status: 'success', task };
+    }
+
+    async addEventTask(params) {
+        const eventName = params.find(p => p.name === 'eventName');
+        const message = params.find(p => p.name === 'message');
+        if (!eventName || !message) {
+            throw new Error('eventName and message are required');
+        }
+        const task = scheduler.registerEventTask(eventName.value, message.value);
+        return { status: 'success', task };
+    }
+
+    async addEventToolTask(params) {
+        const eventName = params.find(p => p.name === 'eventName');
+        const toolName = params.find(p => p.name === 'toolName');
+        const action = params.find(p => p.name === 'action');
+        const paramStr = params.find(p => p.name === 'parameters');
+        if (!eventName || !toolName || !action) {
+            throw new Error('eventName, toolName and action are required');
+        }
+        let parsedParams = [];
+        if (paramStr && paramStr.value) {
+            try {
+                parsedParams = JSON.parse(paramStr.value);
+            } catch (e) {
+                logger.error('SchedulerTool', 'Parameter parse error', { error: e.message });
+            }
+        }
+        const task = scheduler.registerEventToolTask(eventName.value, toolName.value, action.value, parsedParams);
+        return { status: 'success', task };
+    }
+
     async removeTask(params) {
         const idParam = params.find(p => p.name === 'id');
         if (!idParam) throw new Error('id is required');
@@ -74,6 +152,12 @@ class SchedulerTool {
             switch(action) {
                 case 'addTask':
                     return await this.addTask(parsed);
+                case 'addToolTask':
+                    return await this.addToolTask(parsed);
+                case 'addEventTask':
+                    return await this.addEventTask(parsed);
+                case 'addEventToolTask':
+                    return await this.addEventToolTask(parsed);
                 case 'removeTask':
                     return await this.removeTask(parsed);
                 case 'listTasks':
