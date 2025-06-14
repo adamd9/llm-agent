@@ -17,10 +17,14 @@ body {
     width: 100%;
 }
 
-.app-top-line {
-    width: 100%;
-    height: 2px;
-    background-color: #ccc;
+/* Base main-content styling */
+.main-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    padding: 20px 20px 20px 20px; /* Added top padding */
+    gap: 20px;
+    flex-direction: column;
 }
 
 header {
@@ -541,6 +545,46 @@ header {
 /* Animation for TTS playing state */
 #interrupt-button.playing {
     animation: pulse 2s infinite;
+}
+
+/* Reset button styling */
+#reset-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    margin-left: 0;
+    min-width: 70px;
+}
+
+#reset-button:hover {
+    background-color: #0b7dda;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+#reset-button:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+#reset-button .reset-icon {
+    margin-right: 6px;
+    font-size: 16px;
+    display: inline-flex;
+    align-items: center;
+}
+
+#reset-button .reset-text {
+    font-weight: 600;
+    letter-spacing: 0.3px;
 }
 
 @keyframes pulse {
@@ -1135,22 +1179,22 @@ header {
 }
 
 /* Responsive styles */
-/* Main content layout */
+/* Main content layout - mobile first */
 .main-content {
     display: flex;
     flex: 1;
     overflow: auto;
-    padding: 0 10px 10px;
+    padding: 20px 10px 10px; /* Added top padding */
     gap: 10px;
     flex-direction: column;
 }
 
-/* Main content layout */
+/* Main content layout - desktop */
 .main-content {
     display: flex;
     flex: 1;
     overflow: hidden;
-    padding: 0 20px 20px 20px;
+    padding: 20px 20px 20px 20px; /* Added top padding */
     gap: 20px;
 }
 
@@ -1222,7 +1266,7 @@ header {
 @media (min-width: 769px) {
     .main-content {
         flex-direction: row;
-        padding: 0 20px 20px;
+        padding: 20px 20px 20px; /* Added top padding */
         gap: 20px;
     }
     
@@ -1236,7 +1280,7 @@ header {
 
 @media (max-width: 768px) {
     .main-content {
-        padding: 0 10px 10px;
+        padding: 20px 10px 10px; /* Added top padding */
     }
     
     .chat-panel,

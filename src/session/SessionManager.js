@@ -6,16 +6,56 @@ const core = require('../core');
 class SessionManager {
   constructor(ego, options = {}) {
     this.ego = ego;
-    this.sessionId = options.sessionId || 'main';
-    this.history = [];
+    this.sessionId = options.sessionId || uuidv4();
     this.clients = new Set();
     this.busy = false;
     this.idleTimeoutMs = (options.idleTimeoutSec || 1800) * 1000;
+    this.idleTimer = null;
     this.retainExchanges = options.retainExchanges || 20;
+    this.history = [];
     this.chatLogWriter = options.chatLogWriter || null;
+    
+    // For cancellation support
+    this.abortController = null;
+    this.currentProcessingTask = null;
+    
+    // For system status tracking
+    this.systemStatus = {
+      state: 'ready', // ready, processing, error
+      message: 'System ready',
+      timestamp: new Date().toISOString()
+    };
+    
+    // Initialize and load history
+    this._initializeHistory();
     this._resetIdleTimer();
-
     this._registerAgentEvents();
+  }
+  
+  /**
+   * Initialize session history from chat log file if available
+   * @private
+   */
+  async _initializeHistory() {
+    if (this.chatLogWriter) {
+      try {
+        // Load history from file with a limit of retainExchanges * 2 entries
+        // (to account for both user and assistant messages in exchanges)
+        const loadedHistory = await this.chatLogWriter.readHistory({
+          limit: this.retainExchanges * 2,
+          roles: ['user', 'assistant'] // Only load actual conversation messages
+        });
+        
+        if (loadedHistory && loadedHistory.length > 0) {
+          this.history = loadedHistory;
+          logger.debug('session', `Loaded ${loadedHistory.length} history entries from file`);
+        } else {
+          logger.debug('session', 'No history entries loaded from file');
+        }
+      } catch (err) {
+        logger.error('session', 'Failed to load history from file', { error: err.message });
+      }
+    }
   }
 
   _registerAgentEvents() {
@@ -56,13 +96,34 @@ class SessionManager {
   }
 
   _broadcast(message) {
-    for (const ws of this.clients) {
-      try {
-        ws.send(JSON.stringify(message));
-      } catch (err) {
-        logger.error('session', 'Failed to send WS message', { error: err.message });
+    const messageStr = JSON.stringify(message);
+    this.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(messageStr);
       }
-    }
+    });
+  }
+  
+  /**
+   * Update the system status and broadcast to all clients
+   * @param {string} state - The system state (ready, processing, error)
+   * @param {string} message - The status message
+   */
+  updateSystemStatus(state, message) {
+    this.systemStatus = {
+      state,
+      message,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Broadcast the status update to all clients
+    this._broadcast({
+      type: 'systemStatus',
+      data: this.systemStatus
+    });
+    
+    // Log the status update
+    logger.debug('session', `System status: ${state} - ${message}`);
   }
 
   _resetIdleTimer() {
@@ -91,9 +152,41 @@ class SessionManager {
     await logger.debug('session', 'Idle timeout triggered; history trimmed');
   }
 
+  /**
+   * Add a new client connection and send them the current session state
+   * @param {WebSocket} ws - The WebSocket client to add
+   */
   addClient(ws) {
     this.clients.add(ws);
-    ws.send(JSON.stringify({ type: 'connected', sessionId: this.sessionId, resumed: true }));
+    
+    // Send connected event with session info
+    ws.send(JSON.stringify({ 
+      type: 'connected', 
+      sessionId: this.sessionId, 
+      resumed: true,
+      historyAvailable: this.history.length > 0
+    }));
+    
+    // Send current system status to the client
+    ws.send(JSON.stringify({
+      type: 'systemStatus',
+      data: this.systemStatus
+    }));
+    
+    // Send history to the client if available
+    if (this.history.length > 0) {
+      // Send each history item as individual messages
+      this.history.forEach(item => {
+        if (item.role === 'user') {
+          ws.send(JSON.stringify({ type: 'user', data: { content: item.content } }));
+        } else if (item.role === 'assistant') {
+          ws.send(JSON.stringify({ type: 'response', data: { response: item.content } }));
+        } else if (item.role === 'assistantDebug') {
+          ws.send(JSON.stringify({ type: 'debug', data: item.content }));
+        }
+      });
+    }
+    
     ws.on('close', () => {
       this.clients.delete(ws);
     });
@@ -107,8 +200,166 @@ class SessionManager {
     this._logEvent({ role: 'user', content: message });
     this._broadcast({ type: 'user', data: { content: message } });
     this._resetIdleTimer();
-    await this.ego.processMessage(message, this.history);
-    return { ok: true };
+    
+    // Update system status to processing
+    this.updateSystemStatus('processing', 'Processing message...');
+    
+    // Create a new AbortController for this processing task
+    this.abortController = new AbortController();
+    const signal = this.abortController.signal;
+    
+    try {
+      // Store the processing task as a promise
+      this.currentProcessingTask = this.ego.processMessage(message, this.history);
+      
+      // Set up a listener for the abort signal
+      signal.addEventListener('abort', () => {
+        // This will be handled in the catch block below
+        throw new Error('Processing cancelled by user');
+      }, { once: true });
+      
+      // Wait for the processing to complete
+      await this.currentProcessingTask;
+      
+      // Clean up
+      this.currentProcessingTask = null;
+      this.abortController = null;
+      
+      // Update system status to ready
+      this.updateSystemStatus('ready', 'Processing complete');
+      
+      return { ok: true };
+    } catch (error) {
+      if (signal.aborted) {
+        // Handle cancellation
+        this._logEvent({ role: 'system', content: 'Request cancelled by user' });
+        this._broadcast({ type: 'cancelled', reason: 'user-requested' });
+        await logger.debug('session', 'Processing cancelled by user');
+        
+        // Update system status to ready after cancellation
+        this.updateSystemStatus('ready', 'Request cancelled');
+      } else {
+        // Handle other errors
+        this._logEvent({ role: 'system', content: `Error: ${error.message}` });
+        this._broadcast({ type: 'error', error: { message: error.message } });
+        await logger.error('session', 'Error processing message', { error: error.message });
+        
+        // Update system status to error
+        this.updateSystemStatus('error', `Error: ${error.message}`);
+      }
+      
+      // Clean up
+      this.currentProcessingTask = null;
+      this.abortController = null;
+      this.busy = false;
+      
+      return signal.aborted ? { cancelled: true } : { error: error.message };
+    } finally {
+      this.busy = false;
+    }
+  }
+  
+  /**
+   * Cancel the current processing task if one is running
+   * @returns {Object} Result of the cancellation attempt
+   */
+  async cancelProcessing() {
+    if (!this.busy || !this.abortController) {
+      return { error: 'no-active-request' };
+    }
+    
+    try {
+      // Abort the current processing task
+      this.abortController.abort();
+      
+      // Wait a short time for the abort to propagate
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Force reset busy state if it hasn't been reset
+      this.busy = false;
+      
+      return { ok: true, message: 'Processing cancelled' };
+    } catch (error) {
+      await logger.error('session', 'Error cancelling processing', { error: error.message });
+      return { error: 'cancel-failed', message: error.message };
+    }
+  }
+  
+  /**
+   * Reset the session state
+   * @param {Object} options - Reset options
+   * @param {boolean} options.clearHistory - Whether to clear the history completely (default: false)
+   * @param {boolean} options.consolidateMemory - Whether to consolidate memory before reset (default: true)
+   * @param {string} options.reason - Reason for the reset (default: 'user-requested')
+   * @returns {Object} Result of the reset operation
+   */
+  async resetSession(options = {}) {
+    const clearHistory = options.clearHistory === true;
+    const consolidateMemory = options.consolidateMemory !== false;
+    const reason = options.reason || 'user-requested';
+    
+    try {
+      // Update system status to indicate reset in progress
+      this.updateSystemStatus('processing', 'Resetting session...');
+      
+      // Cancel any ongoing processing first
+      if (this.busy) {
+        await this.cancelProcessing();
+      }
+      
+      // Consolidate memory if requested
+      if (consolidateMemory && core.memory && typeof core.memory.consolidateShortTermToLongTerm === 'function') {
+        await core.memory.consolidateShortTermToLongTerm();
+      }
+      
+      // Log the reset event
+      this._logEvent({ 
+        role: 'system', 
+        content: `Session reset (${reason})${clearHistory ? ' with history cleared' : ''}` 
+      });
+      
+      // Clear history if requested
+      if (clearHistory) {
+        const resetMessage = { 
+          role: 'system', 
+          content: `Session history cleared at ${new Date().toISOString()}` 
+        };
+        
+        // Keep only the reset message
+        this.history = [resetMessage];
+        
+        // Write audit to log
+        if (this.chatLogWriter) {
+          this.chatLogWriter.append({ 
+            type: 'session-audit', 
+            action: 'reset', 
+            reason, 
+            timestamp: new Date().toISOString() 
+          });
+        }
+      }
+      
+      // Broadcast the reset event to all clients
+      this._broadcast({ 
+        type: 'reset', 
+        reason, 
+        clearHistory,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Update system status to ready after reset
+      this.updateSystemStatus('ready', 'Session reset complete');
+      
+      await logger.debug('session', `Session reset (${reason})`, { clearHistory });
+      
+      return { ok: true, message: 'Session reset successful' };
+    } catch (error) {
+      // Update system status to error
+      this.updateSystemStatus('error', `Reset failed: ${error.message}`);
+      
+      await logger.error('session', 'Error resetting session', { error: error.message });
+      return { error: 'reset-failed', message: error.message };
+    }
   }
 }
 

@@ -246,8 +246,40 @@ async function startServer() {
         ws.on('message', async (msg) => {
             try {
                 const data = JSON.parse(msg);
-                const res = await sessionManager.handleMessage(data.message);
-                if (res && res.error) ws.send(JSON.stringify({ type: 'busy' }));
+                
+                // Handle cancel request
+                if (data.type === 'cancel') {
+                    const result = await sessionManager.cancelProcessing();
+                    ws.send(JSON.stringify({ 
+                        type: 'cancelResult', 
+                        success: !result.error,
+                        message: result.message || (result.error ? 'Failed to cancel' : 'Processing cancelled')
+                    }));
+                    return;
+                }
+                
+                // Handle session reset request
+                if (data.type === 'reset') {
+                    const options = {
+                        clearHistory: data.clearHistory === true,
+                        consolidateMemory: data.consolidateMemory !== false,
+                        reason: data.reason || 'user-requested'
+                    };
+                    
+                    const result = await sessionManager.resetSession(options);
+                    ws.send(JSON.stringify({
+                        type: 'resetResult',
+                        success: !result.error,
+                        message: result.message || (result.error ? 'Failed to reset session' : 'Session reset successful')
+                    }));
+                    return;
+                }
+                
+                // Handle normal messages
+                if (data.message) {
+                    const res = await sessionManager.handleMessage(data.message);
+                    if (res && res.error) ws.send(JSON.stringify({ type: 'busy' }));
+                }
             } catch (err) {
                 ws.send(JSON.stringify({ type: 'error', error: { message: err.message } }));
             }

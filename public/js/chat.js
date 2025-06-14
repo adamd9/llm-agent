@@ -558,32 +558,53 @@ function updateProcessingUI() {
 
 // Handle interrupt button click
 function handleInterrupt() {
+    console.log('Interrupt requested');
+    
     // Handle TTS interruption
     if (elevenLabsIsPlaying) {
-        console.log('Interrupting TTS playback');
         stopElevenLabsPlaybackAndStream();
-        // Don't return here, allow processing interruption if needed
+        addMessage('system', 'TTS playback interrupted by user.');
     }
     
     // Handle processing interruption
     if (isProcessing) {
-        console.log('Interrupting processing');
-        if (pendingUserAction) {
-            pendingUserAction = false;
-            clearStatus();
+        // Send cancel request to server
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            console.log('Sending cancel request to server');
+            ws.send(JSON.stringify({ type: 'cancel' }));
             
-            if (chatInputField && chatInputField.value.trim().length > 0) {
-                sendMessage();
-            }
+            // Show cancellation status
+            setStatus('Cancelling request...');
         } else {
-            isProcessing = false;
-            updateProcessingUI();
+            console.warn('WebSocket not connected, cannot send cancel request');
         }
     }
     
-    // Only show interruption message if we actually interrupted something
-    if (elevenLabsIsPlaying || isProcessing) {
-        addMessage('system', 'Operation interrupted by user.');
+    // Don't add the processing interruption message here, we'll add it when we get confirmation from the server
+}
+
+/**
+ * Handle reset button click
+ * Prompts the user for confirmation before sending reset request
+ */
+function handleReset() {
+    // Show confirmation dialog
+    const clearHistory = confirm('Do you want to clear the chat history? Click OK to clear history or Cancel to keep history but reset the session.');
+    
+    console.log('Reset requested, clear history:', clearHistory);
+    
+    // Send reset request to server
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ 
+            type: 'reset',
+            clearHistory: clearHistory,
+            reason: 'user-requested'
+        }));
+        
+        setStatus('Resetting session...');
+    } else {
+        console.warn('WebSocket not connected, cannot send reset request');
+        addMessage('system', 'Cannot reset session: WebSocket not connected');
     }
 }
 
@@ -848,6 +869,67 @@ function connect() {
         }
         
         switch(data.type) {
+            case 'cancelResult':
+                console.log('Cancel result received:', data);
+                
+                // Clear the busy state
+                isProcessing = false;
+                updateProcessingUI();
+                
+                // Clear any status message
+                clearStatus();
+                
+                // Add a message about the cancellation
+                addMessage('system', data.success ? 
+                    'Request cancelled successfully.' : 
+                    `Failed to cancel request: ${data.message || 'Unknown error'}`);
+                break;
+                
+            case 'cancelled':
+                console.log('Operation cancelled by server');
+                
+                // Clear the busy state
+                isProcessing = false;
+                updateProcessingUI();
+                
+                // Clear any status message
+                clearStatus();
+                
+                // Add a message about the cancellation
+                addMessage('system', `Operation cancelled: ${data.reason || 'user-requested'}`);
+                break;
+                
+            case 'resetResult':
+                console.log('Reset result received:', data);
+                
+                // Add a message about the reset
+                addMessage('system', data.success ? 
+                    'Session reset successfully.' : 
+                    `Failed to reset session: ${data.message || 'Unknown error'}`);
+                break;
+                
+            case 'reset':
+                console.log('Session reset by server:', data);
+                
+                // Clear the busy state if we were processing
+                if (isProcessing) {
+                    isProcessing = false;
+                    updateProcessingUI();
+                    clearStatus();
+                }
+                
+                // If history was cleared, clear the messages container
+                if (data.clearHistory) {
+                    const messagesContainer = document.getElementById('messages');
+                    if (messagesContainer) {
+                        messagesContainer.innerHTML = '';
+                    }
+                    
+                    // Add a system message about the reset
+                    addMessage('system', `Session has been reset (${data.reason || 'unknown reason'})`);
+                }
+                break;
+                
             case 'response':
                 // Clear any pending finalizing message or timeout
                 removeFinalizingMessage();
@@ -921,6 +1003,16 @@ function connect() {
                 }
                 
                 clearStatus();
+                break;
+                
+            case 'systemStatus':
+                console.log('System status update:', data.data);
+                // Update the status area with the server's system status
+                showStatus(data.data.message, {
+                    spinner: data.data.state === 'processing',
+                    noSpinner: data.data.state !== 'processing',
+                    error: data.data.state === 'error'
+                });
                 break;
                 
             case 'working':
@@ -1121,6 +1213,10 @@ function sendMessage() {
         // Reset utterance tracking state before sending
         hasSentFinalForCurrentUtterance = true; // Mark current utterance as sent
         inputFieldJustClearedBySend = true; // Indicate input was just cleared by a send operation
+        
+        // Add local echo of the message immediately for better UX
+        // This will be replaced by the server's broadcast if needed
+        addMessage('user', message);
         
         // Send the message
         ws.send(JSON.stringify({
@@ -2476,20 +2572,19 @@ document.addEventListener('DOMContentLoaded', () => {
     interruptTTSButton = document.getElementById('interrupt-tts-button'); // Assign TTS interrupt button
     interruptButton = document.getElementById('interrupt-button'); // Assign general interrupt button
     
-    // Set up interrupt button
+    // Initialize interrupt button
     if (interruptButton) {
         interruptButton.addEventListener('click', handleInterrupt);
-        interruptButton.style.display = 'none'; // Start hidden
-        
-        // Create and append the interrupt button content if it doesn't exist
-        if (!interruptButton.querySelector('.interrupt-icon')) {
-            interruptButton.innerHTML = `
-                <span class="interrupt-icon">⏹️</span>
-                <span class="interrupt-text">Interrupt</span>
-            `;
-        }
     } else {
         console.warn('Interrupt button not found in the DOM.');
+    }
+    
+    // Initialize reset button
+    const resetButton = document.getElementById('reset-button');
+    if (resetButton) {
+        resetButton.addEventListener('click', handleReset);
+    } else {
+        console.warn('Reset button not found. Reset functionality will not be available.');
     }
 
     connect(); // Establishes WebSocket and might enable/disable inputs in ws.onopen
