@@ -8,6 +8,8 @@ An AI agent that chats and executes tasks using OpenAI models and a flexible too
 - Planner and coordinator for tool-based task execution
 - Session based logging and conversation history
 - WebSocket API for real-time interaction
+- Multiline chat input for longer messages
+- Text-to-Speech (TTS) for assistant responses (with smart playback)
 
 ## Getting Started
 
