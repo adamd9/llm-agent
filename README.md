@@ -80,6 +80,7 @@ console.log(`Deleted ${deleted} old cache files, ${errors} errors`);
 - Logs stored under `data/logs`
 - Run tests with `npm test`
 - Cache debug logs are available in the main application logs with the `promptCache` prefix
+- A scheduler tool allows tasks to be queued for periodic execution, viewed, or removed. Tasks are stored under `data/scheduler/tasks.json` and run as regular user messages.
 
 ## Documentation
 
