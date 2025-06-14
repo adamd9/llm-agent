@@ -15,9 +15,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
-const { registerSettingsRoutes } = require('./routes/settingsPage');
-registerSettingsRoutes(app, { ego, toolManager });
-
 // Ensure .env variables are loaded
 require('dotenv').config();
 
@@ -129,6 +126,9 @@ const initialMessage = process.argv[2];
 
 // Initialize ego instance
 const ego = new core.Ego(["llmquery", "file-system"]);
+
+const { registerSettingsRoutes } = require('./routes/settingsPage');
+registerSettingsRoutes(app, { ego, toolManager });
 
 
 
