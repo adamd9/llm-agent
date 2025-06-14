@@ -824,11 +824,10 @@ async function fetchHistory() {
 
 // Show or hide the floating scroll button based on message scroll position
 function updateScrollButton() {
-    if (!scrollToInputBtn) return;
-    const messagesDiv = document.getElementById('messages');
-    if (!messagesDiv) return;
-    const atBottom = messagesDiv.scrollHeight - messagesDiv.scrollTop <= messagesDiv.clientHeight + 10;
-    if (atBottom) {
+    if (!scrollToInputBtn || !chatInputField) return;
+    const rect = chatInputField.getBoundingClientRect();
+    const fullyVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+    if (fullyVisible) {
         scrollToInputBtn.classList.remove('visible');
     } else {
         scrollToInputBtn.classList.add('visible');
@@ -837,9 +836,14 @@ function updateScrollButton() {
 
 function scrollToInput() {
     const messagesDiv = document.getElementById('messages');
-    if (!messagesDiv) return;
-    const offset = 20;
-    messagesDiv.scrollTo({ top: messagesDiv.scrollHeight - messagesDiv.clientHeight + offset, behavior: 'smooth' });
+    if (messagesDiv) {
+        messagesDiv.scrollTo({ top: messagesDiv.scrollHeight, behavior: 'smooth' });
+    }
+    if (chatInputField) {
+        const top = chatInputField.getBoundingClientRect().top + window.pageYOffset - 20;
+        window.scrollTo({ top, behavior: 'smooth' });
+        chatInputField.focus();
+    }
 }
 
 function connect() {
@@ -2694,9 +2698,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Setup scroll-to-input button functionality
     const messagesDiv = document.getElementById('messages');
-    if (scrollToInputBtn && messagesDiv) {
+    if (scrollToInputBtn) {
         scrollToInputBtn.addEventListener('click', scrollToInput);
-        messagesDiv.addEventListener('scroll', updateScrollButton);
+        window.addEventListener('scroll', updateScrollButton, { passive: true });
+        window.addEventListener('resize', updateScrollButton);
+        if (messagesDiv) messagesDiv.addEventListener('scroll', updateScrollButton);
         updateScrollButton();
     }
 
