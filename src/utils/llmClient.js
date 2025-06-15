@@ -3,6 +3,7 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const logger = require('./logger');
 const { loadSettings } = require('./settings');
 const promptCache = require('./promptCache');
+const sharedEventEmitter = require('./eventEmitter');
 require('dotenv').config();
 
 class LLMClient {
@@ -42,6 +43,16 @@ class OpenAIClient extends LLMClient {
         const maxTokens = options.max_tokens || settings.maxTokens || 1000;
         logger.debug('OpenAI Client', 'Chatting', { messages, options, model, maxTokens });
 
+        await sharedEventEmitter.emit('subsystemMessage', {
+            module: 'llmClient',
+            content: {
+                type: 'request',
+                model,
+                maxTokens,
+                messages
+            }
+        });
+
         const cacheKey = promptCache.getCacheKey(messages, { ...options, model, maxTokens, client: 'openai' });
         if (promptCache.isEnabled()) {
             const cached = promptCache.readCache(cacheKey);
@@ -57,6 +68,16 @@ class OpenAIClient extends LLMClient {
             temperature: options.temperature || 0.7,
             max_tokens: maxTokens,
             response_format: options.response_format
+        });
+
+        await sharedEventEmitter.emit('subsystemMessage', {
+            module: 'llmClient',
+            content: {
+                type: 'response',
+                model,
+                tokens: response.usage?.total_tokens,
+                response: response.choices[0].message.content
+            }
         });
 
         const result = {

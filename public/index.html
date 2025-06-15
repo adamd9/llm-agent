@@ -73,6 +73,18 @@
                 <button onclick="toggleSubsystem('ego')" class="subsystem-toggle ego-toggle">
                     Ego <span class="message-count ego-count">0</span> ▼
                 </button>
+                <button onclick="toggleSubsystem('tools')" class="subsystem-toggle tools-toggle">
+                    Tools <span class="message-count tools-count">0</span> ▼
+                </button>
+                <button onclick="toggleSubsystem('llmClient')" class="subsystem-toggle llmClient-toggle">
+                    LLM Client <span class="message-count llmClient-count">0</span> ▼
+                </button>
+                <button onclick="toggleSubsystem('memory')" class="subsystem-toggle memory-toggle">
+                    Memory <span class="message-count memory-count">0</span> ▼
+                </button>
+                <button onclick="toggleSubsystem('scheduler')" class="subsystem-toggle scheduler-toggle">
+                    Scheduler <span class="message-count scheduler-count">0</span> ▼
+                </button>
                 <button onclick="toggleSystemErrors()" class="subsystem-toggle system-error-toggle">
                     System Errors <span class="message-count system-error-count">0</span> ▼
                 </button>
@@ -126,6 +138,54 @@
                 <button onclick="toggleSubsystem('ego')" class="close-button">&times;</button>
             </div>
             <div id="ego-output" class="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Tools Modal -->
+    <div id="tools-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Tools Output</h3>
+                <input type="text" class="filter-input" placeholder="Filter..." oninput="filterMessages('tools', this.value)">
+                <button onclick="toggleSubsystem('tools')" class="close-button">&times;</button>
+            </div>
+            <div id="tools-output" class="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- LLM Client Modal -->
+    <div id="llmClient-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>LLM Client</h3>
+                <input type="text" class="filter-input" placeholder="Filter..." oninput="filterMessages('llmClient', this.value)">
+                <button onclick="toggleSubsystem('llmClient')" class="close-button">&times;</button>
+            </div>
+            <div id="llmClient-output" class="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Memory Modal -->
+    <div id="memory-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Memory</h3>
+                <input type="text" class="filter-input" placeholder="Filter..." oninput="filterMessages('memory', this.value)">
+                <button onclick="toggleSubsystem('memory')" class="close-button">&times;</button>
+            </div>
+            <div id="memory-output" class="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Scheduler Modal -->
+    <div id="scheduler-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Scheduler</h3>
+                <input type="text" class="filter-input" placeholder="Filter..." oninput="filterMessages('scheduler', this.value)">
+                <button onclick="toggleSubsystem('scheduler')" class="close-button">&times;</button>
+            </div>
+            <div id="scheduler-output" class="modal-body"></div>
         </div>
     </div>
 

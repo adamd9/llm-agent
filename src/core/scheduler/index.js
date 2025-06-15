@@ -67,29 +67,63 @@ class Scheduler {
         this.tasks.set(config.id, { config, listener });
     }
 
-    runTask(id) {
+    async runTask(id) {
         const taskEntry = this.tasks.get(id);
         if (!taskEntry) return;
         const { config } = taskEntry;
         config.lastRun = Date.now();
         this.saveTasksToFile();
+
+        await sharedEventEmitter.emit('subsystemMessage', {
+            module: 'scheduler',
+            content: { type: 'task_start', config }
+        });
+
         if (config.toolName) {
             const tool = toolManager.getTool(config.toolName);
             if (tool) {
-                tool.execute(config.action || 'sleep', config.parameters || []).catch(err => {
+                try {
+                    const result = await tool.execute(config.action || 'sleep', config.parameters || []);
+                    await sharedEventEmitter.emit('subsystemMessage', {
+                        module: 'scheduler',
+                        content: { type: 'task_result', config, result }
+                    });
+                } catch (err) {
                     logger.error('scheduler', 'Tool task failed', { error: err.message });
-                });
+                    await sharedEventEmitter.emit('subsystemMessage', {
+                        module: 'scheduler',
+                        content: { type: 'task_error', config, error: err.message }
+                    });
+                }
             } else {
                 logger.error('scheduler', `Tool not found: ${config.toolName}`);
+                await sharedEventEmitter.emit('subsystemMessage', {
+                    module: 'scheduler',
+                    content: { type: 'task_error', config, error: 'tool not found' }
+                });
             }
         } else if (config.message) {
             if (!this.sessionManager) {
                 logger.error('scheduler', 'No session manager available for task');
+                await sharedEventEmitter.emit('subsystemMessage', {
+                    module: 'scheduler',
+                    content: { type: 'task_error', config, error: 'no session manager' }
+                });
                 return;
             }
-            this.sessionManager.handleMessage(config.message).catch(err => {
+            try {
+                await this.sessionManager.handleMessage(config.message);
+                await sharedEventEmitter.emit('subsystemMessage', {
+                    module: 'scheduler',
+                    content: { type: 'task_result', config, result: 'message sent' }
+                });
+            } catch (err) {
                 logger.error('scheduler', 'Task execution failed', { error: err.message });
-            });
+                await sharedEventEmitter.emit('subsystemMessage', {
+                    module: 'scheduler',
+                    content: { type: 'task_error', config, error: err.message }
+                });
+            }
         }
     }
 
