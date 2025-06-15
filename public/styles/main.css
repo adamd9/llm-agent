@@ -815,6 +815,14 @@ header {
     right: 0;
 }
 
+/* Generic modal-body styling for all modals */
+.modal-body {
+    max-height: calc(80vh - 120px);
+    overflow-y: auto;
+    padding: 15px;
+}
+
+/* Settings modal specific styling (if needed) */
 #settings-modal .modal-body {
     max-height: calc(80vh - 120px);
     overflow-y: auto;

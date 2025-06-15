@@ -313,7 +313,28 @@ function updateSubsystemOutput(module) {
         output.innerHTML += messages.map((msg) => {
             const messageId = `${module}-message-${msg.id}`;
             const timestamp = new Date(msg.timestamp).toLocaleTimeString();
-            const messageTitle = typeof msg.content === 'object' ? (msg.content.type || 'Message') : 'Message';
+            let messageTitle = typeof msg.content === 'object' ? (msg.content.type || 'Message') : 'Message';
+            
+            // For memory retrieval messages, include the memory type in the title
+            if (messageTitle === 'memory_retrieval_result' && typeof msg.content === 'object' && msg.content.memoryType) {
+                messageTitle = `Memory Retrieval (${msg.content.memoryType})`;
+            }
+            
+            // For LLM client messages, include token counts in the title
+            if (module === 'llmClient' && typeof msg.content === 'object') {
+                if (msg.content.type === 'request') {
+                    // For requests, estimate tokens from messages length
+                    const messages = msg.content.messages || [];
+                    const estimatedTokens = messages.reduce((total, m) => {
+                        // Rough estimate: 1 token ≈ 4 characters
+                        return total + (m.content ? Math.ceil(m.content.length / 4) : 0);
+                    }, 0);
+                    messageTitle = `LLM Request (${estimatedTokens} tokens)`;
+                } else if (msg.content.type === 'response' && msg.content.tokens) {
+                    // For responses, use the actual token count from the API
+                    messageTitle = `LLM Response (${msg.content.tokens} tokens)`;
+                }
+            }
 
             return `<div class="subsystem-message collapsed" id="${messageId}">
                 <div class="subsystem-header" onclick="toggleMessage('${messageId}')">
