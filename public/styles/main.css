@@ -971,6 +971,15 @@ header {
 .subsystem-toggle[data-module="memory"]::before {
     background-color: #673ab7; /* Deep purple for memory */
 }
+.subsystem-toggle[data-module="tools"]::before {
+    background-color: #795548; /* Brown for tools */
+}
+.subsystem-toggle[data-module="llmClient"]::before {
+    background-color: #009688; /* Teal for LLM client */
+}
+.subsystem-toggle[data-module="scheduler"]::before {
+    background-color: #607d8b; /* Blue gray for scheduler */
+}
 
 .subsystem-toggle .toggle-arrow {
     margin-left: auto;

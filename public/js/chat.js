@@ -8,11 +8,15 @@ let subsystemMessages = {
     planner: [],
     coordinator: [],
     ego: [],
+    tools: [],
+    llmClient: [],
+    memory: [],
+    scheduler: [],
     systemError: []
 };
 let debugMessages = [];
-let messageCounters = { planner: 0, coordinator: 0, ego: 0, systemError: 0, debug: 0 };
-let filterKeywords = { planner: '', coordinator: '', ego: '', systemError: '', debug: '' };
+let messageCounters = { planner: 0, coordinator: 0, ego: 0, tools: 0, llmClient: 0, memory: 0, scheduler: 0, systemError: 0, debug: 0 };
+let filterKeywords = { planner: '', coordinator: '', ego: '', tools: '', llmClient: '', memory: '', scheduler: '', systemError: '', debug: '' };
 let connectionError = false; // Track connection error state
 let interruptButton = null; // Reference to the interrupt button
 let pendingUserAction = false; // Track if we're waiting for user action on interrupt

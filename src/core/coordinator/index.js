@@ -112,12 +112,20 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
                 const result = await tool.execute(step.action, step.parameters, plan);
                 logger.debug('Tool execution result:', result);
                 memory.storeShortTerm('toolExecutionResult for' + step.action, JSON.stringify(result), 'ego');
+                await sharedEventEmitter.emit('subsystemMessage', {
+                    module: 'tools',
+                    content: { type: 'tool_execution', tool: step.tool, action: step.action, result }
+                });
                 await sharedEventEmitter.emit('systemStatusMessage', {
                     message: `Completed ${step.action}`,
                     persistent: false
                 });
                 if (result.status === 'error') {
                     logger.debug('Tool execution error:', result);
+                    await sharedEventEmitter.emit('subsystemMessage', {
+                        module: 'tools',
+                        content: { type: 'tool_error', tool: step.tool, action: step.action, error: result.error }
+                    });
                     return {
                         status: 'error',
                         error: result.error,
@@ -156,6 +164,10 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
                 });
             } catch (error) {
                 logger.debug('Tool execution error:', error);
+                await sharedEventEmitter.emit('subsystemMessage', {
+                    module: 'tools',
+                    content: { type: 'tool_error', tool: step.tool, action: step.action, error: error.message }
+                });
                 return {
                     status: 'error',
                     error: error.message,

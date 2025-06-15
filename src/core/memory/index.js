@@ -97,7 +97,7 @@ class Memory {
     
     // Emit subsystem message with the actual short-term memory content
     await sharedEventEmitter.emit('subsystemMessage', {
-      module: 'ego',
+      module: 'memory',
       content: {
         type: 'memory_retrieval_result',
         memoryType: 'short-term',
@@ -343,7 +343,7 @@ ${memory.content}
       
       // Emit subsystem message about starting the consolidation
       await sharedEventEmitter.emit('subsystemMessage', {
-        module: 'ego',
+        module: 'memory',
         content: {
           type: 'memory_consolidation_start',
           originalCount: memories.length,
@@ -410,7 +410,7 @@ ${memory.content}
       
       // Emit subsystem message about the consolidation
       await sharedEventEmitter.emit('subsystemMessage', {
-        module: 'ego',
+        module: 'memory',
         content: {
           type: 'memory_consolidation_result',
           originalCount: memories.length,
@@ -481,7 +481,7 @@ ${memory.content}
       
       // Emit subsystem message with the actual retrieval results
       await sharedEventEmitter.emit('subsystemMessage', {
-        module: 'ego',
+        module: 'memory',
         content: {
           type: 'memory_retrieval_result',
           memoryType: 'long-term',
