@@ -141,16 +141,7 @@ class SessionManager {
     // Update system status
     this.updateSystemStatus('processing', 'Cleaning up session...');
 
-    // Cancel any ongoing processing
-    if (this.busy) {
-      await this.cancelProcessing();
-    }
-
-    // Consolidate memory if requested
-    if (consolidateMemory && core.memory && typeof core.memory.consolidateShortTermToLongTerm === 'function') {
-      await core.memory.consolidateShortTermToLongTerm();
-    }
-
+    // Clear or trim history first so cleanup logs remain visible
     let kept = this.retainExchanges;
 
     if (clearHistory) {
@@ -167,6 +158,16 @@ class SessionManager {
         }
       }
       this.history = exchanges;
+    }
+
+    // Cancel any ongoing processing
+    if (this.busy) {
+      await this.cancelProcessing();
+    }
+
+    // Consolidate memory if requested
+    if (consolidateMemory && core.memory && typeof core.memory.consolidateShortTermToLongTerm === 'function') {
+      await core.memory.consolidateShortTermToLongTerm();
     }
 
     if (this.chatLogWriter) {
