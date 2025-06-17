@@ -332,8 +332,6 @@ class Ego {
     async handleBubble(result, extraInstruction = null) {
         logger.debug('handleBubble', 'Handling bubble', { result, extraInstruction });
         try {
-            const shortTermMemory = await memory.retrieveShortTerm();
-            const longTermRelevantMemory = await memory.retrieveLongTerm('ego', 'retrieve anything relevant to responding to the user', shortTermMemory);
 
             // Prepare the message for the ego
             let message = '';
