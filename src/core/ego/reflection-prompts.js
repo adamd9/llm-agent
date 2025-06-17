@@ -3,7 +3,8 @@
  * 
  * Template variables:
  * - {{short_term_memory}}: The short-term memory content to be analyzed
- * - {{long_term_memory}}: Relevant long-term memory about how the agent thinks it works
+ * - {{self_model}}: The agent's understanding of itself
+ * - {{system_model}}: Technical information about how the agent works
  */
 
 // System prompt for reflection
@@ -14,6 +15,10 @@ Your goal is to learn from how the user guided or corrected the agent. Pay atten
 2. Instances where the user coached or corrected the agent
 3. Any feedback the user provided for future improvement
 4. Opportunities to make future conversations smoother
+
+Here is information about how the system works technically:
+
+{{system_model}}
 
 Keep the analysis objective and constructive, focusing on lessons that will improve future user-agent interactions.`;
 

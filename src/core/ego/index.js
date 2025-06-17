@@ -583,7 +583,7 @@ class Ego {
 
             const shortTermMemory = await memory.retrieveShortTerm();
             
-            // Read the self model file instead of retrieving from long-term memory
+            // Read the self model file
             const selfModelPath = path.join(process.cwd(), 'data', 'self', 'models', 'self.md');
             let selfModel = '';
             
@@ -601,9 +601,31 @@ class Ego {
                 });
                 // Continue with empty self model if there's an error
             }
+            
+            // Read the system model file from src/core directory
+            const systemModelPath = path.join(__dirname, '..', 'systemModel.md');
+            let systemModel = '';
+            
+            try {
+                if (fs.existsSync(systemModelPath)) {
+                    systemModel = fs.readFileSync(systemModelPath, 'utf-8');
+                    logger.debug('reflection', 'Successfully loaded system model file');
+                } else {
+                    logger.warn('reflection', 'System model file not found, proceeding with empty system model');
+                }
+            } catch (fileError) {
+                logger.error('reflection', 'Error reading system model file', {
+                    error: fileError.message,
+                    stack: fileError.stack
+                });
+                // Continue with empty system model if there's an error
+            }
 
             const messages = [
-                { role: 'system', content: reflectionPrompts.REFLECTION_SYSTEM },
+                { 
+                    role: 'system', 
+                    content: reflectionPrompts.REFLECTION_SYSTEM.replace('{{system_model}}', systemModel || 'No system model available.')
+                },
                 {
                     role: 'user',
                     content: reflectionPrompts.REFLECTION_USER

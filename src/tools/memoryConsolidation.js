@@ -86,6 +86,7 @@ class MemoryConsolidationTool {
             // Define paths to model files
             const selfModelPath = path.join(process.cwd(), 'data', 'self', 'models', 'self.md');
             const userModelPath = path.join(process.cwd(), 'data', 'self', 'models', 'user.md');
+            const systemModelPath = path.join(process.cwd(), 'src', 'core', 'systemModel.md');
             
             // Ensure directories exist
             const modelDir = path.dirname(selfModelPath);
@@ -96,6 +97,7 @@ class MemoryConsolidationTool {
             // Read existing model content if available
             let existingSelfModel = '';
             let existingUserModel = '';
+            let existingSystemModel = '';
             
             if (fs.existsSync(selfModelPath)) {
                 existingSelfModel = fs.readFileSync(selfModelPath, 'utf-8');
@@ -103,6 +105,10 @@ class MemoryConsolidationTool {
             
             if (fs.existsSync(userModelPath)) {
                 existingUserModel = fs.readFileSync(userModelPath, 'utf-8');
+            }
+            
+            if (fs.existsSync(systemModelPath)) {
+                existingSystemModel = fs.readFileSync(systemModelPath, 'utf-8');
             }
             
             // Get short-term memory for context
@@ -179,6 +185,36 @@ Do not remove any sections from the original model unless they are explicitly co
             // Update the user model file
             fs.writeFileSync(userModelPath, userUpdateResponse.content);
             logger.debug('MemoryConsolidationTool', 'User model updated successfully');
+            
+            // Finally, update the system model
+            const systemUpdatePrompt = `
+You are analyzing memory data to update a technical model of how an AI agent works.
+
+CURRENT SYSTEM MODEL:
+${existingSystemModel}
+
+RECENT INTERACTIONS (SHORT-TERM MEMORY):
+${shortTermMemory || 'No recent interactions available.'}
+
+LONG-TERM MEMORY EXCERPTS:
+${longTermMemory || 'No long-term memory available.'}
+
+Your task is to extract technical insights about how the agent works, including its architecture, components, and operational details.
+Update the system model with any new technical information learned from the memories.
+When there are contradictions between the current model and new information, prefer the newer information.
+
+Provide a complete, updated Markdown document that maintains the existing structure but incorporates new insights.
+Do not remove any sections from the original model unless they are explicitly contradicted.
+`;
+
+            const systemUpdateResponse = await openai.chat([
+                { role: 'system', content: 'You are an AI model analyst that helps maintain accurate technical documentation of an AI agent system.' },
+                { role: 'user', content: systemUpdatePrompt }
+            ]);
+            
+            // Update the system model file
+            fs.writeFileSync(systemModelPath, systemUpdateResponse.content);
+            logger.debug('MemoryConsolidationTool', 'System model updated successfully');
             
         } catch (error) {
             logger.error('MemoryConsolidationTool', 'Error extracting insights and updating model files:', {

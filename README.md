@@ -101,13 +101,16 @@ The agent uses a multi-layered memory system:
 - Entries are stored with timestamps but without categorization
 - Consolidated periodically to remove duplicates and merge similar memories
 
-### Self and User Models
-- Persistent Markdown files that store the agent's understanding of itself and the user
-- Located in `data/self/models/`:
+### Memory Models
+- Persistent Markdown files that store the agent's understanding of itself, the user, and its own operation
+- User and Self models located in `data/self/models/`:
   - `self.md`: Contains the agent's understanding of its capabilities, limitations, and operational guidelines
   - `user.md`: Contains information about user preferences, patterns, and relevant information learned through interactions
-- Updated during memory consolidation process
-- Used during reflection to improve future interactions
+- System model located in `src/core/systemModel.md`:
+  - Contains technical information about how the agent works, including architecture and components
+  - Not intended to be directly edited in the data directory
+- Self and User models are updated during memory consolidation process
+- All models are used during reflection to improve future interactions
 
 ## Documentation
 
