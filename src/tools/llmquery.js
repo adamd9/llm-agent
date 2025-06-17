@@ -54,15 +54,12 @@ class LLMQueryTool {
         }
 
         const shortTermMemory = await memory.retrieveShortTerm();
-        const longTermRelevantMemory = await memory.retrieveLongTerm('ego', query, shortTermMemory);
 
         let userPrompt = `
         ${query}
         Use the following memory:
         Short term memory (from this conversation):
         ${JSON.stringify(shortTermMemory)}
-        Long term relevant memory:
-        ${JSON.stringify(longTermRelevantMemory)}
         `;
 
         const systemPrompt = await this.buildSystemPrompt();

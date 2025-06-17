@@ -38,6 +38,14 @@ Set `LLM_AGENT_DATA_DIR` to choose where the `data` directory lives. See
 web-based settings page is available as an overlay on the main page (via the Settings button)
 or directly at `/settings` with tabs for general options, prompt overrides and runtime statistics.
 
+### Token Limits
+
+The system enforces a token limit for LLM requests to prevent excessive token usage:
+
+- **Token Limit**: Configurable via `tokenLimit` setting (default: 10000 tokens)
+- **Behavior**: If a request would exceed this limit, an error is emitted to the error subsystem and the request is rejected
+- **Configuration**: Can be adjusted in settings to accommodate different use cases
+
 ### Prompt Caching
 
 The system includes a prompt caching mechanism to improve performance and reduce API calls:

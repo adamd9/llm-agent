@@ -14,6 +14,23 @@ class LLMClient {
     async chat(messages, options = {}) {
         throw new Error('chat method must be implemented by subclass');
     }
+    
+    _estimateTokenCount(messages) {
+        // Simple token estimation: ~4 chars per token
+        // This is a rough estimate and can be replaced with a more accurate tokenizer
+        let totalChars = 0;
+        
+        for (const message of messages) {
+            // Count characters in the content
+            totalChars += message.content ? message.content.length : 0;
+            
+            // Add overhead for message structure (role, etc.)
+            totalChars += 20; // Approximate overhead per message
+        }
+        
+        // Estimate tokens (4 chars per token is a common approximation)
+        return Math.ceil(totalChars / 4);
+    }
 }
 
 class OpenAIClient extends LLMClient {
@@ -41,7 +58,31 @@ class OpenAIClient extends LLMClient {
         const settings = loadSettings();
         const model = options.model || settings.llmModel || this.defaultModel;
         const maxTokens = options.max_tokens || settings.maxTokens || 1000;
-        logger.debug('OpenAI Client', 'Chatting', { messages, options, model, maxTokens });
+        const tokenLimit = options.token_limit || settings.tokenLimit || 10000;
+        logger.debug('OpenAI Client', 'Chatting', { messages, options, model, maxTokens, tokenLimit });
+        
+        // Estimate token count for the request
+        const estimatedTokens = this._estimateTokenCount(messages);
+        
+        // Check if the request exceeds the token limit
+        if (estimatedTokens > tokenLimit) {
+            const errorMessage = `Token limit exceeded: ${estimatedTokens} tokens in request exceeds limit of ${tokenLimit}`;
+            logger.error('OpenAI Client', errorMessage);
+            
+            // Emit error to the error subsystem
+            await sharedEventEmitter.emit('systemError', {
+                module: 'llmClient',
+                content: {
+                    type: 'token_limit_exceeded',
+                    error: errorMessage,
+                    estimatedTokens,
+                    tokenLimit,
+                    status: 'error'
+                }
+            });
+            
+            throw new Error(errorMessage);
+        }
 
         await sharedEventEmitter.emit('subsystemMessage', {
             module: 'llmClient',
@@ -131,6 +172,32 @@ class OllamaClient extends LLMClient {
 
             default: 
                 break;
+        }
+        
+        const settings = loadSettings();
+        const tokenLimit = options.token_limit || settings.tokenLimit || 10000;
+        
+        // Estimate token count for the request
+        const estimatedTokens = this._estimateTokenCount(messages);
+        
+        // Check if the request exceeds the token limit
+        if (estimatedTokens > tokenLimit) {
+            const errorMessage = `Token limit exceeded: ${estimatedTokens} tokens in request exceeds limit of ${tokenLimit}`;
+            logger.error('Ollama Client', errorMessage);
+            
+            // Emit error to the error subsystem
+            await sharedEventEmitter.emit('systemError', {
+                module: 'llmClient',
+                content: {
+                    type: 'token_limit_exceeded',
+                    error: errorMessage,
+                    estimatedTokens,
+                    tokenLimit,
+                    status: 'error'
+                }
+            });
+            
+            throw new Error(errorMessage);
         }
 
         const prompt = this._convertMessagesToPrompt(messages, options);

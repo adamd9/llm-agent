@@ -70,8 +70,6 @@ class LLMQueryOpenAITool {
         try {
             // Retrieve memory
             const shortTermMemory = await memory.retrieveShortTerm();
-            // Pass the actual user query and conversation context to the retrieveLongTerm function for better context
-            const longTermRelevantMemory = await memory.retrieveLongTerm('ego', queryParam.value, shortTermMemory);
 
             // Construct input with memory context
             const input = `
@@ -79,8 +77,6 @@ class LLMQueryOpenAITool {
             Use the following memory:
             Short term memory (from this conversation):
             ${JSON.stringify(shortTermMemory)}
-            Long term relevant memory:
-            ${JSON.stringify(longTermRelevantMemory)}
             `;
 
             // Call OpenAI responses API

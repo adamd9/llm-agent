@@ -7,6 +7,7 @@
   "reflectionModel": "gpt-4.1-nano",
   "utteranceCheckModel": "gpt-4.1-nano",
   "maxTokens": 5000,
+  "tokenLimit": 10000,
   "ttsVoiceId": "D38z5RcWu1voky8WS1ja",
   "ttsModelId": "eleven_flash_v2_5",
   "sttSampleRate": 16000,

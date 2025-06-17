@@ -17,6 +17,8 @@ const fallbackDefaults = {
   utteranceCheckModel: 'gpt-4.1-nano',
   // Default maximum tokens for LLM responses
   maxTokens: 1000,
+  // Maximum tokens allowed for LLM requests
+  tokenLimit: 10000,
   // Default ElevenLabs voice and model for TTS
   ttsVoiceId: 'D38z5RcWu1voky8WS1ja', // "Rachel"
   ttsModelId: 'eleven_flash_v2_5',
