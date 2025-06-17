@@ -2,7 +2,6 @@
  * Prompts used by the Memory module
  * 
  * Template variables:
- * - {{data}}: The data to be categorized (for CATEGORIZE_MEMORY_USER)
  * - {{question}}: The question or query for memory retrieval (for RETRIEVE_MEMORY_USER)
  * - {{memories}}: The list of memories to search through (for RETRIEVE_MEMORY_USER)
  */
@@ -10,17 +9,7 @@
 const { loadPrompt } = require('../../utils/promptManager');
 const MODULE = 'memory';
 
-// Prompt for categorizing long-term memory
-const CATEGORIZE_MEMORY_SYSTEM_DEFAULT = "You are a categorization assistant. You must respond with valid JSON.";
-const CATEGORIZE_MEMORY_SYSTEM = loadPrompt(MODULE, 'CATEGORIZE_MEMORY_SYSTEM', CATEGORIZE_MEMORY_SYSTEM_DEFAULT);
 
-const CATEGORIZE_MEMORY_USER_DEFAULT = `Categorize the following data into a one-word description. Unless there is an explicit category, categorize it as one of the following:
-        - ego (conversation style preferences, user preferences) This is also the default category
-        - execution (skills / tool usage)
-        - planning (how to structure plans)
-        - evaluation (how to evaluate plans)
-        If it doesn't fit, suggest a unique, single word category: {{data}}`;
-const CATEGORIZE_MEMORY_USER = loadPrompt(MODULE, 'CATEGORIZE_MEMORY_USER', CATEGORIZE_MEMORY_USER_DEFAULT);
 
 // Prompt for retrieving relevant memories
 const RETRIEVE_MEMORY_SYSTEM_DEFAULT = `You are a memory retrieval assistant. Find the most relevant memories to answer the question.
@@ -55,32 +44,7 @@ Important guidelines:
 9. Be thorough - missing relevant information will impact the quality of responses`;
 const RETRIEVE_MEMORY_USER = loadPrompt(MODULE, 'RETRIEVE_MEMORY_USER', RETRIEVE_MEMORY_USER_DEFAULT);
 
-// JSON schema for categorization response
-const CATEGORIZE_SCHEMA = {
-  "type": "json_schema",
-  "json_schema": {
-    "name": "evaluation",
-    "schema": {
-      "type": "object",
-      "properties": {
-        "category": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string",
-              "description": "A single-word category describing the evaluation."
-            }
-          },
-          "required": ["name"],
-          "additionalProperties": false
-        }
-      },
-      "required": ["category"],
-      "additionalProperties": false
-    },
-    "strict": true
-  }
-};
+
 
 // Prompt for consolidating long-term memory
 const CONSOLIDATE_MEMORY_SYSTEM_DEFAULT = `You are a memory optimization assistant. Your task is to carefully consolidate a set of memories by:
@@ -167,11 +131,8 @@ const CONSOLIDATE_SCHEMA = {
 };
 
 module.exports = {
-  CATEGORIZE_MEMORY_SYSTEM,
-  CATEGORIZE_MEMORY_USER,
   RETRIEVE_MEMORY_SYSTEM,
   RETRIEVE_MEMORY_USER,
-  CATEGORIZE_SCHEMA,
   CONSOLIDATE_MEMORY_SYSTEM,
   CONSOLIDATE_MEMORY_USER,
   CONSOLIDATE_SCHEMA

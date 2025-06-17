@@ -225,29 +225,12 @@ class Memory {
     
     // No subsystem events for storage operations - we only care about retrieval results
     
-    // Use LLM to categorize data
-    const userPrompt = prompts.CATEGORIZE_MEMORY_USER.replace('{{data}}', dataString);
-
     try {
-      const messages = [
-        { role: "system", content: prompts.CATEGORIZE_MEMORY_SYSTEM },
-        { role: "user", content: userPrompt },
-      ];
-      const response = await this.openaiClient.chat(messages, {
-        response_format: prompts.CATEGORIZE_SCHEMA,
-        temperature: 0.7,
-        max_tokens: 10
-      });
-      const category = JSON.parse(response.content).category.name.trim();
-      logger.debug("Memory", "Categorized long term memory", { dataString, category });
-      
-      // No subsystem events for categorization - we only care about retrieval results
-
       const filePath = path.join(longTermPath, LONG_TERM_FILE);
       const timestamp = Math.floor(Date.now() / 1000);
       
-      // Use consolidated tag format
-      const memoryEntry = `<MEMORY module="${category}" timestamp="${timestamp}">
+      // Use consolidated tag format without category/module
+      const memoryEntry = `<MEMORY timestamp="${timestamp}">
 ${dataString}
 </MEMORY>
 `;
@@ -257,12 +240,11 @@ ${dataString}
       
       return {
         status: "success",
-        data: dataString,
-        category: category
+        data: dataString
       }
     } catch (error) {
       // No subsystem events for storage errors - we only care about retrieval results
-      logger.debug("Memory", "Error categorizing long term memory", {
+      logger.debug("Memory", "Error storing long term memory", {
         error: {
           message: error.message,
           stack: error.stack,
