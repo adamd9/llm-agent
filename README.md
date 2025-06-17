@@ -86,6 +86,29 @@ console.log(`Deleted ${deleted} old cache files, ${errors} errors`);
 - Cache debug logs are available in the main application logs with the `promptCache` prefix
 - Scheduler tool supports periodic and event-based tasks, including automatic tool execution. Tasks persist in `data/scheduler/tasks.json`.
 
+## Memory System
+
+The agent uses a multi-layered memory system:
+
+### Short-Term Memory
+- Stores the current conversation context
+- Located in `data/memory/short-term.md`
+- Used for immediate context in responses
+
+### Long-Term Memory
+- Stores persistent knowledge and insights
+- Located in `data/memory/long-term.md`
+- Entries are stored with timestamps but without categorization
+- Consolidated periodically to remove duplicates and merge similar memories
+
+### Self and User Models
+- Persistent Markdown files that store the agent's understanding of itself and the user
+- Located in `data/self/models/`:
+  - `self.md`: Contains the agent's understanding of its capabilities, limitations, and operational guidelines
+  - `user.md`: Contains information about user preferences, patterns, and relevant information learned through interactions
+- Updated during memory consolidation process
+- Used during reflection to improve future interactions
+
 ## Documentation
 
 - [Architecture](docs/architecture.md) – message flow and subsystem details

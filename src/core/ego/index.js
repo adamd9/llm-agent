@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const { getOpenAIClient } = require('../../utils/openaiClient.js');
 const { DATA_DIR_PATH } = require('../../utils/dataDir');
 require('dotenv').config();
@@ -580,11 +582,25 @@ class Ego {
             logger.debug('reflection', 'Starting reflection process');
 
             const shortTermMemory = await memory.retrieveShortTerm();
-            const longTermContext = await memory.retrieveLongTerm(
-                'ego',
-                'everything the agent knows about how it works, including its own internal model and operational guidelines',
-                shortTermMemory
-            );
+            
+            // Read the self model file instead of retrieving from long-term memory
+            const selfModelPath = path.join(process.cwd(), 'data', 'self', 'models', 'self.md');
+            let selfModel = '';
+            
+            try {
+                if (fs.existsSync(selfModelPath)) {
+                    selfModel = fs.readFileSync(selfModelPath, 'utf-8');
+                    logger.debug('reflection', 'Successfully loaded self model file');
+                } else {
+                    logger.warn('reflection', 'Self model file not found, proceeding with empty self model');
+                }
+            } catch (fileError) {
+                logger.error('reflection', 'Error reading self model file', {
+                    error: fileError.message,
+                    stack: fileError.stack
+                });
+                // Continue with empty self model if there's an error
+            }
 
             const messages = [
                 { role: 'system', content: reflectionPrompts.REFLECTION_SYSTEM },
@@ -592,7 +608,7 @@ class Ego {
                     role: 'user',
                     content: reflectionPrompts.REFLECTION_USER
                         .replace('{{short_term_memory}}', shortTermMemory || '')
-                        .replace('{{long_term_memory}}', longTermContext || '')
+                        .replace('{{self_model}}', selfModel || '')
                 }
             ];
 

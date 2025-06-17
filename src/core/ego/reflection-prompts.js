@@ -22,9 +22,9 @@ const REFLECTION_USER = `Analyze the following short-term memory log of the conv
 
 {{short_term_memory}}
 
-Relevant long-term memory about how the agent thinks it works and its internal model:
+Relevant information about how the agent thinks it works and its internal model:
 
-{{long_term_memory}}
+{{self_model}}
 
 Provide a thoughtful reflection that includes:
 1. Key moments where the user clarified, refined or corrected the agent
