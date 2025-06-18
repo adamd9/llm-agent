@@ -4,7 +4,8 @@
 
 This release introduces an upgraded scheduler system and a new **sleep** tool.
 Scheduled tasks can now be triggered either at fixed intervals or in response to
-session events such as `startup`, `idleTimeout`, and `conversationEnd`.
+session events such as `startup`, `idleTimeout`, `conversationEnd`,
+`messageProcessed`, `sessionCleanup`, and memory maintenance events.
 
 The sleep tool performs session cleanup and can be invoked manually or by the
 scheduler. Cleanup consolidates memory, trims history and emits a `sleep` event
@@ -20,6 +21,11 @@ agent scheduler addTask '{"message": "ping", "frequencySec": 3600}'
 Trigger a tool when the session becomes idle:
 ```bash
 agent scheduler addEventToolTask '{"eventName": "idleTimeout", "toolName": "sleep", "action": "sleep", "parameters": []}'
+```
+
+List available trigger events:
+```bash
+agent scheduler listEvents
 ```
 
 ### Testing

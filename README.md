@@ -94,7 +94,7 @@ console.log(`Deleted ${deleted} old cache files, ${errors} errors`);
 - Logs stored under `data/logs`
 - Run tests with `npm test`
 - Cache debug logs are available in the main application logs with the `promptCache` prefix
-- Scheduler tool supports periodic and event-based tasks, including automatic tool execution. Tasks persist in `data/scheduler/tasks.json`.
+- Scheduler tool supports periodic and event-based tasks, including automatic tool execution. Tasks persist in `data/scheduler/tasks.json`. Use `agent scheduler listEvents` to view available trigger events.
 
 ## Memory System
 
