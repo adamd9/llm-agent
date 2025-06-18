@@ -37,25 +37,9 @@ class SessionManager {
    * @private
    */
   async _initializeHistory() {
-    if (this.chatLogWriter) {
-      try {
-        // Load history from file with a limit of retainExchanges * 2 entries
-        // (to account for both user and assistant messages in exchanges)
-        const loadedHistory = await this.chatLogWriter.readHistory({
-          limit: this.retainExchanges * 2,
-          roles: ['user', 'assistant'] // Only load actual conversation messages
-        });
-        
-        if (loadedHistory && loadedHistory.length > 0) {
-          this.history = loadedHistory;
-          logger.debug('session', `Loaded ${loadedHistory.length} history entries from file`);
-        } else {
-          logger.debug('session', 'No history entries loaded from file');
-        }
-      } catch (err) {
-        logger.error('session', 'Failed to load history from file', { error: err.message });
-      }
-    }
+    // Skip loading history from file to ensure clean state on server restart
+    this.history = [];
+    logger.debug('session', 'Starting with empty history (not loading from file)');
   }
 
   _registerAgentEvents() {
