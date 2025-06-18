@@ -1,6 +1,7 @@
 const logger = require('../utils/logger');
 const memory = require('../core/memory');
 const scheduler = require('../core/scheduler');
+const sharedEventEmitter = require('../utils/eventEmitter');
 
 /**
  * MemoryMaintenanceTool - Heavyweight tool for deep memory maintenance tasks.
@@ -30,7 +31,9 @@ class MemoryMaintenanceTool {
      */
     async consolidate() {
         try {
+            await sharedEventEmitter.emit('memoryMaintenanceStart');
             const result = await memory.consolidateLongTerm();
+            await sharedEventEmitter.emit('memoryMaintenanceEnd');
             return { status: 'success', ...result };
         } catch (error) {
             logger.error('MemoryMaintenanceTool', 'Consolidation failed', { error: error.message });
@@ -46,11 +49,13 @@ class MemoryMaintenanceTool {
             return { status: 'error', error: 'session-manager-unavailable' };
         }
         try {
+            await sharedEventEmitter.emit('memoryMaintenanceStart');
             const result = await scheduler.sessionManager.sleep({
                 clearHistory: opts.clearHistory ?? false,
                 consolidateMemory: opts.consolidateMemory ?? true,
                 reason: opts.reason || 'maintenance-cleanup'
             });
+            await sharedEventEmitter.emit('memoryMaintenanceEnd');
             return result.error ? { status: 'error', error: result.error } : { status: 'success', ...result };
         } catch (error) {
             logger.error('MemoryMaintenanceTool', 'Cleanup failed', { error: error.message });

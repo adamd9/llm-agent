@@ -189,6 +189,7 @@ class SessionManager {
     });
 
     await sharedEventEmitter.emit('sleep', { reason });
+    await sharedEventEmitter.emit('sessionCleanup', { reason });
 
     this.updateSystemStatus('ready', 'Session cleanup complete');
 
@@ -272,6 +273,7 @@ class SessionManager {
       this.updateSystemStatus('ready', 'Processing complete');
 
       await sharedEventEmitter.emit('conversationEnd');
+      await sharedEventEmitter.emit('messageProcessed');
 
       return { ok: true };
     } catch (error) {

@@ -34,7 +34,7 @@ class SchedulerTool {
                     name: 'addEventTask',
                     description: 'Trigger a message when an event occurs',
                     parameters: [
-                        { name: 'eventName', description: 'Event to listen for', type: 'string', required: true },
+                        { name: 'eventName', description: 'Event to listen for (see listEvents)', type: 'string', required: true },
                         { name: 'message', description: 'Message to process', type: 'string', required: true }
                     ]
                 },
@@ -42,7 +42,7 @@ class SchedulerTool {
                     name: 'addEventToolTask',
                     description: 'Trigger a tool when an event occurs',
                     parameters: [
-                        { name: 'eventName', description: 'Event to listen for', type: 'string', required: true },
+                        { name: 'eventName', description: 'Event to listen for (see listEvents)', type: 'string', required: true },
                         { name: 'toolName', description: 'Tool to execute', type: 'string', required: true },
                         { name: 'action', description: 'Tool action', type: 'string', required: true },
                         { name: 'parameters', description: 'Action parameters (JSON)', type: 'string', required: false }
@@ -61,6 +61,11 @@ class SchedulerTool {
                 {
                     name: 'viewTasks',
                     description: 'Alias for listTasks',
+                    parameters: []
+                },
+                {
+                    name: 'listEvents',
+                    description: 'List available scheduler trigger events',
                     parameters: []
                 }
             ]
@@ -143,6 +148,11 @@ class SchedulerTool {
         return this.listTasks();
     }
 
+    async listEvents() {
+        const events = scheduler.getSupportedEvents();
+        return { status: 'success', events };
+    }
+
     async execute(action, parameters) {
         try {
             let parsed = parameters;
@@ -164,6 +174,8 @@ class SchedulerTool {
                     return await this.listTasks();
                 case 'viewTasks':
                     return await this.viewTasks();
+                case 'listEvents':
+                    return await this.listEvents();
                 default:
                     return { status: 'error', error: `Unknown action: ${action}` };
             }

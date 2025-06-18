@@ -9,11 +9,23 @@ const toolManager = require('../../mcp');
 const schedulerDir = path.join(DATA_DIR_PATH, 'scheduler');
 const tasksFile = path.join(schedulerDir, 'tasks.json');
 
+const DEFAULT_EVENTS = [
+    'startup',
+    'idleTimeout',
+    'conversationEnd',
+    'sleep',
+    'messageProcessed',
+    'sessionCleanup',
+    'memoryMaintenanceStart',
+    'memoryMaintenanceEnd'
+];
+
 class Scheduler {
     constructor() {
         // id => { config, timer?, listener? }
         this.tasks = new Map();
         this.sessionManager = null;
+        this.supportedEvents = new Set(DEFAULT_EVENTS);
     }
 
     async initialize(sessionManager) {
@@ -169,6 +181,10 @@ class Scheduler {
 
     listTasks() {
         return Array.from(this.tasks.values()).map(t => t.config);
+    }
+
+    getSupportedEvents() {
+        return Array.from(this.supportedEvents);
     }
 }
 
