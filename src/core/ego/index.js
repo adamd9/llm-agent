@@ -50,8 +50,8 @@ function formatToolResult(result) {
 }
 
 // Configuration
-const MAX_RETRIES = 1;
-const EVALUATION_THRESHOLD = 80; // Score threshold for success
+// Retries were previously controlled by an evaluation score. The evaluator
+// module has been removed, so execution now runs only once.
 
 class Ego {
     constructor(client = null) {
@@ -194,7 +194,7 @@ class Ego {
     }
 
     /**
-     * Executes a task with evaluation and retry loop
+     * Executes a task. Retries and evaluation were removed with the evaluator module.
      */
     async executeWithEvaluation(enrichedMessage, sessionHistory, attempt = 1) {
         logger.debug('executeWithEvaluation', 'Starting execution', {
@@ -236,58 +236,7 @@ class Ego {
         enrichedMessage.plan = planResult.plan;
         const executionResult = await coordinator(enrichedMessage);
         await memory.storeShortTerm('Plan execution result', executionResult);
-        await sharedEventEmitter.emit('systemStatusMessage', 'Execution complete. Evaluating results...');
-
-        // Evaluate the results
-        const evaluation = await evaluator({
-            originalRequest: enrichedMessage.original_message,
-            executionResult,
-            plan: JSON.parse(planResult.plan)
-        });
-
-        logger.debug('executeWithEvaluation', 'Evaluation results', {
-            score: evaluation.score,
-            hasRecommendations: evaluation.recommendations?.length > 0,
-            evaluation
-        });
-
-        await memory.storeShortTerm('Evaluator result', evaluation);
-        
-        // Emit subsystem message with evaluation results
-        await sharedEventEmitter.emit('subsystemMessage', {
-            module: 'ego',
-            content: {
-                type: 'evaluation_results',
-                score: evaluation.score,
-                recommendations: evaluation.recommendations,
-                attempt: attempt
-            }
-        });
-
-        // Check if we need to retry
-        if (evaluation.score < EVALUATION_THRESHOLD && attempt < MAX_RETRIES) {
-            await sharedEventEmitter.emit('systemStatusMessage', `Attempt ${attempt} scored ${evaluation.score}%. Making adjustments...`);
-
-            // Prepare retry message
-            const retryResponse = {
-                type: 'progress',
-                response: `I'm adjusting my approach (attempt ${attempt}/${MAX_RETRIES}):\n` +
-                    `Previous attempt scored ${evaluation.score}%.\n` +
-                    `Adjustments: ${evaluation.recommendations.join(', ')}\n` +
-                    `Let me try again with these improvements.`,
-                enriched_message: enrichedMessage
-            };
-
-            // Add recommendations to context for next attempt
-            enrichedMessage.context.previousAttempt = {
-                score: evaluation.score,
-                recommendations: evaluation.recommendations,
-                attempt
-            };
-
-            // Return both the progress message and the next attempt
-            return await this.executeWithEvaluation(enrichedMessage, sessionHistory, attempt + 1);
-        }
+        await sharedEventEmitter.emit('systemStatusMessage', 'Execution complete.');
 
         // Emit finalizing status message before preparing the final response
         await sharedEventEmitter.emit('systemStatusMessage', {
@@ -325,8 +274,7 @@ class Ego {
         return {
             type: 'task',
             response: finalResponse,
-            enriched_message: enrichedMessage,
-            evaluation: evaluation
+            enriched_message: enrichedMessage
         };
     }
 

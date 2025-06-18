@@ -10,7 +10,7 @@ const scheduler = require('../core/scheduler');
 class MemoryMaintenanceTool {
     constructor() {
         this.name = 'memoryMaintenance';
-        this.description = 'Tool for deep memory consolidation, evaluation, and cleanup';
+        this.description = 'Tool for deep memory consolidation and cleanup';
     }
 
     getCapabilities() {
@@ -19,8 +19,7 @@ class MemoryMaintenanceTool {
             description: this.description,
             actions: [
                 { name: 'consolidate', description: 'Consolidate long-term memory', parameters: [] },
-                { name: 'cleanup', description: 'Session cleanup (previously sleep)', parameters: [] },
-                { name: 'evaluate', description: 'Evaluate execution results', parameters: [] }
+                { name: 'cleanup', description: 'Session cleanup (previously sleep)', parameters: [] }
             ]
         };
     }
@@ -59,22 +58,6 @@ class MemoryMaintenanceTool {
         }
     }
 
-    /**
-     * Evaluate execution results. Re-uses existing evaluator helper.
-     */
-    async evaluate(params = {}) {
-        try {
-            const { originalRequest, executionResult, plan } = params;
-            if (!originalRequest || !executionResult || !plan) {
-                return { status: 'error', error: 'Missing parameters for evaluation' };
-            }
-            const evalResult = await evaluator({ originalRequest, executionResult, plan });
-            return { status: 'success', result: evalResult };
-        } catch (error) {
-            logger.error('MemoryMaintenanceTool', 'Evaluation failed', { error: error.message });
-            return { status: 'error', error: error.message };
-        }
-    }
 
     /**
      * Generic executor used by scheduler/task-planner.
@@ -90,8 +73,6 @@ class MemoryMaintenanceTool {
                 return await this.consolidate(parsed);
             case 'cleanup':
                 return await this.cleanup(parsed);
-            case 'evaluate':
-                return await this.evaluate(parsed);
             default:
                 return { status: 'error', error: `Unknown action: ${action}` };
         }
