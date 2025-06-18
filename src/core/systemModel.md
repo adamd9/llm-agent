@@ -11,7 +11,7 @@ The agent is built upon a modular, layered architecture with three primary compo
     - Drives the main execution loop, including planning, execution, evaluation, and reflection.  
     - Stores user messages, execution results, and reflection insights in short-term memory; retrieves relevant memories (short-term & long-term) via LLM-based relevance filtering and summarization.  
     - Emits status, debug, system, and subsystem events for transparency and debugging.  
-    - Performs reflection after each response to analyze recent interactions and store lessons/insights into long-term memory, enhancing adaptability.  
+    - After each assistant response the task planner triggers the `reflection` tool, which performs a lightweight analysis of recent interactions and stores lessons/insights into long-term memory.  
     - Explicitly tags memory entries with module identifiers and timestamps, supporting detailed memory analysis and consolidation commands.
 
 *   **Coordinator Layer (`src/core/coordinator/`)**:  
@@ -64,9 +64,9 @@ The core operation is an iterative loop involving:
     - Executes plan step-by-step, invoking tools via `MCPToolManager`.  
     - Handles errors, retries, or replans as necessary.  
     - Emits subsystem messages with execution results or errors.  
-5. **Evaluation (`Evaluator`)**:  
-    - Calls the LLM (with `EVALUATION_SCHEMA`) to compare execution results against the original user intent.  
-    - Receives a success score, analysis, and recommendations.  
+5. **DmemoryMaintenance Memory Maintenance (`memoryMaintenance` tool)**:  
+    - Periodically or when explicitly scheduled, the planner invokes the heavy-weight `memoryMaintenance` tool.  
+    - It consolidates long-term memory, prunes low-value items, and can run intensive evaluations of recent execution results where needed.  
 6. **Decision & Retry**:  
     - If success score exceeds threshold (e.g., 80%) or max retries reached, proceed.  
     - If low score and retries remain, generate reflection prompts to analyze evaluation feedback, store lessons, and update context.  
@@ -80,9 +80,9 @@ Throughout, status updates, debug info, and internal insights are emitted via `s
 
 ## 4. Reflection & Memory Enrichment
 
-- Reflection prompts (`reflection-prompts.js`) analyze the latest short-term memory and relevant long-term memory to generate JSON insights, lessons, follow-up questions, and directives.  
+- The `reflection` tool analyzes the latest short-term memory and relevant long-term memory to generate JSON insights, lessons, follow-up questions, and directives.  
 - These insights are stored in long-term memory, enhancing the agent’s adaptive capabilities.  
-- Reflection occurs after each response, including consolidation commands, as observed in memory logs.  
+- Reflection occurs after each assistant response via the `reflection` tool, including during consolidation commands.  
 - Reflection results include lessons learned, which inform future planning and decision-making.
 
 ## 5. Tools & Communication

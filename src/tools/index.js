@@ -6,6 +6,8 @@ const mcpClient = require('./mcpClient');
 
 // Pre-load critical tools to ensure they're always available
 const memoryConsolidationTool = require('./memoryConsolidation');
+const reflectionTool = require('./reflection');
+const memoryMaintenanceTool = require('./memoryMaintenance');
 
 class ToolManager {
     constructor() {
@@ -20,6 +22,10 @@ class ToolManager {
         logger.debug('Loading tools...');
         // Clear existing tools
         this.tools.clear();
+        // Register always-on core tools before dynamic loading
+        [memoryConsolidationTool, reflectionTool, memoryMaintenanceTool].forEach(t => {
+            if (t && t.name) this.tools.set(t.name, t);
+        });
 
         // Load core tools
         await this.loadToolsFromDirectory(this.coreToolsDir, 'core');

@@ -5,7 +5,6 @@ const { DATA_DIR_PATH } = require('../../utils/dataDir');
 require('dotenv').config();
 const { coordinator } = require('../coordinator');
 const { planner } = require('../planner');
-const { evaluator } = require('../evaluator');
 const personalityManager = require('../../personalities');
 const logger = require('../../utils/logger');
 const memory = require('../memory');
@@ -521,7 +520,7 @@ class Ego {
             // Run it asynchronously to avoid blocking
             setTimeout(async () => {
                 try {
-                    await this.reflection();
+                    // Reflection now handled by task planner via reflection tool
                 } catch (reflectionError) {
                     logger.error('handleBubble', 'Error during reflection', {
                         error: {

@@ -10,7 +10,9 @@ An AI agent that chats and executes tasks using OpenAI models and a flexible too
 - WebSocket API for real-time interaction
 - Multiline chat input for longer messages
 - Text-to-Speech (TTS) for assistant responses (with smart playback)
-- Sleep tool for manual or scheduled session cleanup (consolidates memory and trims history)
+- Two dedicated memory tools:
+  - `reflection` – lightweight, runs after each response to store insights with minimal LLM usage
+  - `memoryMaintenance` – heavier, scheduled/triggered for deep memory consolidation, pruning, and evaluation
 - Detailed logging panels for tools, LLM requests, memory access and scheduled tasks
 
 ## Getting Started
