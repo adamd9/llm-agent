@@ -1398,6 +1398,28 @@ header {
     overflow: hidden;
 }
 
+/* Settings page token count styling */
+.token-count {
+    font-size: 0.85em;
+    color: #666;
+    font-weight: normal;
+    margin-left: 8px;
+}
+
+/* Settings page details/summary styling */
+#stats details {
+    margin-bottom: 15px;
+}
+
+#stats details summary {
+    cursor: pointer;
+    padding: 5px 0;
+}
+
+#stats details summary:hover {
+    background-color: #f5f5f5;
+}
+
 /* Canvas content area */
 #canvas-content {
     flex: 1;

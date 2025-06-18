@@ -18,6 +18,11 @@ function registerSettingsRoutes(app, { ego, toolManager }) {
     const shortMem = core.memory.getShortTermMemory();
     const longMem = core.memory.getLongTermMemory();
     
+    // Calculate token estimates (using the same method as in llmClient)
+    const estimateTokens = (text) => Math.ceil((text || '').length / 4);
+    const shortMemTokens = estimateTokens(shortMem);
+    const longMemTokens = estimateTokens(longMem);
+    
     return {
       raw,
       effective,
@@ -27,7 +32,9 @@ function registerSettingsRoutes(app, { ego, toolManager }) {
       failedTools,
       personalityInfo,
       shortMem,
-      longMem
+      longMem,
+      shortMemTokens,
+      longMemTokens
     };
   }
   
@@ -43,6 +50,8 @@ function registerSettingsRoutes(app, { ego, toolManager }) {
     const personalityInfo = content.personalityInfo;
     const shortMem = content.shortMem;
     const longMem = content.longMem;
+    const shortMemTokens = content.shortMemTokens;
+    const longMemTokens = content.longMemTokens;
     
     const generalContent = `
       <form id="settings-form" method="POST" action="/settings">
@@ -77,6 +86,10 @@ function registerSettingsRoutes(app, { ego, toolManager }) {
         <label>
           <span class="setting-name">LLM Max Tokens:</span>
           <span class="setting-input"><input type="number" name="maxTokens" value="${raw.maxTokens ?? ''}" placeholder="${defaults.maxTokens}" /></span>
+        </label>
+        <label>
+          <span class="setting-name">Token Limit:</span>
+          <span class="setting-input"><input type="number" name="tokenLimit" value="${raw.tokenLimit ?? ''}" placeholder="${defaults.tokenLimit}" /></span>
         </label>
         <label>
           <span class="setting-name">TTS Voice ID:</span>
@@ -124,10 +137,14 @@ function registerSettingsRoutes(app, { ego, toolManager }) {
       </ul>
       <h3>Personality</h3>
       <p>${personalityInfo}</p>
-      <h3>Short Term Memory</h3>
-      <pre>${shortMem.replace(/</g,'&lt;')}</pre>
-      <h3>Long Term Memory</h3>
-      <pre>${longMem.replace(/</g,'&lt;')}</pre>
+      <details>
+        <summary><h3 style="display:inline">Short Term Memory</h3> <span class="token-count">(~${shortMemTokens} tokens)</span></summary>
+        <pre>${shortMem.replace(/</g,'&lt;')}</pre>
+      </details>
+      <details>
+        <summary><h3 style="display:inline">Long Term Memory</h3> <span class="token-count">(~${longMemTokens} tokens)</span></summary>
+        <pre>${longMem.replace(/</g,'&lt;')}</pre>
+      </details>
     `;
     
     res.json({
@@ -184,6 +201,7 @@ var buttons=document.querySelectorAll('.settings-tabs button');buttons.forEach(b
         <label>Reflection Model:<input type="text" name="reflectionModel" value="${raw.reflectionModel ?? ''}" placeholder="${defaults.reflectionModel || baseModel}" /></label><br/>
         <label>Utterance Check Model:<input type="text" name="utteranceCheckModel" value="${raw.utteranceCheckModel ?? ''}" placeholder="${defaults.utteranceCheckModel}" /></label><br/>
         <label>LLM Max Tokens:<input type="number" name="maxTokens" value="${raw.maxTokens ?? ''}" placeholder="${defaults.maxTokens}" /></label><br/>
+        <label>Token Limit:<input type="number" name="tokenLimit" value="${raw.tokenLimit ?? ''}" placeholder="${defaults.tokenLimit}" /></label><br/>
         <label>TTS Voice ID:<input type="text" name="ttsVoiceId" value="${raw.ttsVoiceId ?? ''}" placeholder="${defaults.ttsVoiceId}" /></label><br/>
         <label>TTS Model ID:<input type="text" name="ttsModelId" value="${raw.ttsModelId ?? ''}" placeholder="${defaults.ttsModelId}" /></label><br/>
         <label>STT Sample Rate:<input type="number" name="sttSampleRate" value="${raw.sttSampleRate ?? ''}" placeholder="${defaults.sttSampleRate}" /></label><br/>
@@ -234,6 +252,7 @@ var buttons=document.querySelectorAll('.settings-tabs button');buttons.forEach(b
     assign('reflectionModel');
     assign('utteranceCheckModel');
     assign('maxTokens', v => parseInt(v, 10));
+    assign('tokenLimit', v => parseInt(v, 10));
     assign('ttsVoiceId');
     assign('ttsModelId');
     assign('sttSampleRate', v => parseInt(v, 10));
