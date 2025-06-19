@@ -502,13 +502,26 @@ class Ego {
                 }
             });
             
-            // Emit a simplified error message to the user
+            // Create fallback response in the expected format
+            const fallbackMessage = "I'm sorry, I encountered an error while processing your request. Please try again.";
+            const frontendResponse = {
+                chat: fallbackMessage,
+                canvas: {
+                    type: 'markdown',
+                    content: `# Error
+
+${error.message}`
+                }
+            };
+            
+            // Emit the fallback response to the user
             await sharedEventEmitter.emit('message', {
-                role: 'assistant',
-                content: `I'm sorry, I encountered an error while processing your request. Please try again.`
+                type: 'response',
+                data: frontendResponse
             });
             
-            throw error;
+            // Return fallback chat message
+            return fallbackMessage;
         }
     }
 
