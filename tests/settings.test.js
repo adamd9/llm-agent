@@ -1,30 +1,36 @@
 const request = require('supertest');
 const fs = require('fs');
+const path = require('path');
 const { app } = require('../src/index');
 const { SETTINGS_PATH, loadSettings, defaultSettings } = require('../src/utils/settings');
 
+// Skip tests in development mode to preserve user settings
+const isDevelopment = process.env.NODE_ENV === 'development';
+const runTest = isDevelopment ? test.skip : test;
+
 describe('/settings page', () => {
+  // Only clean up settings in test mode
   afterEach(() => {
-    if (fs.existsSync(SETTINGS_PATH)) {
+    if (!isDevelopment && fs.existsSync(SETTINGS_PATH)) {
       fs.unlinkSync(SETTINGS_PATH);
     }
   });
 
-  test('default settings provide maxTokens', () => {
+  runTest('default settings provide maxTokens', () => {
     const settings = loadSettings();
     expect(settings.maxTokens).toBe(defaultSettings.maxTokens);
     expect(settings.autoSendDelayMs).toBe(defaultSettings.autoSendDelayMs);
     expect(settings.usePromptOverrides).toBe(true);
   });
 
-  test('GET /settings returns page', async () => {
+  runTest('GET /settings returns page', async () => {
     const res = await request(app).get('/settings');
     expect(res.status).toBe(200);
     expect(res.text).toMatch(/App Settings/);
     expect(res.text).toMatch(/Stats/);
   });
 
-  test('POST /settings saves file', async () => {
+  runTest('POST /settings saves file', async () => {
     const res = await request(app)
       .post('/settings')
       .type('form')
@@ -60,7 +66,7 @@ describe('/settings page', () => {
     expect(saved.usePromptOverrides).toBe(true);
   });
 
-  test('POST /settings clears to default when blank', async () => {
+  runTest('POST /settings clears to default when blank', async () => {
     // Set a custom model first
     await request(app)
       .post('/settings')
