@@ -194,11 +194,15 @@ function loadSettingsContent() {
 function submitSettingsForm(form) {
     const formData = new FormData(form);
     
+    // Convert FormData to URL-encoded string
+    const urlEncodedData = new URLSearchParams(formData).toString();
+    
     fetch('/settings', {
         method: 'POST',
-        body: formData,
+        body: urlEncodedData,
         headers: {
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded'
         }
     })
     .then(response => response.json())

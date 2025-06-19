@@ -61,8 +61,37 @@ function loadSettings() {
   return settings;
 }
 
+
 function saveSettings(settings) {
-  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2));
+  try {
+    // Ensure the data directory exists
+    const dataDir = path.dirname(SETTINGS_PATH);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    // Merge with existing settings if they exist
+    let existingSettings = {};
+    try {
+      if (fs.existsSync(SETTINGS_PATH)) {
+        existingSettings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+      }
+    } catch (err) {
+      console.warn('Failed to read existing settings, creating new settings file');
+    }
+    
+    // Merge and save
+    const mergedSettings = { ...existingSettings, ...settings };
+    
+    // Write settings to file
+    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(mergedSettings, null, 2));
+    console.log('Settings saved successfully');
+    
+    return true;
+  } catch (err) {
+    console.error('Failed to save settings:', err);
+    return false;
+  }
 }
 
 module.exports = {

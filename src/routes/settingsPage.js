@@ -240,8 +240,12 @@ var buttons=document.querySelectorAll('.settings-tabs button');buttons.forEach(b
     const newSettings = {};
     const assign = (field, transform) => {
       const val = req.body[field];
-      if (val === undefined) return;
-      if (val !== '') newSettings[field] = transform ? transform(val) : val;
+      if (val === undefined) {
+        return;
+      }
+      if (val !== '') {
+        newSettings[field] = transform ? transform(val) : val;
+      }
     };
 
     assign('llmModel');
@@ -259,11 +263,13 @@ var buttons=document.querySelectorAll('.settings-tabs button');buttons.forEach(b
     newSettings.sttFormattedFinals = req.body.sttFormattedFinals ? true : false;
     assign('autoSendDelayMs', v => parseInt(v, 10));
     newSettings.usePromptOverrides = req.body.usePromptOverrides ? true : false;
-
-    saveSettings(newSettings);
+    
+    // Save settings
+    const saveResult = saveSettings(newSettings);
+    
     // For AJAX requests, return JSON
     if (req.xhr || req.headers.accept && req.headers.accept.includes('application/json')) {
-      res.json({ success: true });
+      res.json({ success: true, savedSettings: newSettings });
     } else {
       res.redirect('/settings');
     }
