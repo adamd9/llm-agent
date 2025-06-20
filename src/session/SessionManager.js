@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const sharedEventEmitter = require('../utils/eventEmitter');
 const logger = require('../utils/logger');
 const core = require('../core');
+const WebSocket = require('ws');
 
 class SessionManager {
   constructor(ego, options = {}) {
@@ -80,7 +81,9 @@ class SessionManager {
   }
 
   _broadcast(message) {
-    const messageStr = JSON.stringify(message);
+    // Use safeStringify to handle circular references
+    const safeStringify = require('../utils/safeStringify');
+    const messageStr = safeStringify(message, 'sessionManager._broadcast');
     this.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(messageStr);

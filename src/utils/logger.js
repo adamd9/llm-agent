@@ -86,16 +86,22 @@ class Logger {
         // Write to file
         await this.writeToFile();
 
+        // Create debug message object
+        const debugMessage = {
+            type: 'debug',
+            context,
+            message,
+            data,
+            timestamp: new Date().toISOString()
+        };
+        
+        // Emit debugResponse event for SessionManager to handle
+        // Use safeStringify to handle circular references
+        const safeDebugMessage = JSON.parse(safeStringify(debugMessage, 'logger.debug'));
+        sharedEventEmitter.emit('debugResponse', safeDebugMessage);
+        
         // Send to WebSocket if needed
         if (sendToUser && this.wsConnections) {
-            const debugMessage = {
-                type: 'debug',
-                context,
-                message,
-                data,
-                timestamp: new Date().toISOString()
-            };
-            
             for (const [sessionId, ws] of this.wsConnections) {
                 if (sessionId === this.sessionId) {
                     ws.send(safeStringify({
