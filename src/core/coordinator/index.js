@@ -110,7 +110,7 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
             }
 
             try {
-                const result = await tool.execute(step.action, step.parameters, plan);
+                const result = await tool.execute(step.action, step.parameters, plan, results);
                 logger.debug('Tool execution result:', result);
                 memory.storeShortTerm('toolExecutionResult for' + step.action, JSON.stringify(result), 'ego');
                 await sharedEventEmitter.emit('subsystemMessage', {
@@ -140,17 +140,6 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
                     };
                 }
 
-                if (result.status === 'replan') {
-                    logger.debug('Tool execution replan:', result);
-                    // return {
-                    //     status: 'replan',
-                    //     message: result.message,
-                    //     updatedPlan: result.updatedPlan,
-                    //     nextStepIndex: result.nextStep
-                    // };
-                    await executePlan(result.updatedPlan, true, results, result.nextStepIndex);
-                }
-
                 // Handle the mock tool response format from tests
                 const normalizedResult = {
                     status: result.status || 'success',
@@ -163,6 +152,11 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
                     action: step.action,
                     result: normalizedResult
                 });
+
+                if (result.status === 'replan') {
+                    logger.debug('Tool execution replan:', result);
+                    return await executePlan(result.updatedPlan.steps || result.updatedPlan, true, results, result.nextStepIndex);
+                }
             } catch (error) {
                 logger.debug('Tool execution error:', error);
                 await sharedEventEmitter.emit('subsystemMessage', {
@@ -239,4 +233,4 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
     }
 }
 
-module.exports = { coordinator };
+module.exports = { coordinator, executePlan };

@@ -1,5 +1,4 @@
 const logger = require('../utils/logger.js');
-const memory = require('../core/memory');
 const { getOpenAIClient } = require("../utils/openaiClient.js");
 const { loadSettings } = require("../utils/settings");
 
@@ -30,16 +29,23 @@ class PlanUpdaterTool {
         };
     }
 
-    async reeval(currentStepNumber, plan) {
+    async reeval(currentStepNumber, plan, results = []) {
         logger.debug('planUpdater', 'Re-evaluating plan at step:', currentStepNumber);
-        
-        // Get current context from memory
-        const shortTermMemory = await memory.retrieveShortTerm();
-        
+
+        let previousOutputs = [];
+        if (Array.isArray(results) && results.length > 0) {
+            previousOutputs = results.slice(0, currentStepNumber).map((r, idx) => ({
+                step: idx,
+                tool: r.tool,
+                action: r.action,
+                output: r.result
+            }));
+        }
+
         // Build prompt for OpenAI
         const prompt = `Current Plan: ${JSON.stringify(plan)}
                 Current Step: ${currentStepNumber}
-                Execution History: ${JSON.stringify(shortTermMemory)}
+                Previous Step Outputs: ${JSON.stringify(previousOutputs)}
                 
                 Please analyze this plan and determine if it needs updating. Pay special attention to:
                 - Dependencies between steps
@@ -154,8 +160,8 @@ Remember:
         }
     }
 
-    async execute(action, parameters, plan) {
-        logger.debug('PlanUpdaterTool executing:', { action, parameters, plan });
+    async execute(action, parameters, plan, results = []) {
+        logger.debug('PlanUpdaterTool executing:', { action, parameters, plan, results });
         
         try {
             switch (action) {
@@ -169,7 +175,7 @@ Remember:
                         throw new Error('Missing required plan parameter');
                     }
 
-                    return await this.reeval(currentStepNumber, plan);
+                    return await this.reeval(currentStepNumber, plan, results);
                 }
                     
                 default:

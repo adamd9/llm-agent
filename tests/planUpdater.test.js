@@ -1,9 +1,4 @@
 const planUpdater = require('../src/tools/planUpdater');
-const memory = require('../src/core/memory');
-
-jest.mock('../src/core/memory', () => ({
-  retrieveShortTerm: jest.fn()
-}));
 
 const mockChat = jest.fn();
 jest.mock('../src/utils/openaiClient.js', () => ({
@@ -13,7 +8,6 @@ jest.mock('../src/utils/openaiClient.js', () => ({
 describe('planUpdater tool', () => {
   beforeEach(() => {
     mockChat.mockReset();
-    memory.retrieveShortTerm.mockReset();
   });
 
   test('returns replan when update needed', async () => {
@@ -29,9 +23,11 @@ describe('planUpdater tool', () => {
       next_step_index: 1
     };
     mockChat.mockResolvedValue({ content: JSON.stringify(responseObj) });
-    memory.retrieveShortTerm.mockResolvedValue('[]');
 
-    const res = await planUpdater.execute('evalForUpdate', [{ name: 'currentStepNumber', value: 0 }], plan);
+    const results = [
+      { tool: 'dummy', action: 'a', result: { status: 'success', data: {} } }
+    ];
+    const res = await planUpdater.execute('evalForUpdate', [{ name: 'currentStepNumber', value: 0 }], plan, results);
     expect(res.status).toBe('replan');
     expect(res.updatedPlan.steps).toEqual(plan);
     expect(res.nextStepIndex).toBe(1);
@@ -50,9 +46,12 @@ describe('planUpdater tool', () => {
       next_step_index: 2
     };
     mockChat.mockResolvedValue({ content: JSON.stringify(responseObj) });
-    memory.retrieveShortTerm.mockResolvedValue('[]');
 
-    const res = await planUpdater.execute('evalForUpdate', [{ name: 'currentStepNumber', value: 1 }], plan);
+    const results = [
+      { tool: 'dummy', action: 'a', result: { status: 'success', data: {} } },
+      { tool: 'dummy', action: 'b', result: { status: 'success', data: {} } }
+    ];
+    const res = await planUpdater.execute('evalForUpdate', [{ name: 'currentStepNumber', value: 1 }], plan, results);
     expect(res.status).toBe('success');
     expect(res.nextStepIndex).toBe(2);
   });
