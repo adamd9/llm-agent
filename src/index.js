@@ -151,7 +151,8 @@ async function startServer() {
     if (initialMessage) {
         await sessionManager.handleMessage(initialMessage);
         await new Promise(r => setTimeout(r, 4000));
-        return;
+        // Explicitly exit the process after handling the initial message
+        process.exit(0);
     }
 
     const server = http.createServer(app);
