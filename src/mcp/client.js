@@ -381,7 +381,8 @@ class MCPClient {
 
       if (server.type === 'http-sdk' && server.sdkClient) {
         logger.debug('mcpClient', `Calling tool ${toolName} via SDK on server ${serverId}`, { parameters: mcpParams });
-        const sdkCallParams = { name: toolName, action: 'execute', input: mcpParams };
+        // Format parameters correctly for the SDK callTool method
+        const sdkCallParams = { name: toolName, arguments: mcpParams };
         const sdkResponse = await server.sdkClient.callTool(sdkCallParams);
         logger.debug('mcpClient', `Full SDK response from server ${serverId} for tool ${toolName}:`, sdkResponse);
 
