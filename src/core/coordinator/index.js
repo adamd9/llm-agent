@@ -110,7 +110,7 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
             }
 
             try {
-                const result = await tool.execute(step.action, step.parameters, plan);
+                const result = await tool.execute(step.action, step.parameters, plan, results);
                 logger.debug('Tool execution result:', result);
                 memory.storeShortTerm('toolExecutionResult for' + step.action, JSON.stringify(result), 'ego');
                 await sharedEventEmitter.emit('subsystemMessage', {

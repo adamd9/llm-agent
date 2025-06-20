@@ -31,7 +31,10 @@ describe('planUpdater tool', () => {
     mockChat.mockResolvedValue({ content: JSON.stringify(responseObj) });
     memory.retrieveShortTerm.mockResolvedValue('[]');
 
-    const res = await planUpdater.execute('evalForUpdate', [{ name: 'currentStepNumber', value: 0 }], plan);
+    const results = [
+      { tool: 'dummy', action: 'a', result: { status: 'success', data: {} } }
+    ];
+    const res = await planUpdater.execute('evalForUpdate', [{ name: 'currentStepNumber', value: 0 }], plan, results);
     expect(res.status).toBe('replan');
     expect(res.updatedPlan.steps).toEqual(plan);
     expect(res.nextStepIndex).toBe(1);
@@ -52,7 +55,11 @@ describe('planUpdater tool', () => {
     mockChat.mockResolvedValue({ content: JSON.stringify(responseObj) });
     memory.retrieveShortTerm.mockResolvedValue('[]');
 
-    const res = await planUpdater.execute('evalForUpdate', [{ name: 'currentStepNumber', value: 1 }], plan);
+    const results = [
+      { tool: 'dummy', action: 'a', result: { status: 'success', data: {} } },
+      { tool: 'dummy', action: 'b', result: { status: 'success', data: {} } }
+    ];
+    const res = await planUpdater.execute('evalForUpdate', [{ name: 'currentStepNumber', value: 1 }], plan, results);
     expect(res.status).toBe('success');
     expect(res.nextStepIndex).toBe(2);
   });
