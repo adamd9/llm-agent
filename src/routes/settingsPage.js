@@ -243,9 +243,11 @@ var buttons=document.querySelectorAll('.settings-tabs button');buttons.forEach(b
       if (val === undefined) {
         return;
       }
-      if (val !== '') {
-        newSettings[field] = transform ? transform(val) : val;
+      if (val === '') {
+        newSettings[field] = '';
+        return;
       }
+      newSettings[field] = transform ? transform(val) : val;
     };
 
     assign('llmModel');
