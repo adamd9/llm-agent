@@ -770,9 +770,139 @@ function handleInterrupt() {
  * Prompts the user for confirmation before sending sleep request
  */
 function handleSleep() {
-    // Show confirmation dialog
-    const clearHistory = confirm('Do you want to clear the chat history? Click OK to clear history or Cancel to keep recent context.');
+    // Create custom confirmation dialog
+    const modalOverlay = document.createElement('div');
+    modalOverlay.className = 'modal-overlay';
+    modalOverlay.style.position = 'fixed';
+    modalOverlay.style.top = '0';
+    modalOverlay.style.left = '0';
+    modalOverlay.style.width = '100%';
+    modalOverlay.style.height = '100%';
+    modalOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    modalOverlay.style.display = 'flex';
+    modalOverlay.style.justifyContent = 'center';
+    modalOverlay.style.alignItems = 'center';
+    modalOverlay.style.zIndex = '1000';
+    
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    modalContent.style.backgroundColor = 'white';
+    modalContent.style.padding = '20px';
+    modalContent.style.borderRadius = '5px';
+    modalContent.style.maxWidth = '90%';
+    modalContent.style.width = '400px';
+    modalContent.style.textAlign = 'center';
+    modalContent.style.position = 'relative';
+    modalContent.style.margin = '10px';
+    
+    // Close button (X) in the top-right corner
+    const closeButton = document.createElement('button');
+    closeButton.innerHTML = '&times;';
+    closeButton.style.position = 'absolute';
+    closeButton.style.right = '10px';
+    closeButton.style.top = '10px';
+    closeButton.style.border = 'none';
+    closeButton.style.background = 'none';
+    closeButton.style.fontSize = '20px';
+    closeButton.style.cursor = 'pointer';
+    closeButton.style.padding = '0';
+    closeButton.style.lineHeight = '1';
+    closeButton.setAttribute('aria-label', 'Close');
+    
+    const modalTitle = document.createElement('h3');
+    modalTitle.textContent = 'Sleep Mode';
+    modalTitle.style.marginTop = '0';
+    modalTitle.style.marginBottom = '15px';
+    
+    const modalMessage = document.createElement('p');
+    modalMessage.textContent = 'Do you want to clear the chat history?';
+    modalMessage.style.margin = '0 0 20px 0';
+    
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.display = 'flex';
+    buttonContainer.style.flexDirection = 'row';
+    buttonContainer.style.flexWrap = 'wrap';
+    buttonContainer.style.justifyContent = 'center';
+    buttonContainer.style.gap = '10px';
+    buttonContainer.style.marginTop = '15px';
+    
+    const okButton = document.createElement('button');
+    okButton.textContent = 'Yes, Clear History';
+    okButton.className = 'button';
+    okButton.style.padding = '8px 16px';
+    okButton.style.margin = '5px';
+    okButton.style.minWidth = '120px';
+    
+    const keepButton = document.createElement('button');
+    keepButton.textContent = 'No, Keep History';
+    keepButton.className = 'button';
+    keepButton.style.padding = '8px 16px';
+    keepButton.style.margin = '5px';
+    keepButton.style.minWidth = '120px';
+    
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = 'Cancel';
+    cancelButton.className = 'button';
+    cancelButton.style.padding = '8px 16px';
+    cancelButton.style.margin = '5px';
+    cancelButton.style.minWidth = '120px';
+    
+    buttonContainer.appendChild(okButton);
+    buttonContainer.appendChild(keepButton);
+    buttonContainer.appendChild(cancelButton);
+    
+    modalContent.appendChild(closeButton);
+    modalContent.appendChild(modalTitle);
+    modalContent.appendChild(modalMessage);
+    modalContent.appendChild(buttonContainer);
+    modalOverlay.appendChild(modalContent);
+    
+    document.body.appendChild(modalOverlay);
+    
+    // Function to close the modal
+    const closeModal = () => {
+        if (document.body.contains(modalOverlay)) {
+            document.body.removeChild(modalOverlay);
+        }
+    };
+    
+    // Handle button clicks
+    okButton.addEventListener('click', () => {
+        closeModal();
+        sendSleepRequest(true);
+    });
+    
+    keepButton.addEventListener('click', () => {
+        closeModal();
+        sendSleepRequest(false);
+    });
+    
+    cancelButton.addEventListener('click', closeModal);
+    closeButton.addEventListener('click', closeModal);
+    
+    // Prevent closing when clicking inside the modal content
+    modalContent.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+    
+    // Allow closing when clicking outside the modal content
+    modalOverlay.addEventListener('click', closeModal);
+    
+    // Handle ESC key to close the modal
+    const handleEscKey = (e) => {
+        if (e.key === 'Escape') {
+            closeModal();
+            document.removeEventListener('keydown', handleEscKey);
+        }
+    };
+    document.addEventListener('keydown', handleEscKey);
+}
 
+/**
+ * Send sleep request to the server
+ * @param {boolean} clearHistory - Whether to clear chat history
+ */
+function sendSleepRequest(clearHistory) {
     console.log('Sleep requested, clear history:', clearHistory);
 
     // Send sleep request to server
@@ -787,7 +917,7 @@ function handleSleep() {
             clearCanvas();
         }
 
-        setStatus('Entering sleep mode...');
+        showStatus('Entering sleep mode...');
     } else {
         console.warn('WebSocket not connected, cannot send sleep request');
         addMessage('system', 'Cannot enter sleep mode: WebSocket not connected');
