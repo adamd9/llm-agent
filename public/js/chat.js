@@ -548,7 +548,7 @@ function toggleStatus(messageDiv) {
 function showStatus(message, options = {}) {
     console.log('Showing status:', message, options);
 
-    // Process message and track data type if needed
+    // Process message and track data type
     let messageText, isPersistent, dataType;
     if (typeof message === 'string') {
         messageText = message;
@@ -580,6 +580,12 @@ function showStatus(message, options = {}) {
     // Create status div
     const statusDiv = document.createElement('div');
     statusDiv.className = 'system-message status-message';
+    
+    // Add pulsing animation for non-persistent messages
+    if (!isPersistent) {
+        statusDiv.classList.add('pulse');
+    }
+    
     if (dataType) {
         statusDiv.setAttribute('data-type', dataType);
     }
@@ -587,15 +593,15 @@ function showStatus(message, options = {}) {
     // Add spinner if needed
     const spinner = options.noSpinner ? '' : '<span class="spinner"></span>';
     
-    if (isPersistent && message.includes('Results ready')) {
+    if (isPersistent && messageText.includes('Results ready')) {
         // For persistent results, show a button to view them
         statusDiv.classList.add('persistent');
         currentResult = messageText;
         const viewButton = '<button onclick="toggleResults()" class="view-results-button">View Results ▼</button>';
-        statusDiv.innerHTML = `${spinner}${messageText} ${viewButton}`;
+        statusDiv.innerHTML = `${spinner}<span class="message-text">${messageText}</span> ${viewButton}`;
     } else {
         // Regular status message
-        statusDiv.innerHTML = `${spinner}${messageText.replace(/\n/g, '<br>')}`;
+        statusDiv.innerHTML = `${spinner}<span class="message-text">${messageText.replace(/\n/g, '<br>')}</span>`;
     }
     
     // Add close button for persistent messages
@@ -625,6 +631,27 @@ function showStatus(message, options = {}) {
     if (isPersistent) {
         currentMessagePersistent = true;
         systemMessageDiv = statusDiv;
+    } else {
+        // For non-persistent messages, store reference to handle automatic removal
+        systemMessageDiv = statusDiv;
+        
+        // Auto-remove the message after a delay if specified
+        if (options.autoRemove) {
+            setTimeout(() => {
+                if (statusDiv && statusDiv.parentNode) {
+                    // Fade out the message
+                    statusDiv.style.opacity = '0';
+                    statusDiv.style.transition = 'opacity 0.5s ease';
+                    
+                    // Remove after animation completes
+                    setTimeout(() => {
+                        if (statusDiv && statusDiv.parentNode) {
+                            statusDiv.remove();
+                        }
+                    }, 500);
+                }
+            }, 2000); // Show the message for 2 seconds before removing
+        }
     }
 }
 
@@ -637,16 +664,31 @@ function clearStatus() {
     // Update UI based on processing state
     updateProcessingUI();
     
-    // Clear any system messages after a delay
-    if (systemMessageDiv) {
-        setTimeout(() => {
-            if (systemMessageDiv) {
-                systemMessageDiv.remove();
-                systemMessageDiv = null;
-            }
-        }, 3000);
-        systemMessageDiv = null;
+    // Clear any system messages
+    const systemMessagesContainer = document.getElementById('system-messages-container');
+    if (systemMessagesContainer) {
+        // Find all non-persistent status messages
+        const nonPersistentMessages = systemMessagesContainer.querySelectorAll('.status-message:not(.persistent)');
+        
+        // If there are non-persistent messages, fade them out and remove them
+        if (nonPersistentMessages.length > 0) {
+            nonPersistentMessages.forEach(message => {
+                // Add fade-out class for smooth disappearance
+                message.style.opacity = '0';
+                message.style.transition = 'opacity 0.5s ease';
+                
+                // Remove after animation completes
+                setTimeout(() => {
+                    if (message && message.parentNode) {
+                        message.remove();
+                    }
+                }, 500);
+            });
+        }
     }
+    
+    // Reset system message reference
+    systemMessageDiv = null;
 }
 
 // Update UI based on processing state and TTS playback
@@ -1194,12 +1236,28 @@ function connect() {
                 
             case 'systemStatus':
                 console.log('System status update:', data.data);
-                // Update the status area with the server's system status
-                showStatus(data.data.message, {
-                    spinner: data.data.state === 'processing',
-                    noSpinner: data.data.state !== 'processing',
-                    error: data.data.state === 'error'
-                });
+                
+                // Handle system status updates based on state
+                if (data.data.state === 'ready' && data.data.message === 'Processing complete') {
+                    // For 'Processing complete' message, show it briefly then clear it
+                    showStatus(data.data.message, {
+                        spinner: false,
+                        noSpinner: true,
+                        error: false,
+                        autoRemove: true // Flag to auto-remove this message
+                    });
+                    
+                    // Reset processing state to enable the send button
+                    isProcessing = false;
+                    updateProcessingUI();
+                } else {
+                    // For other system status messages
+                    showStatus(data.data.message, {
+                        spinner: data.data.state === 'processing',
+                        noSpinner: data.data.state !== 'processing',
+                        error: data.data.state === 'error'
+                    });
+                }
                 break;
                 
             case 'working':

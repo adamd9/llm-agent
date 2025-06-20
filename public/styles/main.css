@@ -257,6 +257,28 @@ header {
     position: relative;
 }
 
+/* Pulsing animation for system messages */
+.system-message.pulse {
+    animation: none; /* Remove box-shadow animation */
+}
+
+.system-message.pulse .message-text {
+    animation: textPulse 1.5s infinite ease-in-out;
+    display: inline-block;
+}
+
+@keyframes textPulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
 .system-message::before {
     content: '';
     position: absolute;
