@@ -96,6 +96,12 @@ console.log(`Deleted ${deleted} old cache files, ${errors} errors`);
 - Cache debug logs are available in the main application logs with the `promptCache` prefix
 - Scheduler tool supports periodic and event-based tasks, including automatic tool execution. Tasks persist in `data/scheduler/tasks.json`. Use `agent scheduler listEvents` to view available trigger events.
 
+## File System Tool
+
+The built-in `fileSystem` tool exposes the agent's project directory for read operations and the `data` directory for writes. Use the `list` action to recursively list all non-hidden files starting from any directory inside the project. The capability payload includes a `rootDirectories` field describing the directories and their access levels.
+
+When the agent runs with an MCP server, these `rootDirectories` help the server map the agent's local paths to the server environment so that tools operate on the expected files.
+
 ## Memory System
 
 The agent uses a multi-layered memory system:

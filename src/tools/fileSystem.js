@@ -5,10 +5,12 @@ const { DATA_DIR_PATH } = require('../utils/dataDir'); // Import the centralized
 
 class FileSystemTool {
     constructor() {
-        this.dataRoot = DATA_DIR_PATH; // Use the centralized path
+        this.dataRoot = DATA_DIR_PATH; // Directory with write permissions
+        this.projectRoot = path.resolve(__dirname, '../..');
         // Logging for dataRoot selection is now handled in dataDir.js
         this.name = 'fileSystem';
-        this.description = 'Tool for file system operations';
+        // Clarify this operates on the agent's own file system
+        this.description = 'Access the agent\'s project files. Allows reading from the entire project while write operations are limited to the data directory.';
     }
 
     async initialize() {
@@ -20,33 +22,33 @@ class FileSystemTool {
         }
     }
 
-    // Helper to check if path is within data directory and resolve it
-    _validatePath(filePath) {
-        logger.debug('validatePath', 'Validating path', {
-            filePath: filePath,
-            dataRoot: this.dataRoot
-        });
-        // Handle empty or root path
-        if (!filePath || filePath === '/' || filePath === '.') {
-            return this.dataRoot;
-        }
-
-        // Remove leading slash if present
-        const normalizedPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
-        
-        const resolvedPath = path.resolve(this.dataRoot, normalizedPath);
-        
-        // Validate the resolved path is within data directory
-        if (!resolvedPath.startsWith(this.dataRoot)) {
-            throw new Error('Path must be within data directory');
-        }
-
-        logger.debug('validatePath', 'Path validated', {
+    // Resolve a path relative to the project root and ensure it doesn't escape it
+    _resolvePath(filePath) {
+        logger.debug('resolvePath', 'Resolving path', {
             filePath,
-            resolvedPath
+            projectRoot: this.projectRoot
         });
 
-        return resolvedPath;
+        const base = filePath && filePath !== '/' && filePath !== '.' ? filePath : '.';
+        const normalized = path.isAbsolute(base) ? base : path.join(this.projectRoot, base);
+        const resolved = path.resolve(normalized);
+
+        if (!resolved.startsWith(this.projectRoot)) {
+            throw new Error('Path must be within project root');
+        }
+
+        return resolved;
+    }
+
+    // Validate that a path to be written is inside the data directory
+    _validateWritePath(filePath) {
+        const abs = path.isAbsolute(filePath)
+            ? path.resolve(filePath)
+            : path.resolve(this.projectRoot, filePath);
+        if (!abs.startsWith(this.dataRoot)) {
+            throw new Error('Write operations allowed only within data directory');
+        }
+        return abs;
     }
 
     async execute(action, parameters) {
@@ -93,9 +95,26 @@ class FileSystemTool {
                     }
                     return await this.deleteFile(deletePathParam.value);
 
+                case 'rename':
+                    const oldPathParam = parsedParams.find(p => p.name === 'oldPath');
+                    const newPathParam = parsedParams.find(p => p.name === 'newPath');
+                    if (!oldPathParam || !newPathParam) {
+                        throw new Error('Missing required parameters: oldPath and newPath');
+                    }
+                    return await this.renameFile(oldPathParam.value, newPathParam.value);
+
+                case 'copy':
+                    const srcPathParam = parsedParams.find(p => p.name === 'srcPath');
+                    const destPathParam = parsedParams.find(p => p.name === 'destPath');
+                    if (!srcPathParam || !destPathParam) {
+                        throw new Error('Missing required parameters: srcPath and destPath');
+                    }
+                    return await this.copyFile(srcPathParam.value, destPathParam.value);
+
                 case 'list':
                     const listPathParam = parsedParams.find(param => param.name === 'path');
                     return await this.listFiles(listPathParam ? listPathParam.value : '.');
+
 
                 case 'exists':
                     const existsPathParam = parsedParams.find(param => param.name === 'path');
@@ -125,7 +144,7 @@ class FileSystemTool {
     }
 
     async readFile(filePath) {
-        const validPath = this._validatePath(filePath);
+        const validPath = this._resolvePath(filePath);
         const content = await fs.readFile(validPath, 'utf8');
         return {
             status: 'success',
@@ -144,7 +163,7 @@ class FileSystemTool {
 
         let fileHandle;
         try {
-            const validPath = this._validatePath(filePath);
+            const validPath = this._validateWritePath(filePath);
             
             // Use file handle for atomic write
             fileHandle = await fs.open(validPath, 'w');
@@ -188,7 +207,7 @@ class FileSystemTool {
     }
 
     async deleteFile(filePath) {
-        const validPath = this._validatePath(filePath);
+        const validPath = this._validateWritePath(filePath);
         await fs.unlink(validPath);
         return {
             status: 'success',
@@ -196,19 +215,43 @@ class FileSystemTool {
         };
     }
 
-    async listFiles(dirPath) {
-        const validPath = this._validatePath(dirPath);
+    async renameFile(oldPath, newPath) {
+        const src = this._validateWritePath(oldPath);
+        const dest = this._validateWritePath(newPath);
+        await fs.rename(src, dest);
+        return {
+            status: 'success',
+            from: src,
+            to: dest
+        };
+    }
 
+    async copyFile(srcPath, destPath) {
+        const src = this._resolvePath(srcPath);
+        const dest = this._validateWritePath(destPath);
+        await fs.copyFile(src, dest);
+        return {
+            status: 'success',
+            from: src,
+            to: dest
+        };
+    }
+
+    async listFiles(dirPath) {
+        const validPath = this._resolvePath(dirPath);
+
+        const root = this.projectRoot;
         async function getFilesRecursively(currentPath) {
             try {
-                const items = await fs.readdir(currentPath, { withFileTypes: true });
+                const items = (await fs.readdir(currentPath, { withFileTypes: true }))
+                    .filter(item => !item.name.startsWith('.')); // skip hidden files
                 const files = await Promise.all(items.map(async item => {
                     const fullPath = path.join(currentPath, item.name);
                     try {
                         const stats = await fs.stat(fullPath);
                         const result = {
                             name: item.name,
-                            path: fullPath,
+                            path: path.relative(root, fullPath),
                             type: item.isDirectory() ? 'directory' : 'file',
                             size: stats.size,
                             modifiedTime: stats.mtime
@@ -229,7 +272,7 @@ class FileSystemTool {
                         // If we can't stat the file, return basic info
                         return {
                             name: item.name,
-                            path: fullPath,
+                            path: path.relative(root, fullPath),
                             type: 'unknown',
                             error: 'File not accessible'
                         };
@@ -247,8 +290,8 @@ class FileSystemTool {
         }
 
         try {
-            // Ensure data directory exists
-            await fs.mkdir(validPath, { recursive: true });
+            // Check that directory exists before reading
+            await fs.access(validPath);
             const files = await getFilesRecursively(validPath);
 
             return {
@@ -257,6 +300,13 @@ class FileSystemTool {
                 path: validPath
             };
         } catch (error) {
+            if (error.code === 'ENOENT') {
+                return {
+                    status: 'error',
+                    error: 'Directory does not exist',
+                    path: validPath
+                };
+            }
             return {
                 status: 'error',
                 error: error.message,
@@ -265,8 +315,9 @@ class FileSystemTool {
         }
     }
 
+
     async fileExists(filePath) {
-        const validPath = this._validatePath(filePath);
+        const validPath = this._resolvePath(filePath);
         try {
             await fs.access(validPath);
             return {
@@ -290,7 +341,7 @@ class FileSystemTool {
             actions: [
                 {
                     name: 'list',
-                    description: 'List files in the data directory',
+                    description: 'List all non-hidden files starting from a directory in the agent project',
                     parameters: []
                 },
                 {
@@ -340,13 +391,55 @@ class FileSystemTool {
                         type: 'string',
                         required: true
                     }]
+                },
+                {
+                    name: 'rename',
+                    description: 'Rename or move a file within the data directory',
+                    parameters: [
+                        {
+                            name: 'oldPath',
+                            description: 'Existing path',
+                            type: 'string',
+                            required: true
+                        },
+                        {
+                            name: 'newPath',
+                            description: 'New path',
+                            type: 'string',
+                            required: true
+                        }
+                    ]
+                },
+                {
+                    name: 'copy',
+                    description: 'Copy a file into the data directory',
+                    parameters: [
+                        {
+                            name: 'srcPath',
+                            description: 'Source file path',
+                            type: 'string',
+                            required: true
+                        },
+                        {
+                            name: 'destPath',
+                            description: 'Destination path in data directory',
+                            type: 'string',
+                            required: true
+                        }
+                    ]
                 }
             ],
+            // Paths exposed to agent tools and MCP servers
             rootDirectories: {
+                project: {
+                    path: this.projectRoot,
+                    access: 'read',
+                    description: 'Agent project root (read-only)'
+                },
                 data: {
                     path: this.dataRoot,
                     access: 'read-write',
-                    description: 'Data storage directory'
+                    description: 'Data directory for runtime files'
                 }
             }
         };

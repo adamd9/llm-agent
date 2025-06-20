@@ -125,7 +125,7 @@ app.post('/api/tts/elevenlabs-stream', async (req, res) => {
 const initialMessage = process.argv[2];
 
 // Initialize ego instance
-const ego = new core.Ego(["llmquery", "file-system"]);
+const ego = new core.Ego();
 
 const { registerSettingsRoutes } = require('./routes/settingsPage');
 registerSettingsRoutes(app, { ego, toolManager });
