@@ -56,6 +56,7 @@ let retryCount = 0; // Track retry attempts
 const MIN_AUDIO_CHUNK_SIZE = 1000; // Minimum size to attempt decoding
 let audioDataBuffer = new Uint8Array(0); // Buffer for accumulating small audio chunks
 let isTTSEnabled = true; // Toggle state for TTS functionality
+let resumeSTTAfterTTS = false;
 
 // Function to update message counts on buttons
 function updateMessageCounts() {
@@ -2046,6 +2047,25 @@ async function toggleVoiceSTT() {
 
 // --- New STT Functions End ---
 
+function pauseSTTForTTS() {
+    resumeSTTAfterTTS = false;
+    if (isRecording) {
+        resumeSTTAfterTTS = true;
+        return toggleVoiceSTT();
+    }
+    return Promise.resolve();
+}
+
+async function resumeSTTAfterTTSIfNeeded() {
+    if (resumeSTTAfterTTS && !isRecording) {
+        resumeSTTAfterTTS = false;
+        await toggleVoiceSTT();
+    } else {
+        resumeSTTAfterTTS = false;
+    }
+}
+
+
 // --- ElevenLabs TTS Functions Start ---
 
 async function stopElevenLabsPlaybackAndStream() {
@@ -2114,6 +2134,7 @@ async function stopElevenLabsPlaybackAndStream() {
     }
     
     // Double-check UI state after a short delay
+    await resumeSTTAfterTTSIfNeeded();
     setTimeout(updateProcessingUI, 100);
 }
 
@@ -2435,6 +2456,7 @@ async function playElevenLabsTTS(text) {
         console.log('TTS is currently disabled. Not playing message.');
         return;
     }
+    await pauseSTTForTTS();
     
     // Clear any existing audio data buffer when starting new TTS
     audioDataBuffer = new Uint8Array(0);
