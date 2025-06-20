@@ -142,13 +142,7 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
 
                 if (result.status === 'replan') {
                     logger.debug('Tool execution replan:', result);
-                    // return {
-                    //     status: 'replan',
-                    //     message: result.message,
-                    //     updatedPlan: result.updatedPlan,
-                    //     nextStepIndex: result.nextStep
-                    // };
-                    await executePlan(result.updatedPlan, true, results, result.nextStepIndex);
+                    return await executePlan(result.updatedPlan, true, results, result.nextStepIndex);
                 }
 
                 // Handle the mock tool response format from tests
