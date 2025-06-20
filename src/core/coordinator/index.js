@@ -84,7 +84,8 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
         logger.debug('Using cached tools:', tools.length);
         const toolMap = new Map(tools.map(tool => [tool.name, tool]));
 
-        for (step of plan) {
+        for (let i = startStep; i < plan.length; i++) {
+            step = plan[i];
             logger.debug('Executing step:', step);
             await sharedEventEmitter.emit('systemStatusMessage', {
                 message: `${step.action}`,
