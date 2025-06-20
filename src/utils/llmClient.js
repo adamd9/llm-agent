@@ -59,13 +59,14 @@ class OpenAIClient extends LLMClient {
         const model = options.model || settings.llmModel || this.defaultModel;
         const maxTokens = options.max_tokens || settings.maxTokens || 1000;
         const tokenLimit = options.token_limit || settings.tokenLimit || 10000;
-        logger.debug('OpenAI Client', 'Chatting', { messages, options, model, maxTokens, tokenLimit });
+        const bypassTokenLimit = options.bypassTokenLimit || false;
+        logger.debug('OpenAI Client', 'Chatting', { messages, options, model, maxTokens, tokenLimit, bypassTokenLimit });
         
         // Estimate token count for the request
         const estimatedTokens = this._estimateTokenCount(messages);
         
-        // Check if the request exceeds the token limit
-        if (estimatedTokens > tokenLimit) {
+        // Check if the request exceeds the token limit (unless bypassing)
+        if (!bypassTokenLimit && estimatedTokens > tokenLimit) {
             const errorMessage = `Token limit exceeded: ${estimatedTokens} tokens in request exceeds limit of ${tokenLimit}`;
             logger.error('OpenAI Client', errorMessage);
             

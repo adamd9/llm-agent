@@ -150,8 +150,16 @@ class SessionManager {
     }
 
     // Consolidate memory if requested
-    if (consolidateMemory && core.memory && typeof core.memory.consolidateShortTermToLongTerm === 'function') {
-      await core.memory.consolidateShortTermToLongTerm();
+    if (consolidateMemory && core.memory) {
+      // First move short term memories to long term storage
+      if (typeof core.memory.consolidateShortTermToLongTerm === 'function') {
+        await core.memory.consolidateShortTermToLongTerm();
+      }
+      
+      // Then consolidate the long term memory
+      if (typeof core.memory.consolidateLongTerm === 'function') {
+        await core.memory.consolidateLongTerm(true); // Pass true to bypass token limits during sleep
+      }
     }
 
     if (this.chatLogWriter) {

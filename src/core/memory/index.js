@@ -284,7 +284,7 @@ ${dataString}
   }
 
   // Consolidate long term memory using LLM to remove duplicates, prune low-value content, and merge similar memories
-  async consolidateLongTerm() {
+  async consolidateLongTerm(bypassTokenLimit = false) {
     logger.debug("Memory", "Consolidating long term memory using LLM");
     const filePath = path.join(longTermPath, LONG_TERM_FILE);
     
@@ -341,7 +341,8 @@ ${memory.content}
       const response = await this.openaiClient.chat(messages, {
         response_format: prompts.CONSOLIDATE_SCHEMA,
         temperature: 0.2,
-        max_tokens: 4000
+        max_tokens: 10000,
+        bypassTokenLimit: bypassTokenLimit
       });
       
       // Parse the consolidated memories from the LLM response
