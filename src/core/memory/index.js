@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require('path');
 const { DATA_DIR_PATH } = require('../../utils/dataDir');
 const { getOpenAIClient } = require("../../utils/openaiClient.js");
+const { loadSettings } = require('../../utils/settings');
 const logger = require("../../utils/logger.js");
 const prompts = require("./prompts");
 const sharedEventEmitter = require("../../utils/eventEmitter");
@@ -509,7 +510,26 @@ ${memory.content}
     try {
       const shortContent = this.getShortTermMemory();
       if (!shortContent.trim()) return;
-      await this.storeLongTerm({ transcript: shortContent });
+      // Generate a concise summary of the short-term transcript using the LLM.
+      // The summary should capture key facts and results while skipping debug
+      // or tool noise that may be present in the transcript.
+      let summary = '';
+      try {
+        const messages = [
+          { role: 'system', content: prompts.SHORT_TERM_SUMMARY_SYSTEM },
+          { role: 'user', content: prompts.SHORT_TERM_SUMMARY_USER.replace('{{transcript}}', shortContent) }
+        ];
+        const settings = loadSettings();
+        const response = await this.openaiClient.chat(messages, {
+          model: settings.memoryModel || settings.llmModel
+        });
+        summary = response.content;
+      } catch (summErr) {
+        logger.error('Memory', 'Error summarizing short term memory', { error: summErr.message });
+        summary = shortContent; // Fallback to raw content if summarization fails
+      }
+
+      await this.storeLongTerm(`[Conversation Summary] ${summary}`);
       await this.resetMemory();
     } catch (err) {
       logger.error('Memory', 'Failed to consolidate short term memory', { error: err.message });

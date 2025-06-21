@@ -5,6 +5,7 @@
   "queryModel": "gpt-4.1-nano",
   "bubbleModel": "gpt-4.1-nano",
   "reflectionModel": "gpt-4.1-nano",
+  "memoryModel": "gpt-4.1-nano",
   "utteranceCheckModel": "gpt-4.1-nano",
   "maxTokens": 5000,
   "tokenLimit": 10000,

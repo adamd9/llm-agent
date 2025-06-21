@@ -14,6 +14,7 @@ const fallbackDefaults = {
   queryModel: '',
   bubbleModel: '',
   reflectionModel: '',
+  memoryModel: '',
   utteranceCheckModel: 'gpt-4.1-nano',
   // Default maximum tokens for LLM responses
   maxTokens: 1000,
