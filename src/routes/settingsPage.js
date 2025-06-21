@@ -150,11 +150,27 @@ function registerSettingsRoutes(app, { ego, toolManager }) {
         <pre>${longMem.replace(/</g,'&lt;')}</pre>
       </details>
     `;
-    
+
+    const filesContent = `
+      <div id="file-editor">
+        <label>Select File:
+          <select id="datafile-select" onchange="loadDataFile()">
+            <option value="short-term">short_term.txt</option>
+            <option value="long-term">long_term.txt</option>
+          </select>
+        </label>
+        <textarea id="datafile-content" rows="10" style="width:100%;"></textarea>
+        <div class="settings-actions">
+          <button type="button" onclick="saveDataFile()">Save</button>
+        </div>
+      </div>
+    `;
+
     res.json({
       general: generalContent,
       prompts: promptsContent,
-      stats: statsContent
+      stats: statsContent,
+      files: filesContent
     });
   });
 
@@ -183,6 +199,8 @@ function registerSettingsRoutes(app, { ego, toolManager }) {
 function showTab(id){document.querySelectorAll('.settings-tab').forEach(t=>t.classList.remove('active'));document.getElementById(id).classList.add('active');
 var buttons=document.querySelectorAll('.settings-tabs button');buttons.forEach(b=>{if(b.dataset.tab===id){b.classList.add('active');}else{b.classList.remove('active');}});
 }
+function loadDataFile(){const s=document.getElementById('datafile-select');const t=document.getElementById('datafile-content');if(!s||!t)return;fetch('/datafiles?name='+encodeURIComponent(s.value)).then(r=>r.json()).then(d=>{t.value=d.content||'';});}
+function saveDataFile(){const s=document.getElementById('datafile-select');const t=document.getElementById('datafile-content');if(!s||!t)return;fetch('/datafiles',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:s.value,content:t.value})}).then(r=>r.json()).then(d=>{alert(d.success?'File saved':'Failed to save file');});}
 </script>
 </head><body>
 <div class="modal-content" style="margin:40px auto;">
@@ -192,6 +210,7 @@ var buttons=document.querySelectorAll('.settings-tabs button');buttons.forEach(b
       <button data-tab="general" class="active" onclick="showTab('general')">General</button>
       <button data-tab="prompts" onclick="showTab('prompts')">Prompts</button>
       <button data-tab="stats" onclick="showTab('stats')">Stats</button>
+      <button data-tab="files" onclick="showTab('files')">Files</button>
     </div>
   </div>
   <div class="modal-body">
@@ -234,6 +253,18 @@ var buttons=document.querySelectorAll('.settings-tabs button');buttons.forEach(b
       <pre>${shortMem.replace(/</g,'&lt;')}</pre>
       <h3>Long Term Memory</h3>
       <pre>${longMem.replace(/</g,'&lt;')}</pre>
+    </div>
+    <div id="files" class="settings-tab">
+      <div id="file-editor">
+        <label>Select File:
+          <select id="datafile-select" onchange="loadDataFile()">
+            <option value="short-term">short_term.txt</option>
+            <option value="long-term">long_term.txt</option>
+          </select>
+        </label><br/>
+        <textarea id="datafile-content" rows="10" style="width:100%;"></textarea><br/>
+        <button type="button" onclick="saveDataFile()">Save</button>
+      </div>
     </div>
   </div>
 </div>
