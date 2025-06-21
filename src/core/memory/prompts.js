@@ -130,10 +130,21 @@ const CONSOLIDATE_SCHEMA = {
   }
 };
 
+// Prompts for summarizing short-term memory before long-term storage
+// The transcript may contain debug logs, tool traces or other noisy system output.
+// The assistant should distill the true conversation and important facts while ignoring
+// low level debug chatter.
+const SHORT_TERM_SUMMARY_SYSTEM_DEFAULT = `You are a memory summarization assistant. Condense a conversation transcript into a concise summary capturing the key user requests, assistant responses, decisions and outcomes. Ignore debug logs or repetitive tool traces.`;
+const SHORT_TERM_SUMMARY_USER_DEFAULT = `Summarize the following conversation transcript. Omit filler text, debug statements and irrelevant tool output. Capture any key facts, decisions or results in bullet form. Use as many bullets as needed to cover all important information.\n\n{{transcript}}`;
+const SHORT_TERM_SUMMARY_SYSTEM = loadPrompt(MODULE, 'SHORT_TERM_SUMMARY_SYSTEM', SHORT_TERM_SUMMARY_SYSTEM_DEFAULT);
+const SHORT_TERM_SUMMARY_USER = loadPrompt(MODULE, 'SHORT_TERM_SUMMARY_USER', SHORT_TERM_SUMMARY_USER_DEFAULT);
+
 module.exports = {
   RETRIEVE_MEMORY_SYSTEM,
   RETRIEVE_MEMORY_USER,
   CONSOLIDATE_MEMORY_SYSTEM,
   CONSOLIDATE_MEMORY_USER,
-  CONSOLIDATE_SCHEMA
+  CONSOLIDATE_SCHEMA,
+  SHORT_TERM_SUMMARY_SYSTEM,
+  SHORT_TERM_SUMMARY_USER
 };
