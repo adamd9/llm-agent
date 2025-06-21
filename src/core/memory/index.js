@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require('path');
 const { DATA_DIR_PATH } = require('../../utils/dataDir');
 const { getOpenAIClient } = require("../../utils/openaiClient.js");
+const { loadSettings } = require('../../utils/settings');
 const logger = require("../../utils/logger.js");
 const prompts = require("./prompts");
 const sharedEventEmitter = require("../../utils/eventEmitter");
@@ -518,7 +519,10 @@ ${memory.content}
           { role: 'system', content: prompts.SHORT_TERM_SUMMARY_SYSTEM },
           { role: 'user', content: prompts.SHORT_TERM_SUMMARY_USER.replace('{{transcript}}', shortContent) }
         ];
-        const response = await this.openaiClient.chat(messages);
+        const settings = loadSettings();
+        const response = await this.openaiClient.chat(messages, {
+          model: settings.memoryModel || settings.llmModel
+        });
         summary = response.content;
       } catch (summErr) {
         logger.error('Memory', 'Error summarizing short term memory', { error: summErr.message });

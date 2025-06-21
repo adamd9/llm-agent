@@ -80,6 +80,10 @@ function registerSettingsRoutes(app, { ego, toolManager }) {
           <span class="setting-input"><input type="text" name="reflectionModel" value="${raw.reflectionModel ?? ''}" placeholder="${defaults.reflectionModel || baseModel}" /></span>
         </label>
         <label>
+          <span class="setting-name">Memory Model:</span>
+          <span class="setting-input"><input type="text" name="memoryModel" value="${raw.memoryModel ?? ''}" placeholder="${defaults.memoryModel || baseModel}" /></span>
+        </label>
+        <label>
           <span class="setting-name">Utterance Check Model:</span>
           <span class="setting-input"><input type="text" name="utteranceCheckModel" value="${raw.utteranceCheckModel ?? ''}" placeholder="${defaults.utteranceCheckModel}" /></span>
         </label>
@@ -199,6 +203,7 @@ var buttons=document.querySelectorAll('.settings-tabs button');buttons.forEach(b
         <label>Query Model:<input type="text" name="queryModel" value="${raw.queryModel ?? ''}" placeholder="${defaults.queryModel || baseModel}" /></label><br/>
         <label>Bubble Model:<input type="text" name="bubbleModel" value="${raw.bubbleModel ?? ''}" placeholder="${defaults.bubbleModel || baseModel}" /></label><br/>
         <label>Reflection Model:<input type="text" name="reflectionModel" value="${raw.reflectionModel ?? ''}" placeholder="${defaults.reflectionModel || baseModel}" /></label><br/>
+        <label>Memory Model:<input type="text" name="memoryModel" value="${raw.memoryModel ?? ''}" placeholder="${defaults.memoryModel || baseModel}" /></label><br/>
         <label>Utterance Check Model:<input type="text" name="utteranceCheckModel" value="${raw.utteranceCheckModel ?? ''}" placeholder="${defaults.utteranceCheckModel}" /></label><br/>
         <label>LLM Max Tokens:<input type="number" name="maxTokens" value="${raw.maxTokens ?? ''}" placeholder="${defaults.maxTokens}" /></label><br/>
         <label>Token Limit:<input type="number" name="tokenLimit" value="${raw.tokenLimit ?? ''}" placeholder="${defaults.tokenLimit}" /></label><br/>
@@ -256,6 +261,7 @@ var buttons=document.querySelectorAll('.settings-tabs button');buttons.forEach(b
     assign('queryModel');
     assign('bubbleModel');
     assign('reflectionModel');
+    assign('memoryModel');
     assign('utteranceCheckModel');
     assign('maxTokens', v => parseInt(v, 10));
     assign('tokenLimit', v => parseInt(v, 10));

@@ -40,6 +40,7 @@ describe('/settings page', () => {
         evaluatorModel: 'evalModel',
         queryModel: 'queryModel',
         bubbleModel: 'bubbleModel',
+        memoryModel: 'memoryModel',
         utteranceCheckModel: 'nano-model',
         maxTokens: 1500,
         ttsVoiceId: 'voiceX',
@@ -56,6 +57,7 @@ describe('/settings page', () => {
     expect(saved.evaluatorModel).toBe('evalModel');
     expect(saved.queryModel).toBe('queryModel');
     expect(saved.bubbleModel).toBe('bubbleModel');
+    expect(saved.memoryModel).toBe('memoryModel');
     expect(saved.utteranceCheckModel).toBe('nano-model');
     expect(saved.maxTokens).toBe(1500);
     expect(saved.ttsVoiceId).toBe('voiceX');
@@ -71,16 +73,17 @@ describe('/settings page', () => {
     await request(app)
       .post('/settings')
       .type('form')
-      .send({ llmModel: 'custom-model' });
+      .send({ llmModel: 'custom-model', memoryModel: 'memCustom' });
 
     // Clear the model
     await request(app)
       .post('/settings')
       .type('form')
-      .send({ llmModel: '' });
+      .send({ llmModel: '', memoryModel: '' });
 
     const saved = loadSettings();
     expect(saved.llmModel).toBe(defaultSettings.llmModel);
+    expect(saved.memoryModel).toBe(defaultSettings.memoryModel);
     expect(saved.maxTokens).toBe(defaultSettings.maxTokens);
     expect(saved.usePromptOverrides).toBe(false);
   });
