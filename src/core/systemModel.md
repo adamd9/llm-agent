@@ -71,8 +71,14 @@ The core operation is an iterative loop involving:
     - If success score exceeds threshold (e.g., 80%) or max retries reached, proceed.  
     - If low score and retries remain, generate reflection prompts to analyze evaluation feedback, store lessons, and update context.  
 7. **Response Generation (`Ego.handleBubble`)**:  
-    - Uses LLM to generate natural language reply based on final results or errors.  
-    - Stores the response in memory.  
+    - Uses LLM to transform internal tool execution results into natural, personality-driven responses to the user.  
+    - Processes structured execution results which may be in one of three formats:
+      - Error messages ("Error: [error message]")
+      - Tool output content (plain text or JSON)
+      - Complex objects with fields like type, response, and enriched_message
+    - Generates responses that could be statements, summaries from results, or questions for the user.
+    - The response output is formatted as JSON with 'chat' (brief 1-2 sentence response) and 'canvas' (detailed markdown content) fields.
+    - Stores the response in memory.
     - Initiates reflection process after response, analyzing recent interactions and insights, storing lessons in long-term memory.  
 8. **Output**: Response sent back to user, and process repeats if needed.
 
