@@ -175,6 +175,7 @@ function loadSettingsContent() {
                 <div id="settings-general" class="settings-tab active">${data.general}</div>
                 <div id="settings-prompts" class="settings-tab">${data.prompts}</div>
                 <div id="settings-stats" class="settings-tab">${data.stats}</div>
+                <div id="settings-files" class="settings-tab">${data.files}</div>
             `;
             
             // Add event listener for the settings form
@@ -185,6 +186,7 @@ function loadSettingsContent() {
                     submitSettingsForm(form);
                 });
             }
+            loadDataFile();
         })
         .catch(error => {
             output.innerHTML = `<div class="error-message">Error loading settings: ${error.message}</div>`;
@@ -249,6 +251,38 @@ function showSettingsTab(tabId) {
             button.classList.remove('active');
         }
     });
+}
+
+function loadDataFile() {
+    const select = document.getElementById('datafile-select');
+    const textarea = document.getElementById('datafile-content');
+    if (!select || !textarea) return;
+    fetch('/datafiles?name=' + encodeURIComponent(select.value))
+        .then(res => res.json())
+        .then(data => {
+            textarea.value = data.content || '';
+        })
+        .catch(err => alert('Error loading file: ' + err.message));
+}
+
+function saveDataFile() {
+    const select = document.getElementById('datafile-select');
+    const textarea = document.getElementById('datafile-content');
+    if (!select || !textarea) return;
+    fetch('/datafiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: select.value, content: textarea.value })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert('File saved');
+        } else {
+            alert('Failed to save file');
+        }
+    })
+    .catch(err => alert('Error saving file: ' + err.message));
 }
 
 function capitalizeFirstLetter(string) {

@@ -128,7 +128,9 @@ const initialMessage = process.argv[2];
 const ego = new core.Ego();
 
 const { registerSettingsRoutes } = require('./routes/settingsPage');
+const { registerDataFileRoutes } = require('./routes/dataFiles');
 registerSettingsRoutes(app, { ego, toolManager });
+registerDataFileRoutes(app);
 
 
 
