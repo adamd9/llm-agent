@@ -14,7 +14,15 @@ const MODULE = 'memory';
 // Prompt for retrieving relevant memories
 const RETRIEVE_MEMORY_SYSTEM_DEFAULT = `You are a memory retrieval assistant. Find the most relevant memories to answer the question.
 
-You will be provided with the entire memory database content. Your job is to scan through it and identify any information that would be relevant to answering the user's question.
+You will be provided with the entire memory database content organized in markdown format. Your job is to scan through it and identify any information that would be relevant to answering the user's question.
+
+Memories are formatted as markdown entries with headings and metadata, like this:
+## Memory: [context]
+*Module: [module] | Timestamp: [timestamp] | Tags: [tags]*
+
+[content]
+
+---
 
 Pay special attention to:
 1. User preferences and default behaviors - these are CRITICAL to include
@@ -29,14 +37,14 @@ const RETRIEVE_MEMORY_USER_DEFAULT = `Given the following memory database conten
     
 Question: "{{question}}"
     
-Memory Database Content:
+Memory Database Content (in markdown format):
 {{memories}}
 
 Important guidelines:
 1. Search for keywords related to the question throughout the entire memory content
 2. User preferences and default behaviors are CRITICAL to include
-3. Pay special attention to memory entries with context attributes that match the query topic
-4. Examine memory tags for relevance to the query (e.g., tags like 'weather', 'temperature', 'location')
+3. Pay special attention to memory entries with context attributes in their headings or metadata
+4. Examine memory tags in the metadata for relevance to the query (e.g., tags like 'weather', 'temperature', 'location')
 5. Return the exact relevant text from the memory database - be precise and complete
 6. If you find multiple relevant pieces of information, include all of them
 7. Always check for default preferences related to the query topic
@@ -47,7 +55,7 @@ const RETRIEVE_MEMORY_USER = loadPrompt(MODULE, 'RETRIEVE_MEMORY_USER', RETRIEVE
 
 
 // Prompt for consolidating long-term memory
-const CONSOLIDATE_MEMORY_SYSTEM_DEFAULT = `You are a memory optimization assistant. Your task is to carefully consolidate a set of memories by:
+const CONSOLIDATE_MEMORY_SYSTEM_DEFAULT = `You are a memory optimization assistant. Your task is to carefully consolidate a set of memories formatted in markdown by:
 1. Removing exact and near-duplicate memories (keeping the newest version based on timestamp)
 2. Pruning low-value content like process markers, debugging info, and metadata that won't be useful for future queries
 3. Merging memories that convey the same material facts or understanding about the SAME SPECIFIC TOPIC, even if the wording is different
@@ -57,10 +65,18 @@ const CONSOLIDATE_MEMORY_SYSTEM_DEFAULT = `You are a memory optimization assista
 7. Adding relevant tags/categorizations to each consolidated memory to improve retrieval
 8. Preserving all substantive information that would be valuable for future retrieval
 
+Memories are formatted as markdown entries with headings and metadata, like this:
+## Memory: [context]
+*Module: [module] | Timestamp: [timestamp] | Tags: [tags]*
+
+[content]
+
+---
+
 You must respond with a JSON object containing an array of consolidated memory objects.`;
 const CONSOLIDATE_MEMORY_SYSTEM = loadPrompt(MODULE, 'CONSOLIDATE_MEMORY_SYSTEM', CONSOLIDATE_MEMORY_SYSTEM_DEFAULT);
 
-const CONSOLIDATE_MEMORY_USER_DEFAULT = `Analyze and consolidate the following memories:
+const CONSOLIDATE_MEMORY_USER_DEFAULT = `Analyze and consolidate the following memories, which are formatted in markdown:
 
 {{memories}}
 
@@ -74,6 +90,7 @@ For each memory or group of related memories:
 7. Only consolidate multiple memories into a "model of understanding" when they are about the EXACT SAME TOPIC
 8. Add 3-5 relevant tags to each consolidated memory to improve retrieval (comma-separated)
 9. Preserve the module and timestamp attributes from the newest memory in each group
+10. Extract context from the memory headings (after '## Memory:') if available
 
 Return a JSON object with a 'memories' array containing the consolidated memory objects:
 {
@@ -82,7 +99,8 @@ Return a JSON object with a 'memories' array containing the consolidated memory 
       "module": "string", // Original module or category
       "timestamp": number, // Unix timestamp from the newest memory in each group (no quotes)
       "content": "string", // The consolidated, cleaned content
-      "tags": "string" // Comma-separated list of 3-5 relevant tags for this memory
+      "tags": "string", // Comma-separated list of 3-5 relevant tags for this memory
+      "context": "string" // Original context from the memory heading if available
     }
   ]
 }`;
@@ -116,9 +134,13 @@ const CONSOLIDATE_SCHEMA = {
               "tags": {
                 "type": "string",
                 "description": "Comma-separated list of 3-5 relevant tags for this memory"
+              },
+              "context": {
+                "type": "string",
+                "description": "The context or title of the memory from the memory heading"
               }
             },
-            "required": ["module", "timestamp", "content", "tags"],
+            "required": ["module", "timestamp", "content", "tags", "context"],
             "additionalProperties": false
           }
         }

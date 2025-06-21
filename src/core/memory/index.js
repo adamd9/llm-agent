@@ -17,9 +17,9 @@ const maxLines = 200; // Adjust this as necessary
 const SHORT_TERM_FILE = 'short_term.txt';
 const LONG_TERM_FILE = 'long_term.txt';
 
-// Define memory delimiters for multi-line content
-const MEMORY_START_TAG = '<MEMORY';
-const MEMORY_END_TAG = '</MEMORY>';
+// Define memory delimiters for multi-line content in markdown format
+const MEMORY_START_TAG = '```memory';
+const MEMORY_END_TAG = '```';
 
 // Ensure all memory directories exist
 if (!fs.existsSync(baseMemoryPath)) fs.mkdirSync(baseMemoryPath);
@@ -68,8 +68,16 @@ class Memory {
     }
 
     try {
-      // Use consolidated tag format
-      const memoryEntry = `<MEMORY module="${module}" context="${context}" timestamp="${timestamp}">\n${dataString}\n</MEMORY>\n`;
+      // Use markdown format for more human readability
+      const memoryEntry = `
+## Memory: ${context}
+
+*Module: ${module} | Timestamp: ${timestamp}*
+
+${dataString}
+
+---
+`;
       
       // No subsystem events for storage operations - we only care about retrieval results
       fs.appendFileSync(filePath, memoryEntry);
@@ -110,14 +118,32 @@ class Memory {
     return memoryContent;
   }
 
-  // Parse memory content with consolidated tags
+  // Parse memory content with markdown format and handle consolidated tags for backward compatibility
   parseMemoryContent(content) {
     const memories = [];
     
-    // New consolidated tag format
-    const memoryRegex = /<MEMORY\s+([^>]+)>\n([\s\S]*?)\n<\/MEMORY>/g;
+    // New markdown format
+    // Match markdown memories in the format: ## Memory: <context>\n*Module: <module> | Timestamp: <timestamp>*\n\n<content>\n\n---
+    const markdownRegex = /## Memory: ([^\n]*)\s*\n\s*\*Module: ([^|]*) \| Timestamp: ([^\*]*)\*\s*\n\n([\s\S]*?)\n\n---/g;
     
     let match;
+    while ((match = markdownRegex.exec(content)) !== null) {
+      try {
+        memories.push({
+          context: match[1].trim(),
+          module: match[2].trim(),
+          timestamp: match[3].trim(),
+          content: match[4].trim(),
+          format: 'markdown'
+        });
+      } catch (error) {
+        logger.error('Memory', 'Error parsing markdown memory content', { error: error.message });
+      }
+    }
+    
+    // Handle consolidated tag format for backward compatibility 
+    const memoryRegex = /<MEMORY\s+([^>]+)>\n([\s\S]*?)\n<\/MEMORY>/g;
+    
     while ((match = memoryRegex.exec(content)) !== null) {
       try {
         // Parse attributes from the tag
@@ -147,7 +173,7 @@ class Memory {
       }
     }
     
-    // Also handle legacy format for backward compatibility
+    // Also handle older legacy format for backward compatibility
     // This can be removed once all memory files are migrated
     this.parseLegacyMemoryContent(content, memories);
     
@@ -230,10 +256,15 @@ class Memory {
       const filePath = path.join(longTermPath, LONG_TERM_FILE);
       const timestamp = Math.floor(Date.now() / 1000);
       
-      // Use consolidated tag format without category/module
-      const memoryEntry = `<MEMORY timestamp="${timestamp}">
+      // Use markdown format for long-term memory
+      const memoryEntry = `
+## Long-Term Memory
+
+*Timestamp: ${timestamp}*
+
 ${dataString}
-</MEMORY>
+
+---
 `;
       fs.appendFileSync(filePath, memoryEntry);
       
@@ -314,12 +345,16 @@ ${dataString}
       
       logger.debug("Memory", "Using LLM to intelligently consolidate memories", { memoryCount: memories.length });
       
-      // Prepare the memories in a format that's easy for the LLM to analyze
+      // Prepare the memories in markdown format that's easy for the LLM to analyze
       const formattedMemories = memories.map(memory => {
-        return `<MEMORY module="${memory.module}" timestamp="${memory.timestamp}">
-${memory.content}
-</MEMORY>`;
-      }).join('\n\n');
+        const memoryContext = memory.context || 'Memory';
+        const memoryModule = memory.module || 'system';
+        return `## Memory: ${memoryContext}
+
+*Module: ${memoryModule} | Timestamp: ${memory.timestamp}*
+
+${memory.content}`;
+      }).join('\n\n---\n\n');
       
       // Use LLM to consolidate memories
       const userPrompt = prompts.CONSOLIDATE_MEMORY_USER.replace('{{memories}}', formattedMemories);
@@ -371,11 +406,15 @@ ${memory.content}
           continue;
         }
         
-        // Use consolidated tag format with tags attribute
-        consolidatedContent += `<MEMORY module="${memory.module}" timestamp="${memory.timestamp}" tags="${memory.tags}">
-${memory.content}
-</MEMORY>
+        // Use markdown format with tags attribute
+        consolidatedContent += `
+## Memory: ${memory.context || 'Consolidated'}
 
+*Module: ${memory.module || 'system'} | Timestamp: ${memory.timestamp} | Tags: ${memory.tags || ''}*
+
+${memory.content}
+
+---
 `;
       }
       
