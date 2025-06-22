@@ -354,6 +354,13 @@ function updateSubsystemOutput(module) {
             const timestamp = new Date(msg.timestamp).toLocaleTimeString();
             let messageTitle = typeof msg.content === 'object' ? (msg.content.type || 'Message') : 'Message';
             
+            // For tool execution and error messages, include the tool name in the title
+            if (typeof msg.content === 'object' && (msg.content.type === 'tool_execution' || msg.content.type === 'tool_error') && msg.content.tool) {
+                messageTitle = msg.content.type === 'tool_execution' ? 
+                    `Tool Execution [${msg.content.tool}]` : 
+                    `Tool Error [${msg.content.tool}]`;
+            }
+            
             // For memory retrieval messages, include the memory type in the title
             if (messageTitle === 'memory_retrieval_result' && typeof msg.content === 'object' && msg.content.memoryType) {
                 messageTitle = `Memory Retrieval (${msg.content.memoryType})`;
@@ -368,10 +375,13 @@ function updateSubsystemOutput(module) {
                         // Rough estimate: 1 token ≈ 4 characters
                         return total + (m.content ? Math.ceil(m.content.length / 4) : 0);
                     }, 0);
-                    messageTitle = `LLM Request (${estimatedTokens} tokens)`;
+                    // Include caller name if available
+                    const caller = msg.content.caller || 'unknown';
+                    messageTitle = `LLM Request [${caller}] (${estimatedTokens} tokens)`;
                 } else if (msg.content.type === 'response' && msg.content.tokens) {
-                    // For responses, use the actual token count from the API
-                    messageTitle = `LLM Response (${msg.content.tokens} tokens)`;
+                    // For responses, use the actual token count from the API and include the caller name if available
+                    const caller = msg.content.caller || msg.content.function || 'unknown';
+                    messageTitle = `LLM Response [${caller}] (${msg.content.tokens} tokens)`;
                 }
             }
 

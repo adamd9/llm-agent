@@ -10,7 +10,7 @@ The agent is built upon a modular, layered architecture with three primary compo
     - The central orchestrator handling natural language understanding, task management, identity & personality, and user interaction.  
     - Drives the main execution loop, including planning, execution, evaluation, and reflection.  
     - Stores user messages, execution results, and reflection insights in short-term memory; retrieves relevant memories (short-term & long-term) via LLM-based relevance filtering and summarization.  
-    - Emits status, debug, system, and subsystem events for transparency and debugging.  
+    - Emits status, debug, system, and subsystem events for transparency and debugging with descriptive titles that include function names for LLM responses and tool names for tool executions and errors.  
     - After each assistant response the task planner triggers the `reflection` tool, which performs a lightweight analysis of recent interactions and stores lessons/insights into long-term memory.  
     - Explicitly tags memory entries with module identifiers and timestamps, supporting detailed memory analysis and consolidation commands.
 
@@ -19,7 +19,7 @@ The agent is built upon a modular, layered architecture with three primary compo
     - Coordinates step-by-step execution, invoking tools via `MCPToolManager`.  
     - Supports re-planning if tools request replanning or if execution results suggest adjustments.  
     - When a replan is triggered, stores the updated plan in short-term memory and logs the transition details.  
-    - Emits subsystem messages with execution status or errors.
+    - Emits subsystem messages with execution status or errors, including descriptive titles that contain the specific tool name for both successful executions and errors.
 
 *   **Tool Layer (`src/mcp/`, `src/tools/`, `data/tools/`, `data/mcp-servers/`, `data/remote-mcp-servers/`)**:  
     - Provides the agent's capabilities via tools, which may be local scripts, local MCP servers, or remote MCP servers accessed via SDK.  

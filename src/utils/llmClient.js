@@ -15,6 +15,45 @@ class LLMClient {
         throw new Error('chat method must be implemented by subclass');
     }
     
+    _getFunctionName() {
+        // Try to get the calling function name from the stack trace
+        const stackTrace = new Error().stack;
+        // Parse the stack trace to find the calling function
+        // Format is typically: "Error\n    at FunctionName (path/to/file.js:line:column)"
+        const stackLines = stackTrace.split('\n').slice(2); // Skip Error and current function
+        
+        // First, try to find a meaningful caller outside of the LLM client
+        for (const line of stackLines) {
+            // Extract file path and function name for better context
+            const fileMatch = line.match(/\s+at\s+([\w\.]+)\s+\(([^:]+)/);
+            if (fileMatch && fileMatch[1] && fileMatch[2]) {
+                const funcName = fileMatch[1];
+                const filePath = fileMatch[2];
+                
+                // Skip internal LLM client functions
+                if (funcName.includes('LLMClient') || 
+                    funcName.includes('OpenAIClient') || 
+                    funcName.includes('OllamaClient') || 
+                    funcName.includes('Object.<anonymous>')) {
+                    continue;
+                }
+                
+                // Extract module name from file path for better context
+                const moduleMatch = filePath.match(/\/src\/([^\/]+)\/([^\/]+)/);
+                if (moduleMatch) {
+                    const module = moduleMatch[1];
+                    const file = moduleMatch[2].replace('.js', '');
+                    return `${module}/${file}.${funcName}`;
+                }
+                
+                // If we can't extract module, just return the function name
+                return funcName;
+            }
+        }
+        
+        return 'unknown';
+    }
+    
     _estimateTokenCount(messages) {
         // Simple token estimation: ~4 chars per token
         // This is a rough estimate and can be replaced with a more accurate tokenizer
@@ -55,6 +94,9 @@ class OpenAIClient extends LLMClient {
     }
 
     async chat(messages, options = {}) {
+        // Extract function name from options or use a default
+        const functionName = options.functionName || this._getFunctionName();
+        
         const settings = loadSettings();
         const model = options.model || settings.llmModel || this.defaultModel;
         const maxTokens = options.max_tokens || settings.maxTokens || 1000;
@@ -85,13 +127,17 @@ class OpenAIClient extends LLMClient {
             throw new Error(errorMessage);
         }
 
+        // Get caller name for request
+        const callerName = options.callerName || this._getFunctionName();
+        
         await sharedEventEmitter.emit('subsystemMessage', {
             module: 'llmClient',
             content: {
                 type: 'request',
                 model,
                 maxTokens,
-                messages
+                messages,
+                caller: callerName
             }
         });
 
@@ -112,13 +158,18 @@ class OpenAIClient extends LLMClient {
             response_format: options.response_format
         });
 
+        // Use the same caller name for the response as was used for the request
+        const responseCaller = options.callerName || functionName;
+        
         await sharedEventEmitter.emit('subsystemMessage', {
             module: 'llmClient',
             content: {
                 type: 'response',
                 model,
                 tokens: response.usage?.total_tokens,
-                response: response.choices[0].message.content
+                response: response.choices[0].message.content,
+                function: functionName,
+                caller: responseCaller
             }
         });
 
@@ -161,6 +212,9 @@ class OllamaClient extends LLMClient {
     }
 
     async chat(messages, options = {}) {
+        // Extract function name from options or use a default
+        const functionName = options.functionName || this._getFunctionName();
+        
         logger.debug('MODEL for OllamaClient: ', this.model)
         switch (options.model) {
             case 'gpt-4o-mini':
@@ -230,6 +284,22 @@ class OllamaClient extends LLMClient {
 
         const result = await response.json();
         logger.debug('LLM Client Response: ', result.response)
+        
+        // Get caller name for response
+        const responseCaller = options.callerName || functionName;
+        
+        // Emit subsystem message for the response
+        await sharedEventEmitter.emit('subsystemMessage', {
+            module: 'llmClient',
+            content: {
+                type: 'response',
+                model: options.model || this.model,
+                tokens: result.eval_count || Math.ceil(result.response.length / 4), // Rough token estimate if not provided
+                response: result.response,
+                function: functionName,
+                caller: responseCaller
+            }
+        });
         if (options.response_format?.type === 'json_schema') {
             try {
                 // Check if response is wrapped in code blocks
