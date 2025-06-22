@@ -142,7 +142,21 @@ async function executePlan(plan, isReplan = false, existingResults = [], startSt
 
                 if (result.status === 'replan') {
                     logger.debug('Tool execution replan:', result);
-                    return await executePlan(result.updatedPlan, true, results, result.nextStepIndex);
+                    
+                    // Store the updated plan in memory for tracking
+                    await memory.storeShortTerm('UpdatedPlan', JSON.stringify(result.updatedPlan), 'coordinator');
+                    await memory.storeShortTerm('UpdatedPlan', JSON.stringify(result.updatedPlan), 'ego');
+                    
+                    // Log the transition from old plan to new plan
+                    logger.info('Coordinator', 'Plan updated', {
+                        reason: result.message,
+                        oldPlanLength: plan.length,
+                        newPlanLength: result.updatedPlan.steps.length,
+                        nextStepIndex: result.nextStepIndex
+                    });
+                    
+                    // Execute the updated plan
+                    return await executePlan(result.updatedPlan.steps, true, results, result.nextStepIndex);
                 }
 
                 // Handle the mock tool response format from tests

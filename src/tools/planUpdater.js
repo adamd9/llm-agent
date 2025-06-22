@@ -2,6 +2,8 @@ const logger = require('../utils/logger.js');
 const memory = require('../core/memory');
 const { getOpenAIClient } = require("../utils/openaiClient.js");
 const { loadSettings } = require("../utils/settings");
+const { planner } = require("../core/planner");
+const sharedEventEmitter = require('../utils/eventEmitter');
 
 class PlanUpdaterTool {
     constructor() {
@@ -31,10 +33,12 @@ class PlanUpdaterTool {
     }
 
     async reeval(currentStepNumber, plan, results = []) {
-        logger.debug('planUpdater', 'Re-evaluating plan at step:', currentStepNumber);
-
-        const shortTermMemory = await memory.retrieveShortTerm();
-
+        logger.debug('PlanUpdaterTool', 'Re-evaluating plan', { currentStepNumber, plan });
+        
+        // Get short-term memory to provide context
+        const shortTermMemory = await memory.retrieveShortTerm() || [];
+        
+        // Format previous outputs for context
         let previousOutputs = [];
         if (Array.isArray(results) && results.length > 0) {
             previousOutputs = results.slice(0, currentStepNumber).map((r, idx) => ({
@@ -45,117 +49,72 @@ class PlanUpdaterTool {
             }));
         }
 
-        // Build prompt for OpenAI
-        const prompt = `Current Plan: ${JSON.stringify(plan)}
-                Current Step: ${currentStepNumber}
-                Previous Step Outputs: ${JSON.stringify(previousOutputs)}
-                Execution History: ${JSON.stringify(shortTermMemory)}
-                
-                Please analyze this plan and determine if it needs updating. Pay special attention to:
-                - Dependencies between steps
-                - Required inputs that will be generated in previous steps
-                - Any conflicts or issues based on the execution history`;
-
-        const messages = [
-            {
-                role: 'system',
-                content: `You are a plan evaluator and updater. Your role is to assess whether a plan needs updating based on new information and execution results. You must respond with valid JSON.
-
-Remember:
-1. Only suggest updates if truly necessary
-2. Consider both success and failure scenarios
-3. Maintain consistency with original goals
-4. Be specific about why updates are needed`
-            },
-            {
-                role: 'user',
-                content: prompt
+        // Create an enriched message for the planner
+        const enrichedMessage = {
+            original_message: `Re-evaluate the current plan based on execution results. 
+            Current Step: ${currentStepNumber}
+            Previous Step Outputs: ${JSON.stringify(previousOutputs)}
+            Current Plan: ${JSON.stringify(plan)}
+            
+            Determine if the plan needs updating based on these results. If it does, provide an updated plan.`,
+            context: {
+                short_term_memory: shortTermMemory
             }
-        ];
+        };
+        
+        // Emit subsystem message about replanning
+        await sharedEventEmitter.emit('subsystemMessage', {
+            module: 'planUpdater',
+            content: {
+                type: 'replanning',
+                currentStep: currentStepNumber,
+                previousResults: previousOutputs.length
+            }
+        });
 
         try {
-            const openai = getOpenAIClient();
-            const settings = loadSettings();
-            const response = await openai.chat(messages, {
-                response_format: {
-                    type: "json_schema",
-                    json_schema: {
-                        name: "evaluation",
-                        schema: {
-                            type: "object",
-                            properties: {
-                                needs_update: {
-                                    type: "boolean",
-                                    description: "Indicates whether the plan needs to be updated"
-                                },
-                                reason: {
-                                    type: "string",
-                                    description: "Explanation of why the plan needs updating (if it does)"
-                                },
-                                updated_plan: {
-                                    type: "object",
-                                    properties: {
-                                        steps: {
-                                            type: "array",
-                                            items: {
-                                                type: "object",
-                                                properties: {
-                                                    tool: { type: "string" },
-                                                    action: { type: "string" },
-                                                    parameters: {
-                                                        type: "array",
-                                                        items: {
-                                                            type: "object",
-                                                            properties: {
-                                                                name: { type: "string" },
-                                                                value: { type: "string" }
-                                                            },
-                                                            required: ["name", "value"],
-                                                            additionalProperties: false
-                                                        }
-                                                    },
-                                                    description: { type: "string" }
-                                                },
-                                                required: ["tool", "action", "parameters", "description"],
-                                                additionalProperties: false
-                                            }
-                                        }
-                                    },
-                                    required: ["steps"],
-                                    additionalProperties: false
-                                },
-                                next_step_index: {
-                                    type: "integer",
-                                    description: "0-based index of the next step to execute"
-                                }
-                            },
-                            required: ["needs_update", "reason", "updated_plan", "next_step_index"],
-                            additionalProperties: false
-                        },
-                        strict: true
-                    }
-                },
-                temperature: 0.7,
-                max_tokens: settings.maxTokens || 1000
-            });
-
-            const evaluation = JSON.parse(response.content);
+            // Use the existing planner to generate a new plan
+            logger.debug('PlanUpdaterTool', 'Calling planner with enriched message');
+            const planResult = await planner(enrichedMessage);
+            logger.debug('PlanUpdaterTool', 'Planner result:', planResult);
             
-            logger.debug('PlanUpdaterTool', 'Evaluation for update result:', evaluation);
-
-            if (evaluation.needs_update) {
+            if (planResult.status === 'error') {
+                logger.error('PlanUpdaterTool', 'Planner error:', planResult.error);
                 return {
-                    status: 'replan',
-                    message: evaluation.reason,
-                    updatedPlan: evaluation.updated_plan,
-                    nextStepIndex: evaluation.next_step_index
+                    status: 'error',
+                    error: planResult.error,
+                    message: `Plan re-evaluation failed: ${planResult.error}`
                 };
             }
-
+            
+            // Parse the new plan
+            const newPlan = JSON.parse(planResult.plan);
+            
+            // Compare old and new plans to determine if an update is needed
+            const oldPlanStr = JSON.stringify(plan);
+            const newPlanStr = JSON.stringify(newPlan);
+            const needsUpdate = oldPlanStr !== newPlanStr;
+            
+            if (needsUpdate) {
+                logger.debug('PlanUpdaterTool', 'Plan update needed', {
+                    oldPlanLength: plan.length,
+                    newPlanLength: newPlan.length
+                });
+                
+                return {
+                    status: 'replan',
+                    message: 'Plan updated based on execution results',
+                    updatedPlan: {
+                        steps: newPlan
+                    },
+                    nextStepIndex: currentStepNumber
+                };
+            }
+            
             return {
                 status: 'success',
                 message: 'Plan is valid and can continue execution',
-                nextStepIndex: evaluation.next_step_index
+                nextStepIndex: currentStepNumber
             };
 
         } catch (error) {
