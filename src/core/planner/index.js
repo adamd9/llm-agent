@@ -6,6 +6,8 @@ const memory = require('../memory');
 const sharedEventEmitter = require('../../utils/eventEmitter');
 const prompts = require('./prompts');
 const { loadSettings } = require('../../utils/settings');
+const fs = require('fs');
+const path = require('path');
 
 const openai = getOpenAIClient();
 
@@ -239,4 +241,187 @@ function formatToolsDescription(tools) {
     }).join('\n');
 }
 
-module.exports = { planner };
+/**
+ * Creates a high-level strategic approach for solving the user's request
+ * @param {Object} enrichedMessage - The enriched message containing the original message and memory
+ * @param {Object} client - Optional client for OpenAI
+ * @returns {Object} - The strategic planning result containing approach and success criteria
+ */
+async function strategicPlanner(enrichedMessage, client = null) {
+    try {
+        logger.debug('strategicPlanner', 'Starting strategic planning process', {
+            message: enrichedMessage.original_message
+        });
+        
+        await sharedEventEmitter.emit('systemStatusMessage', {
+            message: 'Formulating strategic approach...',
+            persistent: false
+        });
+
+        // Get high-level tool descriptions (names and descriptions only)
+        const tools = await toolManager.getAllTools();
+        const toolSummary = tools.map(tool => `${tool.name}: ${tool.description}`).join('\n');
+        
+        logger.debug('strategicPlanner', 'Tool summary prepared', { 
+            toolCount: tools.length 
+        });
+
+        // Read memory models for context
+        const selfModelPath = path.join(process.cwd(), 'data', 'self', 'models', 'self.md');
+        const userModelPath = path.join(process.cwd(), 'data', 'self', 'models', 'user.md');
+        const systemModelPath = path.join(process.cwd(), 'src', 'core', 'systemModel.md');
+        
+        let selfModel = 'No self model available.';
+        let userModel = 'No user model available.';
+        let systemModel = 'No system model available.';
+        
+        if (fs.existsSync(selfModelPath)) {
+            selfModel = fs.readFileSync(selfModelPath, 'utf-8');
+            logger.debug('strategicPlanner', 'Loaded self model', { 
+                length: selfModel.length 
+            });
+        }
+        
+        if (fs.existsSync(userModelPath)) {
+            userModel = fs.readFileSync(userModelPath, 'utf-8');
+            logger.debug('strategicPlanner', 'Loaded user model', { 
+                length: userModel.length 
+            });
+        }
+        
+        if (fs.existsSync(systemModelPath)) {
+            systemModel = fs.readFileSync(systemModelPath, 'utf-8');
+            logger.debug('strategicPlanner', 'Loaded system model', { 
+                length: systemModel.length 
+            });
+        }
+        
+        // Get recent interactions from long-term memory
+        const recentInteractions = await memory.retrieveLongTerm('recent_interactions', 5) || 'No recent interactions found.';
+        logger.debug('strategicPlanner', 'Retrieved recent interactions', { 
+            dataType: typeof recentInteractions,
+            dataAvailable: recentInteractions !== 'No recent interactions found.' 
+        });
+        
+        // Format the strategic planning prompt
+        const strategicUserPrompt = prompts.STRATEGIC_PLANNER_USER
+            .replace('{{original_message}}', enrichedMessage.original_message)
+            .replace('{{toolSummary}}', toolSummary)
+            .replace('{{selfModel}}', selfModel)
+            .replace('{{userModel}}', userModel)
+            .replace('{{systemModel}}', systemModel)
+            .replace('{{recentInteractions}}', 
+                typeof recentInteractions === 'object' 
+                ? JSON.stringify(recentInteractions, null, 2) 
+                : recentInteractions);
+        
+        const strategicPrompts = [
+            { role: 'system', content: prompts.STRATEGIC_PLANNER_SYSTEM },
+            { role: 'user', content: strategicUserPrompt }
+        ];
+
+        logger.debug('strategicPlanner', 'Strategic planning prompt prepared');
+        
+        // Emit subsystem message with the planning prompt
+        await sharedEventEmitter.emit('subsystemMessage', {
+            module: 'planner',
+            content: {
+                type: 'strategic_prompt',
+                prompt: strategicPrompts,
+                message: enrichedMessage.original_message
+            }
+        });
+
+        // Get settings for model configuration
+        const settings = loadSettings();
+        const strategicResponse = await openai.chat(strategicPrompts, {
+            model: settings.strategicPlannerModel || settings.plannerModel || settings.llmModel,
+            response_format: prompts.STRATEGY_SCHEMA,
+            temperature: settings.strategicPlannerTemperature || 0.7,
+            max_tokens: settings.strategicPlannerMaxTokens || 2000
+        });
+
+        logger.debug('strategicPlanner', 'Received strategic planning response');
+        
+        let strategy;
+        try {
+            strategy = JSON.parse(strategicResponse.content);
+            logger.debug('strategicPlanner', 'Successfully parsed strategy', {
+                approach: strategy.approach.substring(0, 100) + '...',
+                criteriaCount: strategy.successCriteria.length,
+                complexity: strategy.complexityAssessment
+            });
+            
+            // Add maximum iterations from settings
+            strategy.maxIterations = settings.maxREACTIterations || 10;
+            
+            // Emit subsystem message with the generated strategy
+            await sharedEventEmitter.emit('subsystemMessage', {
+                module: 'planner',
+                content: {
+                    type: 'strategy',
+                    strategy: strategy,
+                    message: enrichedMessage.original_message
+                }
+            });
+            
+            // Store strategy in short-term memory
+            await memory.storeShortTerm('current_strategy', JSON.stringify(strategy));
+            
+            return {
+                status: 'success',
+                strategy
+            };
+            
+        } catch (parseError) {
+            logger.error('strategicPlanner', 'Failed to parse strategy', {
+                content: strategicResponse.content,
+                error: parseError.message
+            });
+            
+            // Emit system error message
+            await sharedEventEmitter.emit('systemError', {
+                module: 'planner',
+                content: {
+                    type: 'system_error',
+                    error: parseError.message,
+                    stack: parseError.stack,
+                    location: 'strategicPlanner.parseStrategy',
+                    status: 'error'
+                }
+            });
+            
+            return {
+                status: 'error',
+                error: 'Failed to create a valid strategy'
+            };
+        }
+
+    } catch (error) {
+        logger.error('strategicPlanner', 'Strategic planning process failed', {
+            error: {
+                message: error.message,
+                stack: error.stack
+            }
+        });
+
+        // Emit system error message
+        await sharedEventEmitter.emit('systemError', {
+            module: 'planner',
+            content: {
+                type: 'system_error',
+                error: error.message,
+                stack: error.stack,
+                location: 'strategicPlanner',
+                status: 'error'
+            }
+        });
+
+        return {
+            status: 'error',
+            error: error.message
+        };
+    }
+}
+
+module.exports = { planner, strategicPlanner };

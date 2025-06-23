@@ -8,15 +8,29 @@ class ChatLogWriter {
     this.logPath = options.chatLogPath || path.join(DATA_DIR_PATH, 'chat_history.ndjson');
     this.rotateMb = options.logRotateMb || 5;
     this.maxEntries = options.maxEntries || 100; // Default limit for history entries to load
+    
+    // Ensure the data directory exists
+    const dirPath = path.dirname(this.logPath);
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+    
     this.currentStream = fs.createWriteStream(this.logPath, { flags: 'a' });
   }
 
   _checkRotate() {
-    const stats = fs.statSync(this.logPath);
-    if (stats.size > this.rotateMb * 1024 * 1024) {
-      const rotated = this.logPath.replace(/\.ndjson$/, `-${Date.now()}.ndjson`);
-      fs.renameSync(this.logPath, rotated);
-      this.currentStream = fs.createWriteStream(this.logPath, { flags: 'a' });
+    try {
+      // Check if the file exists before trying to stat it
+      if (fs.existsSync(this.logPath)) {
+        const stats = fs.statSync(this.logPath);
+        if (stats.size > this.rotateMb * 1024 * 1024) {
+          const rotated = this.logPath.replace(/\.ndjson$/, `-${Date.now()}.ndjson`);
+          fs.renameSync(this.logPath, rotated);
+          this.currentStream = fs.createWriteStream(this.logPath, { flags: 'a' });
+        }
+      }
+    } catch (err) {
+      console.error('Error checking log rotation:', err);
     }
   }
 

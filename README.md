@@ -5,7 +5,13 @@ An AI agent that chats and executes tasks using OpenAI models and a flexible too
 ## Features
 
 - Natural language conversation with a configurable personality
-- Planner and coordinator for tool-based task execution
+- Strategy-guided REACT execution framework:
+  - Strategic planner that generates high-level approach and success criteria
+  - Dynamic step-by-step execution with real-time evaluation
+  - Adaptive planning based on execution results
+  - Configurable iteration limits to prevent infinite loops
+  - Complexity-aware execution (handles simple tasks efficiently)
+- Memory-informed planning using context from self, user, and system models
 - Session based logging and conversation history
 - WebSocket API for real-time interaction
 - Multiline chat input for longer messages

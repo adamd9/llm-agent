@@ -4,7 +4,7 @@ const { getOpenAIClient } = require('../../utils/openaiClient.js');
 const { DATA_DIR_PATH } = require('../../utils/dataDir');
 require('dotenv').config();
 const { coordinator } = require('../coordinator');
-const { planner } = require('../planner');
+const { planner, strategicPlanner } = require('../planner');
 const personalityManager = require('../../personalities');
 const logger = require('../../utils/logger');
 const memory = require('../memory');
@@ -216,24 +216,24 @@ class Ego {
             });
         }
 
-        // Get plan from planner
-        const planResult = await planner(enrichedMessage);
-        logger.debug('executeWithEvaluation', 'Planner result', { planResult });
+        // Get strategy from strategic planner
+        const strategyResult = await strategicPlanner(enrichedMessage);
+        logger.debug('executeWithEvaluation', 'Strategic planner result', { strategyResult });
 
-        if (planResult.status === 'error') {
-            logger.debug('executeWithEvaluation', 'Planning failed', { error: planResult.error });
+        if (strategyResult.status === 'error') {
+            logger.debug('executeWithEvaluation', 'Strategic planning failed', { error: strategyResult.error });
             return {
                 type: 'error',
                 error: {
-                    message: planResult.error
+                    message: strategyResult.error
                 }
             };
         }
 
-        await sharedEventEmitter.emit('systemStatusMessage', 'Starting execution of the plan...');
+        await sharedEventEmitter.emit('systemStatusMessage', 'Starting execution with strategy...');
 
-        // Execute the plan
-        enrichedMessage.plan = planResult.plan;
+        // Execute with strategy
+        enrichedMessage.strategy = strategyResult.strategy;
         const executionResult = await coordinator(enrichedMessage);
         await memory.storeShortTerm('Plan execution result', executionResult);
         await sharedEventEmitter.emit('systemStatusMessage', 'Execution complete.');
@@ -552,7 +552,7 @@ ${error.message}`
                     selfModel = fs.readFileSync(selfModelPath, 'utf-8');
                     logger.debug('reflection', 'Successfully loaded self model file');
                 } else {
-                    logger.warn('reflection', 'Self model file not found, proceeding with empty self model');
+                    logger.debug('reflection', 'Self model file not found, proceeding with empty self model');
                 }
             } catch (fileError) {
                 logger.error('reflection', 'Error reading self model file', {
@@ -571,7 +571,7 @@ ${error.message}`
                     systemModel = fs.readFileSync(systemModelPath, 'utf-8');
                     logger.debug('reflection', 'Successfully loaded system model file');
                 } else {
-                    logger.warn('reflection', 'System model file not found, proceeding with empty system model');
+                    logger.debug('reflection', 'System model file not found, proceeding with empty system model');
                 }
             } catch (fileError) {
                 logger.error('reflection', 'Error reading system model file', {

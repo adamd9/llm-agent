@@ -10,6 +10,8 @@ const fallbackDefaults = {
   llmModel: 'gpt-4.1',
   // Optional specialised models for different subsystems
   plannerModel: '',
+  strategicPlannerModel: '',
+  stepPlannerModel: '',
   evaluatorModel: '',
   queryModel: '',
   bubbleModel: '',
@@ -20,6 +22,8 @@ const fallbackDefaults = {
   maxTokens: 1000,
   // Maximum tokens allowed for LLM requests
   tokenLimit: 10000,
+  // REACT execution settings
+  maxREACTIterations: 10,
   // Default ElevenLabs voice and model for TTS
   ttsVoiceId: 'D38z5RcWu1voky8WS1ja', // "Rachel"
   ttsModelId: 'eleven_flash_v2_5',

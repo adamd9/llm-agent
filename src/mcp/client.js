@@ -375,7 +375,7 @@ class MCPClient {
       } else if (parsedParams && typeof parsedParams === 'object') {
         mcpParams = parsedParams;
       } else {
-        logger.warn('mcpClient', `Unexpected parameter format for tool ${toolName}. Parameters:`, parsedParams);
+        logger.debug('mcpClient', `Unexpected parameter format for tool ${toolName}. Parameters:`, parsedParams);
         mcpParams = parsedParams || {};
       }
 
@@ -424,14 +424,14 @@ class MCPClient {
                 finalResult = firstContent.text; // Fallback to raw text if parsing fails
               }
             } else {
-              logger.warn('mcpClient', `sdkResponse.content[0] for tool ${toolName} on server ${serverId} not in expected format {type: 'text', text: 'string'}. Checking sdkResponse.output. Content[0]:`, firstContent);
+              logger.debug('mcpClient', `sdkResponse.content[0] for tool ${toolName} on server ${serverId} not in expected format {type: 'text', text: 'string'}. Checking sdkResponse.output. Content[0]:`, firstContent);
               finalResult = sdkResponse.output; // Fallback to output if content[0] is not as expected
             }
           } else if (sdkResponse.output !== undefined) {
             logger.debug('mcpClient', `Using sdkResponse.output for tool ${toolName} on server ${serverId} as sdkResponse.content was not suitable or absent.`);
             finalResult = sdkResponse.output;
           } else {
-            logger.warn('mcpClient', `Neither sdkResponse.content nor sdkResponse.output provided usable data for tool ${toolName} on server ${serverId}. Full response:`, sdkResponse);
+            logger.debug('mcpClient', `Neither sdkResponse.content nor sdkResponse.output provided usable data for tool ${toolName} on server ${serverId}. Full response:`, sdkResponse);
             // If there's no error, but no discernible data, return the whole sdkResponse as a fallback, or an empty object.
             // This situation implies the server responded successfully but sent an unusual payload.
             finalResult = sdkResponse; // Or consider returning an empty object or a specific 'no data' indicator.
