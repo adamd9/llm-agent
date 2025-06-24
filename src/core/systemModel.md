@@ -104,10 +104,6 @@ Throughout, status updates, debug info, and internal insights are emitted via `s
 - **`MCPClient`**: Handles communication with MCP servers, supports streaming responses for remote servers.  
 - **Tools**: All tools conform to a uniform interface with `name`, `description`, and `execute()` method.  
 - **Remote tools**: Accessed via SDK or local MCP servers, with communication managed through `MCPClient`.
-- **`planUpdater` Tool**: Special tool for updating plans based on results of prior steps.
-  - Validates that any tools in the updated plan actually exist in the system.
-  - Prevents creation of plans with non-existent tools.
-  - Returns a `replan` status when plan updates are needed, which triggers the coordinator to execute the updated plan.
 
 ## 6. Event System
 

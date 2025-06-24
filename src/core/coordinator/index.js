@@ -522,19 +522,7 @@ async function planNextStep(message, strategy, previousSteps, toolsDescription, 
             shortTermMemory.substring(0, 1000) + '...[truncated]' : shortTermMemory;
         const limitedLongTermMemory = longTermMemory.length > 1000 ? 
             longTermMemory.substring(0, 1000) + '...[truncated]' : longTermMemory;
-            
-        // Limit tools description size
-        let limitedToolsDescription = toolsDescription;
-        if (toolsDescription.length > 2000) {
-            // Keep only basic tool information without detailed descriptions
-            const toolLines = toolsDescription.split('\n');
-            const simplifiedTools = toolLines
-                .filter(line => line.trim().startsWith('- '))
-                .slice(0, 15) // Limit to 15 tools
-                .join('\n');
-            limitedToolsDescription = `${simplifiedTools}\n[Additional tools omitted to save tokens]`;
-        }
-        
+
         // Format the step planning prompt
         const stepUserPrompt = prompts.STEP_PLANNER_USER
             .replace('{{original_message}}', message)
@@ -545,7 +533,7 @@ async function planNextStep(message, strategy, previousSteps, toolsDescription, 
             .replace('{{long_term_memory}}', limitedLongTermMemory);
         
         const stepSystemPrompt = prompts.STEP_PLANNER_SYSTEM
-            .replace('{{toolsDescription}}', limitedToolsDescription);
+            .replace('{{toolsDescription}}', toolsDescription);
         
         const stepPrompts = [
             { role: 'system', content: stepSystemPrompt },
