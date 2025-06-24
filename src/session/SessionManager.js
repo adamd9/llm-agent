@@ -242,6 +242,10 @@ class SessionManager {
     }
     // Archive and clear previous timeline before starting new request
     timelineManager.reset();
+    // Notify clients to reset their UIs
+    this._broadcast({ type: 'sessionReset' });
+    // Send empty timeline snapshot so they clear timeline
+    this._broadcast({ type: 'timelineSnapshot', data: [] });
 
     this.busy = true;
     this._logEvent({ role: 'user', content: message });

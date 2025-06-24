@@ -17,6 +17,21 @@ let subsystemMessages = {
 let debugMessages = [];
 let timelineEvents = [];
 
+function resetAllSubsystemData(){
+    for(const key in subsystemMessages){
+        subsystemMessages[key]=[];
+        const elId = key==='systemError' ? 'system-error-output' : `${key}-output`;
+        const el = document.getElementById(elId);
+        if(el){
+            el.innerHTML = `<div class="no-messages">No ${key} messages yet</div>`;
+        }
+    }
+    timelineEvents=[];
+    const tlOut=document.getElementById('timeline-output');
+    if(tlOut){ tlOut.innerHTML = '<div class="no-messages">No timeline events yet</div>'; }
+    updateMessageCounts();
+}
+
 // --- Timeline Handling Helper & UI ---
 function handleTimelineEvt(evt) {
     timelineEvents.push(evt);
@@ -310,8 +325,8 @@ function toggleSettings() {
     // Load settings content when opening
     if (isHidden) {
         loadSettingsContent();
-        // Set active tab to general by default
-        showSettingsTab('general');
+        // Set active tab to stats by default
+        showSettingsTab('stats');
     }
 }
 
@@ -329,9 +344,9 @@ function loadSettingsContent() {
         .then(data => {
             // Create tab structure
             output.innerHTML = `
-                <div id="settings-general" class="settings-tab active">${data.general}</div>
+                <div id="settings-general" class="settings-tab">${data.general}</div>
                 <div id="settings-prompts" class="settings-tab">${data.prompts}</div>
-                <div id="settings-stats" class="settings-tab">${data.stats}</div>
+                <div id="settings-stats" class="settings-tab active">${data.stats}</div>
                 <div id="settings-files" class="settings-tab">${data.files}</div>
             `;
             
@@ -1157,7 +1172,6 @@ function humanizeStatusMessage(message) {
         'Starting execution of the plan...': '🔧 Working on it...',
         'Executing the plan...': '🚀 Almost there...',
         'query': '📨 Querying model...',
-        'evalForUpdate': 'Evaluating results...',
         'finalizing': '✨ Finalizing response...'
     };
 
@@ -1610,21 +1624,6 @@ function connect() {
                 console.log('Working status update:', data.data.status);
                 showStatus(data.data.status);
                 
-                // If this is the last working message before the final response,
-                // show a finalizing message
-                if (data.data.status === 'evalForUpdate') {
-                    // Set a timeout to show the finalizing message if the response doesn't come soon
-                    if (window.finalizingTimeout) {
-                        clearTimeout(window.finalizingTimeout);
-                    }
-                    window.finalizingTimeout = setTimeout(() => {
-                        // Only show if we haven't received a response yet
-                        if (!document.querySelector('.message.assistant:last-child') || 
-                            document.querySelector('.message.assistant:last-child').textContent.trim() === '') {
-                            showFinalizingMessage();
-                        }
-                    }, 2000); // Show after 2 seconds if no response
-                }
                 break;
                 
             case 'timelineSnapshot':
@@ -1747,6 +1746,10 @@ function connect() {
                 
                 // addMessage('error', `Error: ${typeof data.error === 'string' ? data.error : JSON.stringify(data.error)}`); // Removed: Server errors should only go to the System Errors toggle
                 clearStatus();
+                break;
+
+            case 'sessionReset':
+                resetAllSubsystemData();
                 break;
 
             case 'user':
