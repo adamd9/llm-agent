@@ -20,6 +20,11 @@ An AI agent that chats and executes tasks using OpenAI models and a flexible too
   - `reflection` – lightweight, runs after each response to store insights with minimal LLM usage
   - `memoryMaintenance` – heavier, scheduled/triggered for deep memory consolidation, pruning, and evaluation
 - Detailed logging panels for tools, LLM requests, memory access and scheduled tasks
+- Consolidated **Timeline** modal: chronological view of all subsystem events with:
+  - Expand/collapse rows showing full JSON payloads
+  - Fixed-width subsystem badge (pill) so source is immediately visible
+  - Text filter and per-row / copy-visible buttons
+  - State persisted server-side; resets on new user query with automatic archival of the last 10 timelines
 
 ## Getting Started
 
