@@ -166,7 +166,8 @@ EXAMPLE FORMAT:
 }
 
 For tool execution steps, include the tool name, action, and parameters.
-For completion steps, you must still include all fields but can use placeholder values for tool-related fields.`;
+For completion steps, you must still include all fields but can use placeholder values for tool-related fields.
+For the question tool, status is always "complete"`;
 
 // User prompt for step planner
 const STEP_PLANNER_USER = `Request: "{{original_message}}"
@@ -241,7 +242,8 @@ STEP RESULT:
 {{stepResult}}
 
 Evaluate if this step result is making progress toward the strategic approach and success criteria.
-Provide an honest assessment with suggestions if improvements are needed.`;
+Provide an honest assessment with suggestions if improvements are needed.
+If the step used the 'question' tool and 'needsUserResponse' is true, respond with 'isOnTrack': true and reasoning: "Awaiting user input" so the planner will stop until the user responds.`;
 
 // JSON schema for evaluation response
 const EVALUATION_SCHEMA = {

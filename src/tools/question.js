@@ -73,7 +73,7 @@ class QuestionTool {
         // For now, we just return a message indicating that a question has been asked
         const toolResponse = { 
             status: 'success', 
-            message: 'Question has been asked to the user.',
+            message: 'Question should be asked to the user.',
             data: {
                 question,
                 context: context || undefined,

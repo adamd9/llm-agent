@@ -11,7 +11,7 @@ The agent is built upon a modular, layered architecture with three primary compo
     - Drives the main execution loop, including planning, execution, evaluation, and reflection.  
     - Stores user messages, execution results, and reflection insights in short-term memory; retrieves relevant memories (short-term & long-term) via LLM-based relevance filtering and summarization.  
     - Emits status, debug, system, and subsystem events for transparency and debugging with descriptive titles that include function names for LLM responses and tool names for tool executions and errors.  
-    - After each assistant response the task planner triggers the `reflection` tool, which performs a lightweight analysis of recent interactions and stores lessons/insights into long-term memory.  
+    - After each assistant response, the task planner triggers the `reflection` tool, performing a lightweight analysis of recent interactions and storing lessons/insights into long-term memory.  
     - Explicitly tags memory entries with module identifiers and timestamps, supporting detailed memory analysis and consolidation commands.
 
 *   **Coordinator Layer (`src/core/coordinator/`)**:  
@@ -51,7 +51,8 @@ The Memory subsystem has been significantly refined with recent insights:
 
 * **Memory Operations**:  
     - Emission of `subsystemMessage` events during memory retrieval, analysis, and storage for transparency.  
-    - Memory data—including commands and their results—are available for analysis during reflection and consolidation commands, ensuring continuous learning and memory management.
+    - Memory data—including commands and their results—are available for analysis during reflection and consolidation commands, ensuring continuous learning and memory management.  
+    - The system explicitly tags memory entries with module identifiers and timestamps for detailed analysis and targeted operations.
 
 ## 3. System Flow & Operational Loop
 
@@ -71,7 +72,7 @@ The core operation is an iterative loop involving:
     - Executes plan step-by-step, invoking tools via `MCPToolManager`.  
     - Handles errors, retries, or replans as necessary.  
     - Emits subsystem messages with execution results or errors.  
-5. **DmemoryMaintenance Memory Maintenance (`memoryMaintenance` tool)**:  
+5. **Memory Maintenance (`memoryMaintenance` tool)**:  
     - Periodically or when explicitly scheduled, the planner invokes the heavy-weight `memoryMaintenance` tool.  
     - It consolidates long-term memory, prunes low-value items, and can run intensive evaluations of recent execution results where needed.  
 6. **Decision & Retry**:  
@@ -96,7 +97,8 @@ Throughout, status updates, debug info, and internal insights are emitted via `s
 - The `reflection` tool analyzes the latest short-term memory and relevant long-term memory to generate JSON insights, lessons, follow-up questions, and directives.  
 - These insights are stored in long-term memory, enhancing the agent’s adaptive capabilities.  
 - Reflection occurs after each assistant response via the `reflection` tool, including during consolidation commands.  
-- Reflection results include lessons learned, which inform future planning and decision-making.
+- Reflection results include lessons learned, which inform future planning and decision-making.  
+- Explicit memory tagging with module identifiers and timestamps supports detailed memory analysis and targeted processing.
 
 ## 5. Tools & Communication
 
@@ -135,11 +137,12 @@ The REACT execution loop in the coordinator module implements special handling f
 - Memory relevance filtering incorporates recent short-term context, providing richer, contextual retrieval.  
 - Reflection after each response improves agent adaptability, with lessons stored for future cycles.  
 - Explicit handling of commands like consolidation, consolidation feedback, and memory analysis has been integrated into operational flow.  
-- Commands such as "consolidate" are explicitly stored as memory entries with module tags and timestamps, allowing targeted retrieval and processing.
+- Commands such as "consolidate" are explicitly stored as memory entries with module tags and timestamps, allowing targeted retrieval and processing.  
+- Memory entries are explicitly tagged with module identifiers and timestamps for detailed analysis and targeted operations.
 
 ---
 
-## 9. Contradictions & Preferences
+## 10. Contradictions & Preferences
 
 - The current detailed architecture has been refined with recent memory data.  
 - Memory analysis, relevance-based retrieval, and reflection have been explicitly incorporated into the operational flow.  
