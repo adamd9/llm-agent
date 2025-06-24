@@ -15,6 +15,25 @@ let subsystemMessages = {
     systemError: []
 };
 let debugMessages = [];
+
+// --- Timeline Handling Helper ---
+function handleTimelineEvt(evt) {
+    if (!evt || !evt.subsystem) return;
+    const module = evt.subsystem;
+    const content = evt.payload;
+    const title = evt.title || (typeof content === 'object' && content.type) || 'Message';
+    if (!subsystemMessages[module]) {
+        subsystemMessages[module] = [];
+        messageCounters[module] = 0;
+        filterKeywords[module] = '';
+    }
+    subsystemMessages[module].push({
+        id: messageCounters[module]++,
+        content,
+        title,
+        timestamp: evt.receivedAt || new Date().toISOString()
+    });
+}
 let messageCounters = { planner: 0, coordinator: 0, ego: 0, tools: 0, llmClient: 0, memory: 0, scheduler: 0, systemError: 0, debug: 0 };
 let filterKeywords = { planner: '', coordinator: '', ego: '', tools: '', llmClient: '', memory: '', scheduler: '', systemError: '', debug: '' };
 let connectionError = false; // Track connection error state
@@ -352,7 +371,13 @@ function updateSubsystemOutput(module) {
         output.innerHTML += messages.map((msg) => {
             const messageId = `${module}-message-${msg.id}`;
             const timestamp = new Date(msg.timestamp).toLocaleTimeString();
-            let messageTitle = typeof msg.content === 'object' ? (msg.content.type || 'Message') : 'Message';
+            let messageTitle = msg.title || (typeof msg.content === 'object' ? (msg.content.type || 'Message') : 'Message');
+            // Fallback to content.type if title is generic
+            if (messageTitle.toLowerCase().endsWith(': message') || messageTitle === 'Message') {
+                if (typeof msg.content === 'object' && msg.content.type) {
+                    messageTitle = msg.content.type;
+                }
+            }
             
             // For tool execution and error messages, include the tool name in the title
             if (typeof msg.content === 'object' && (msg.content.type === 'tool_execution' || msg.content.type === 'tool_error') && msg.content.tool) {
@@ -1456,6 +1481,14 @@ function connect() {
                 }
                 break;
                 
+            case 'timelineSnapshot':
+                (data.data || []).forEach(e => handleTimelineEvt(e));
+                updateMessageCounts();
+                break;
+            case 'timelineEvent':
+                handleTimelineEvt(data.data);
+                updateMessageCounts();
+                break;
             case 'subsystem':
                 console.log('Subsystem message:', data.data);
                 const module = data.data.module;

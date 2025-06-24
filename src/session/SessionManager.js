@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const sharedEventEmitter = require('../utils/eventEmitter');
+const timelineManager = require('../timeline/TimelineManager');
 const logger = require('../utils/logger');
 const core = require('../core');
 const WebSocket = require('ws');
@@ -57,9 +58,10 @@ class SessionManager {
       this._broadcast({ type: 'working', data: { status: data } });
     });
 
-    sharedEventEmitter.on('subsystemMessage', async (data) => {
-      await logger.debug('subsystem', `${data.module} subsystem message`, data);
-      this._broadcast({ type: 'subsystem', data });
+    // Consolidated timeline events are recorded by TimelineManager and emitted as 'timelineEvent'.
+    // Broadcast them verbatim so clients can filter locally.
+    sharedEventEmitter.on('timelineEvent', (evt) => {
+      this._broadcast({ type: 'timelineEvent', data: evt });
     });
 
     sharedEventEmitter.on('systemError', async (data) => {
@@ -213,6 +215,9 @@ class SessionManager {
     }));
     
     // Send history to the client if available
+    // Send current timeline snapshot so client can build UI immediately
+    ws.send(JSON.stringify({ type: 'timelineSnapshot', data: timelineManager.getEvents() }));
+
     if (this.history.length > 0) {
       // Send each history item as individual messages
       this.history.forEach(item => {
@@ -235,6 +240,9 @@ class SessionManager {
     if (this.busy) {
       return { error: 'busy' };
     }
+    // Archive and clear previous timeline before starting new request
+    timelineManager.reset();
+
     this.busy = true;
     this._logEvent({ role: 'user', content: message });
     this._broadcast({ type: 'user', data: { content: message } });
