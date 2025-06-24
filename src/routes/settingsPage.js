@@ -131,6 +131,10 @@ function registerSettingsRoutes(app, { ego, toolManager }) {
     `;
     
     const statsContent = `
+      <h3>Short Term Memory</h3>
+      <p class="token-count">~${shortMemTokens} tokens</p>
+      <h3>Long Term Memory</h3>
+      <p class="token-count">~${longMemTokens} tokens</p>
       <h3>Loaded Tools</h3>
       <ul>
         ${tools.map(t => `<li>${t}</li>`).join('') || '<li>None</li>'}
@@ -141,14 +145,6 @@ function registerSettingsRoutes(app, { ego, toolManager }) {
       </ul>
       <h3>Personality</h3>
       <p>${personalityInfo}</p>
-      <details>
-        <summary><h3 style="display:inline">Short Term Memory</h3> <span class="token-count">(~${shortMemTokens} tokens)</span></summary>
-        <pre>${shortMem.replace(/</g,'&lt;')}</pre>
-      </details>
-      <details>
-        <summary><h3 style="display:inline">Long Term Memory</h3> <span class="token-count">(~${longMemTokens} tokens)</span></summary>
-        <pre>${longMem.replace(/</g,'&lt;')}</pre>
-      </details>
     `;
 
     const filesContent = `
