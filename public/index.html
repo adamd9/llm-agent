@@ -63,7 +63,7 @@
                     <span class="sleep-icon">💤</span>
                     <span class="sleep-text">Sleep</span>
                 </button>
-                <button onclick="toggleDebug()" class="debug-toggle">Debug ▼</button>
+                <button onclick="toggleTimeline()" class="timeline-toggle">Timeline ▼</button>
                 <button onclick="toggleSubsystem('planner')" class="subsystem-toggle planner-toggle">
                     Planner <span class="message-count planner-count">0</span> ▼
                 </button>
@@ -93,15 +93,15 @@
         </header>
     </div>
 
-    <!-- Debug Modal -->
-    <div id="debug-modal" class="modal hidden">
+    <!-- Timeline Modal -->
+    <div id="timeline-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Debug Output</h3>
-                <input type="text" class="filter-input" placeholder="Filter..." oninput="filterMessages('debug', this.value)">
-                <button onclick="toggleDebug()" class="close-button">&times;</button>
+                <h3>Timeline</h3> <button onclick="copyVisibleTimeline()" class="copy-button">Copy Visible</button>
+                <input type="text" class="filter-input" placeholder="Filter..." oninput="filterMessages('timeline', this.value)">
+                <button onclick="toggleTimeline()" class="close-button">&times;</button>
             </div>
-            <div id="debug-output" class="modal-body"></div>
+            <div id="timeline-output" class="modal-body"></div>
         </div>
     </div>
 

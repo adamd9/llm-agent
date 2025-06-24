@@ -15,9 +15,11 @@ let subsystemMessages = {
     systemError: []
 };
 let debugMessages = [];
+let timelineEvents = [];
 
-// --- Timeline Handling Helper ---
+// --- Timeline Handling Helper & UI ---
 function handleTimelineEvt(evt) {
+    timelineEvents.push(evt);
     if (!evt || !evt.subsystem) return;
     const module = evt.subsystem;
     const content = evt.payload;
@@ -35,7 +37,8 @@ function handleTimelineEvt(evt) {
     });
 }
 let messageCounters = { planner: 0, coordinator: 0, ego: 0, tools: 0, llmClient: 0, memory: 0, scheduler: 0, systemError: 0, debug: 0 };
-let filterKeywords = { planner: '', coordinator: '', ego: '', tools: '', llmClient: '', memory: '', scheduler: '', systemError: '', debug: '' };
+let filterKeywords = {
+    timeline: '', planner: '', coordinator: '', ego: '', tools: '', llmClient: '', memory: '', scheduler: '', systemError: '', debug: '' };
 let connectionError = false; // Track connection error state
 let interruptButton = null; // Reference to the interrupt button
 let pendingUserAction = false; // Track if we're waiting for user action on interrupt
@@ -156,6 +159,141 @@ function toggleSystemErrors() {
         updateSubsystemOutput('systemError');
     }
 }
+
+// Timeline toggle
+function toggleTimeline() {
+    const modal = document.getElementById('timeline-modal');
+    const button = document.querySelector('.timeline-toggle');
+    const isHidden = modal.classList.contains('hidden');
+    modal.classList.toggle('hidden');
+    button.textContent = isHidden ? 'Timeline ▲' : 'Timeline ▼';
+    document.body.style.overflow = isHidden ? 'hidden' : '';
+    if (isHidden) {
+        updateTimelineOutput();
+    }
+}
+
+function computeMessageTitle(module,msg){
+    let messageTitle = msg.title || (typeof msg.content === 'object' ? (msg.content.type || 'Message') : 'Message');
+    // Fallback generic
+    if (messageTitle.toLowerCase().endsWith(': message') || messageTitle === 'Message') {
+        if (typeof msg.content === 'object' && msg.content.type) {
+            messageTitle = msg.content.type;
+        }
+    }
+    // Tool execution/error
+    if (typeof msg.content === 'object' && (msg.content.type === 'tool_execution' || msg.content.type === 'tool_error') && msg.content.tool) {
+        messageTitle = msg.content.type === 'tool_execution' ? `Tool Execution [${msg.content.tool}]` : `Tool Error [${msg.content.tool}]`;
+    }
+    // Memory retrieval
+    if (messageTitle === 'memory_retrieval_result' && typeof msg.content === 'object' && msg.content.memoryType) {
+        messageTitle = `Memory Retrieval (${msg.content.memoryType})`;
+    }
+    // LLM client specific
+    if (module === 'llmClient' && typeof msg.content === 'object') {
+        if (msg.content.type === 'request') {
+            const messages = msg.content.messages || [];
+            const estimatedTokens = messages.reduce((total, m) => total + (m.content ? Math.ceil(m.content.length/4):0),0);
+            const caller = msg.content.caller || 'unknown';
+            messageTitle = `LLM Request [${caller}] (${estimatedTokens} tokens)`;
+        } else if (msg.content.type==='response' && msg.content.tokens){
+            const caller = msg.content.caller || msg.content.function || 'unknown';
+            messageTitle = `LLM Response [${caller}] (${msg.content.tokens} tokens)`;
+        }
+    }
+    return messageTitle;
+}
+
+function deriveTimelineTitle(evt){
+    const module=evt.subsystem;
+    const msg= { title: evt.title || '', content: evt.payload };
+    let title=evt.title||'';
+    // replicate subsystem title logic (simplified)
+    if(module==='llmClient' && typeof msg.content==='object'){
+        if(msg.content.type==='request'){
+            const caller=msg.content.caller||'unknown';
+            const estTokens=(msg.content.messages||[]).reduce((t,m)=>t+(m.content?Math.ceil(m.content.length/4):0),0);
+            title=`LLM Request [${caller}] (${estTokens} tokens)`;
+        } else if(msg.content.type==='response' && msg.content.tokens){
+            const caller=msg.content.caller||msg.content.function||'unknown';
+            title=`LLM Response [${caller}] (${msg.content.tokens} tokens)`;
+        }
+    }
+    if(!title){
+        if(typeof msg.content==='object'){
+            if(msg.content.title){
+                title=`${module}: ${msg.content.title}`;
+            } else if(msg.content.type){
+                title=`${module}: ${msg.content.type}`;
+            } else if(msg.content.action){
+                title=`${module}: ${msg.content.action}`;
+            } else if(msg.content.name){
+                title=`${module}: ${msg.content.name}`;
+            } else {
+                title=`${module}: message`;
+            }
+        } else if(typeof msg.content==='string'){
+            title=`${module}: ${msg.content.substring(0,60)}`;
+        } else {
+            title=`${module}: message`;
+        }
+    }
+    return computeMessageTitle(module,msg);
+}
+
+function updateTimelineOutput() {
+    const output = document.getElementById('timeline-output');
+    if (!output) return;
+    const keyword = (filterKeywords['timeline'] || '').toLowerCase();
+    let messages = timelineEvents.filter(ev => ev.subsystem !== 'debug');
+    if (keyword) {
+        messages = messages.filter(e => {
+            return (e.title && e.title.toLowerCase().includes(keyword)) ||
+                   JSON.stringify(e.payload).toLowerCase().includes(keyword);
+        });
+    }
+    if (!messages.length) {
+        output.innerHTML = '<div class="no-messages">No timeline events yet</div>';
+        return;
+    }
+    output.innerHTML = messages.map((e, idx) => {
+        const msgId = `timeline-message-${idx}`;
+        const timestamp = new Date(e.receivedAt).toLocaleTimeString();
+        let titleText = deriveTimelineTitle(e);
+        const prefix = `${e.subsystem}: `;
+        if(titleText.toLowerCase().startsWith(prefix.toLowerCase())){
+            titleText = titleText.slice(prefix.length);
+        }
+        return `<div class="subsystem-message collapsed" id="${msgId}">
+            <div class="subsystem-header" onclick="toggleMessage('${msgId}')">
+                <span class="subsystem-timestamp">${timestamp}</span>
+                <span class="subsystem-pill">${e.subsystem}</span>
+                <span class="subsystem-title">${titleText}</span>
+                <button class="copy-button" onclick="event.stopPropagation(); copyTimelineMessage(${idx});">Copy</button>
+                <span class="expand-icon">▼</span>
+            </div>
+            <div class="subsystem-content hidden">${formatTimelineContent(e)}</div>
+        </div>`;
+    }).join('');
+}
+
+
+function copyVisibleTimeline() {
+    updateTimelineOutput();
+    const output = document.getElementById('timeline-output');
+    if (!output) return;
+    navigator.clipboard.writeText(output.innerText).then(()=>alert('Timeline copied'));}
+
+function copyTimelineMessage(idx) {
+    if (!timelineEvents[idx]) return;
+    const text = JSON.stringify(timelineEvents[idx].payload, null, 2);
+    navigator.clipboard.writeText(text).then(()=>alert('Event copied'));}
+
+function formatTimelineContent(evt) {
+    const pretty = JSON.stringify(evt.payload, null, 2).replace(/</g,'&lt;');
+    return `<pre style="white-space: pre-wrap;">${pretty}</pre>`;
+}
+
 
 // Function to toggle settings modal
 function toggleSettings() {
@@ -371,7 +509,7 @@ function updateSubsystemOutput(module) {
         output.innerHTML += messages.map((msg) => {
             const messageId = `${module}-message-${msg.id}`;
             const timestamp = new Date(msg.timestamp).toLocaleTimeString();
-            let messageTitle = msg.title || (typeof msg.content === 'object' ? (msg.content.type || 'Message') : 'Message');
+            let messageTitle = computeMessageTitle(module,msg);
             // Fallback to content.type if title is generic
             if (messageTitle.toLowerCase().endsWith(': message') || messageTitle === 'Message') {
                 if (typeof msg.content === 'object' && msg.content.type) {
@@ -413,7 +551,8 @@ function updateSubsystemOutput(module) {
             return `<div class="subsystem-message collapsed" id="${messageId}">
                 <div class="subsystem-header" onclick="toggleMessage('${messageId}')">
                     <span class="subsystem-timestamp">${timestamp}</span>
-                    <span class="subsystem-title">${messageTitle}</span>
+                     <span class="subsystem-pill">${module}</span>
+                     <span class="subsystem-title">${messageTitle}</span>
                     <button class="copy-button" onclick="event.stopPropagation(); copyMessage('${module}', ${msg.id});">Copy</button>
                     <span class="expand-icon">▼</span>
                 </div>
@@ -499,6 +638,11 @@ function copyMessage(module, id) {
 }
 
 function filterMessages(module, keyword) {
+    if (module === 'timeline') {
+        filterKeywords.timeline = keyword.toLowerCase();
+        updateTimelineOutput();
+        return;
+    }
     filterKeywords[module] = keyword.toLowerCase();
     if (module === 'debug') {
         updateDebugOutput();
@@ -1185,6 +1329,8 @@ async function fetchHistory() {
         const history = await res.json();
         const messagesDiv = document.getElementById('messages');
         if (messagesDiv) messagesDiv.innerHTML = '';
+        // Ensure any previous canvas content is cleared when (re)loading history
+        clearCanvas();
         
         // Set the flag to indicate we're loading history
         isLoadingHistory = true;
@@ -1482,17 +1628,16 @@ function connect() {
                 break;
                 
             case 'timelineSnapshot':
-                (data.data || []).forEach(e => handleTimelineEvt(e));
+                (data.data||[]).forEach(ev=> handleTimelineEvt(ev));
                 updateMessageCounts();
+                if(!document.getElementById('timeline-modal').classList.contains('hidden')) updateTimelineOutput();
                 break;
             case 'timelineEvent':
                 handleTimelineEvt(data.data);
                 updateMessageCounts();
+                if(!document.getElementById('timeline-modal').classList.contains('hidden')) updateTimelineOutput();
                 break;
             case 'subsystem':
-                console.log('Subsystem message:', data.data);
-                const module = data.data.module;
-                const content = data.data.content;
                 
                 // Store the message with timestamp
                 if (subsystemMessages[module]) {

@@ -135,6 +135,11 @@ const STEP_PLANNER_SYSTEM = `You are an expert step planner working within a REA
 Available tools:
 {{toolsDescription}}
 
+IMPORTANT TOOL FIELD RULES:
+- The "tool" field must be ONLY the tool name (for example, "llmquery").
+- The "action" field must be ONLY the action name for that tool (for example, "query").
+- NEVER combine them into a single value such as "llmquery.query". This will be treated as invalid.
+
 You will plan a step that is either:
 1. A tool execution step with status "in_progress"
 2. A completion step with status "complete" if the task is done

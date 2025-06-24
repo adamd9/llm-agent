@@ -764,7 +764,18 @@ header {
     transition: all 0.2s ease;
 }
 
-.debug-toggle:hover {
+.timeline-toggle {
+    background: #f5f5f5;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #666;
+    transition: all 0.2s ease;
+}
+
+.debug-toggle:hover, .timeline-toggle:hover {
     background: #e0e0e0;
 }
 
@@ -1279,6 +1290,21 @@ header {
 
 .subsystem-content strong {
     color: #1565c0;
+}
+
+/* Pill showing subsystem */
+.subsystem-pill {
+    display:inline-block;
+    min-width:80px;
+    padding:2px 6px;
+    margin-right:8px;
+    background:#e4e7eb;
+    border:1px solid #c2c6cc;
+    border-radius:10px;
+    font-size:12px;
+    font-weight:600;
+    color:#333;
+    text-align:center;
 }
 
 .expand-all-container {

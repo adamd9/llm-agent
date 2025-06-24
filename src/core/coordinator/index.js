@@ -574,6 +574,8 @@ async function planNextStep(message, strategy, previousSteps, toolsDescription, 
         
         try {
             const step = JSON.parse(stepResponse.content);
+
+            
             
             // If step status is 'complete', ensure all required fields have default values
             // This is needed because OpenAI schema validation requires all fields in 'required'
