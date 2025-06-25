@@ -118,133 +118,6 @@ ${dataString}
     return memoryContent;
   }
 
-  // Parse memory content with markdown format and handle consolidated tags for backward compatibility
-  parseMemoryContent(content) {
-    const memories = [];
-    
-    // New markdown format
-    // Match markdown memories in the format: ## Memory: <context>\n*Module: <module> | Timestamp: <timestamp>*\n\n<content>\n\n---
-    const markdownRegex = /## Memory: ([^\n]*)\s*\n\s*\*Module: ([^|]*) \| Timestamp: ([^\*]*)\*\s*\n\n([\s\S]*?)\n\n---/g;
-    
-    let match;
-    while ((match = markdownRegex.exec(content)) !== null) {
-      try {
-        memories.push({
-          context: match[1].trim(),
-          module: match[2].trim(),
-          timestamp: match[3].trim(),
-          content: match[4].trim(),
-          format: 'markdown'
-        });
-      } catch (error) {
-        logger.error('Memory', 'Error parsing markdown memory content', { error: error.message });
-      }
-    }
-    
-    // Handle consolidated tag format for backward compatibility 
-    const memoryRegex = /<MEMORY\s+([^>]+)>\n([\s\S]*?)\n<\/MEMORY>/g;
-    
-    while ((match = memoryRegex.exec(content)) !== null) {
-      try {
-        // Parse attributes from the tag
-        const attributesStr = match[1];
-        const attributes = {};
-        
-        // Extract attributes using regex
-        const attrRegex = /(\w+)="([^"]*)"/g;
-        let attrMatch;
-        while ((attrMatch = attrRegex.exec(attributesStr)) !== null) {
-          attributes[attrMatch[1]] = attrMatch[2];
-        }
-        
-        // Create memory object with parsed attributes
-        // If tags attribute is missing, add an empty one for backward compatibility
-        if (!attributes.tags) {
-          attributes.tags = '';
-        }
-        
-        memories.push({
-          ...attributes,
-          content: match[2],
-          format: 'consolidated'
-        });
-      } catch (error) {
-        logger.error('Memory', 'Error parsing memory content', { error: error.message });
-      }
-    }
-    
-    // Also handle older legacy format for backward compatibility
-    // This can be removed once all memory files are migrated
-    this.parseLegacyMemoryContent(content, memories);
-    
-    return memories;
-  }
-  
-  // Parse legacy memory content for backward compatibility
-  parseLegacyMemoryContent(content, memories) {
-    // Legacy format with old delimiters
-    const legacyShortTermRegex = /\[(.*?)\]\[(.*?)\]\[(.*?)\]\n<MEMORY_CONTENT>\n([\s\S]*?)\n<\/MEMORY_CONTENT>/g;
-    const legacyLongTermRegex = /\[(.*?)\]\[(.*?)\]\n<MEMORY_CONTENT>\n([\s\S]*?)\n<\/MEMORY_CONTENT>/g;
-    
-    // Process short-term legacy format
-    let match;
-    while ((match = legacyShortTermRegex.exec(content)) !== null) {
-      memories.push({
-        module: match[1],
-        context: match[2],
-        timestamp: match[3],
-        content: match[4],
-        format: 'legacy_delimited'
-      });
-    }
-    
-    // Process long-term legacy format
-    const processedRanges = [];
-    while ((match = legacyLongTermRegex.exec(content)) !== null) {
-      const matchStart = match.index;
-      const matchEnd = match.index + match[0].length;
-      
-      // Skip if this range overlaps with a previously processed range
-      const overlaps = processedRanges.some(range => 
-        (matchStart >= range.start && matchStart <= range.end) || 
-        (matchEnd >= range.start && matchEnd <= range.end)
-      );
-      
-      if (!overlaps && match[0].indexOf('][') === match[0].lastIndexOf('][')) {
-        memories.push({
-          module: match[1],
-          timestamp: match[2],
-          content: match[3],
-          format: 'legacy_delimited'
-        });
-        
-        processedRanges.push({
-          start: matchStart,
-          end: matchEnd
-        });
-      }
-    }
-    
-    // Legacy format without delimiters (oldest format)
-    const legacyOldestRegex = /\[(.*?)\]\[(.*?)\]\[(.*?)\]\s([\s\S]*?)(?=\n\[|\n$)/g;
-    while ((match = legacyOldestRegex.exec(content)) !== null) {
-      // Skip if this is already captured by other formats
-      const isDuplicate = memories.some(m => 
-        m.timestamp === match[3] && m.content.includes(match[4].trim())
-      );
-      
-      if (!isDuplicate) {
-        memories.push({
-          module: match[1],
-          context: match[2],
-          timestamp: match[3],
-          content: match[4].trim(),
-          format: 'legacy_oldest'
-        });
-      }
-    }
-  }
-
   // Store long term memory
   async storeLongTerm(data) {
     logger.debug("Memory", "Storing long term memory", { data });
@@ -336,25 +209,12 @@ ${dataString}
         return { status: "success", message: "Memory file is empty", consolidated: 0 };
       }
       
-      // Parse the memory content to get individual memories
-      const memories = this.parseMemoryContent(memoryContent);
-      
-      if (memories.length === 0) {
-        return { status: "success", message: "No memories found to consolidate", consolidated: 0 };
-      }
-      
-      logger.debug("Memory", "Using LLM to intelligently consolidate memories", { memoryCount: memories.length });
-      
-      // Prepare the memories in markdown format that's easy for the LLM to analyze
-      const formattedMemories = memories.map(memory => {
-        const memoryContext = memory.context || 'Memory';
-        const memoryModule = memory.module || 'system';
-        return `## Memory: ${memoryContext}
+      // We no longer attempt to parse – just send raw content.
+      const originalSize = memoryContent.length;
+      logger.debug("Memory", "Using LLM to consolidate raw memory content", { originalSize });
 
-*Module: ${memoryModule} | Timestamp: ${memory.timestamp}*
-
-${memory.content}`;
-      }).join('\n\n---\n\n');
+      // Wrap raw memories in fenced markdown block so the LLM sees clear boundaries.
+      const formattedMemories = `\n\n\`\`\`markdown\n${memoryContent}\n\`\`\``;
       
       // Use LLM to consolidate memories
       const userPrompt = prompts.CONSOLIDATE_MEMORY_USER.replace('{{memories}}', formattedMemories);
@@ -364,7 +224,7 @@ ${memory.content}`;
         module: 'memory',
         content: {
           type: 'memory_consolidation_start',
-          originalCount: memories.length,
+          originalSize,
           timestamp: new Date().toISOString()
         }
       });
@@ -421,14 +281,16 @@ ${memory.content}
       // Write the consolidated content back to the file
       fs.writeFileSync(filePath, consolidatedContent);
       
-      // Calculate how many memories were consolidated
+      // Size metrics
       const consolidatedCount = consolidatedMemories.length;
-      const removedCount = memories.length - consolidatedCount;
+      const consolidatedSize = consolidatedContent.length;
+      const sizeReduction = originalSize - consolidatedSize;
       
       logger.debug("Memory", "Long term memory consolidated using LLM", {
-        original: memories.length,
-        consolidated: consolidatedCount,
-        removed: removedCount
+        originalSize,
+        consolidatedSize,
+        sizeReduction,
+        consolidatedCount
       });
       
       // Emit subsystem message about the consolidation
@@ -436,9 +298,10 @@ ${memory.content}
         module: 'memory',
         content: {
           type: 'memory_consolidation_result',
-          originalCount: memories.length,
-          consolidatedCount: consolidatedCount,
-          removedCount: removedCount,
+          originalSize,
+          consolidatedSize,
+          sizeReduction,
+          consolidatedCount,
           backupPath,
           timestamp: new Date().toISOString()
         }
@@ -447,9 +310,10 @@ ${memory.content}
       return {
         status: "success",
         message: "Long term memory consolidated successfully using LLM",
-        originalCount: memories.length,
-        consolidatedCount: consolidatedCount,
-        removedCount: removedCount,
+        originalSize,
+        consolidatedSize,
+        sizeReduction,
+        consolidatedCount,
         backupPath
       };
     } catch (error) {
