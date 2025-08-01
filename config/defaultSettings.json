@@ -1,6 +1,7 @@
 {
   "llmModel": "gpt-4.1-nano",
   "plannerModel": "gpt-4.1-nano",
+  "executionModeModel": "gpt-4.1-mini",
   "evaluatorModel": "gpt-4.1-nano",
   "queryModel": "gpt-4.1-nano",
   "bubbleModel": "gpt-4.1-nano",

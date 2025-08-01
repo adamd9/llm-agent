@@ -296,12 +296,49 @@ async function strategicPlanner(enrichedMessage, client = null) {
             });
         }
         
-        // Get recent interactions from long-term memory
-        const recentInteractions = await memory.retrieveLongTerm('recent_interactions', 5) || 'No recent interactions found.';
-        logger.debug('strategicPlanner', 'Retrieved recent interactions', { 
+        // Use already-retrieved long-term memory instead of making another call
+        const recentInteractions = enrichedMessage.context?.long_term_relevant_memory || 'No recent interactions found.';
+        logger.debug('strategicPlanner', 'Using already-retrieved long-term memory', { 
             dataType: typeof recentInteractions,
             dataAvailable: recentInteractions !== 'No recent interactions found.' 
         });
+        
+        // First, determine execution mode using LLM-based decision
+        const executionModeDecision = await determineExecutionMode({
+            userQuery: enrichedMessage.original_message,
+            shortTermMemory: enrichedMessage.context?.short_term_memory || {},
+            longTermMemory: enrichedMessage.context?.long_term_relevant_memory || {},
+            recentInteractions,
+            selfModel,
+            userModel
+        });
+        
+        logger.debug('strategicPlanner', 'Execution mode determined', { executionModeDecision });
+        
+        // Emit subsystem message about execution mode decision
+        await sharedEventEmitter.emit('subsystemMessage', {
+            module: 'planner',
+            content: {
+                type: 'execution_mode_decision',
+                mode: executionModeDecision.mode,
+                reasoning: executionModeDecision.reasoning,
+                confidence: executionModeDecision.confidence
+            }
+        });
+        
+        // If direct LLM execution is chosen, return early with execution mode flag
+        if (executionModeDecision.mode === 'DIRECT_LLM') {
+            logger.debug('strategicPlanner', 'Returning direct LLM execution mode');
+            return {
+                status: 'success',
+                executionMode: 'DIRECT_LLM',
+                reasoning: executionModeDecision.reasoning,
+                confidence: executionModeDecision.confidence
+            };
+        }
+        
+        // Continue with full strategic planning for complex queries
+        logger.debug('strategicPlanner', 'Proceeding with full strategic planning');
         
         // Format the strategic planning prompt
         const strategicUserPrompt = prompts.STRATEGIC_PLANNER_USER
@@ -420,6 +457,74 @@ async function strategicPlanner(enrichedMessage, client = null) {
         return {
             status: 'error',
             error: error.message
+        };
+    }
+}
+
+/**
+ * Determines whether to use direct LLM execution or full planning
+ * @param {Object} context - Context object with user query and memory
+ * @returns {Promise<Object>} Decision object with mode, reasoning, and confidence
+ */
+async function determineExecutionMode(context) {
+    try {
+        const systemPrompt = prompts.EXECUTION_MODE_DECISION_SYSTEM;
+        const userPrompt = prompts.EXECUTION_MODE_DECISION_USER
+            .replace('{{user_query}}', context.userQuery)
+            .replace('{{short_term_memory}}', JSON.stringify(context.shortTermMemory || {}, null, 2))
+            .replace('{{long_term_memory}}', JSON.stringify(context.longTermMemory || {}, null, 2))
+            .replace('{{recent_interactions}}', 
+                typeof context.recentInteractions === 'object' 
+                ? JSON.stringify(context.recentInteractions, null, 2) 
+                : context.recentInteractions)
+            .replace('{{self_model}}', context.selfModel || 'No self model available.')
+            .replace('{{user_model}}', context.userModel || 'No user model available.');
+
+        logger.debug('determineExecutionMode', 'Making LLM call for execution mode decision');
+
+        const decisionPrompts = [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+        ];
+
+        // Get settings for model configuration
+        const settings = loadSettings();
+        const response = await openai.chat(decisionPrompts, {
+            model: settings.executionModeModel || settings.plannerModel || settings.llmModel || 'gpt-4.1-mini',
+            temperature: 0.1,
+            max_tokens: 500
+        });
+
+        const content = response.content.trim();
+        logger.debug('determineExecutionMode', 'LLM response received', { content });
+
+        // Parse the JSON response
+        const decision = JSON.parse(content);
+        
+        // Validate the decision structure
+        if (!decision.mode || !['DIRECT_LLM', 'FULL_PLANNING'].includes(decision.mode)) {
+            throw new Error('Invalid execution mode decision');
+        }
+
+        return {
+            mode: decision.mode,
+            reasoning: decision.reasoning || 'No reasoning provided',
+            confidence: decision.confidence || 0.5
+        };
+
+    } catch (error) {
+        logger.debug('determineExecutionMode', 'Error determining execution mode, defaulting to FULL_PLANNING', {
+            error: {
+                message: error.message,
+                stack: error.stack
+            }
+        });
+        
+        // Default to full planning if decision fails
+        return {
+            mode: 'FULL_PLANNING',
+            reasoning: 'Error in decision process, defaulting to full planning for safety',
+            confidence: 0.5
         };
     }
 }

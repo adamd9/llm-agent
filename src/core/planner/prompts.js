@@ -269,6 +269,68 @@ const EVALUATION_SCHEMA = {
   }
 };
 
+// Decision prompt for determining execution mode within strategic planning
+const EXECUTION_MODE_DECISION_SYSTEM = `You are a smart routing system that prioritizes efficiency. Your task is to determine whether a user query needs complex multi-step planning or can be handled with a direct LLM call with web search.
+
+**BIAS TOWARD DIRECT_LLM**: Default to DIRECT_LLM unless the query genuinely requires complex execution or the agent's memory contains CRITICAL information that would significantly improve the response.
+
+Available execution modes:
+1. DIRECT_LLM: For queries that can be answered efficiently with a single LLM call + web search
+   - Simple factual questions (weather, news, current events, definitions)
+   - General knowledge requests
+   - Straightforward explanations or summaries
+   - Questions where fresh/current information is more valuable than stored memory
+   - ANY query that can be answered well without complex tool coordination
+
+2. FULL_PLANNING: ONLY for queries that genuinely require:
+   - File operations (reading, writing, modifying files)
+   - Code analysis or modifications
+   - Multi-step tasks requiring tool coordination
+   - Tasks explicitly requesting tool usage
+   - Complex analytical tasks requiring multiple tools working together
+   - Queries where the available memory content is ESSENTIAL to provide the correct answer
+
+**KEY PRINCIPLE**: Memory is already available as context - the question is whether you NEED to use it. Only choose FULL_PLANNING if:
+- The memory content is ESSENTIAL for providing the correct answer (not just helpful context)
+- The query explicitly requires complex tool coordination
+- The task cannot be completed with a single LLM call
+- Using the memory content would fundamentally change what the answer should be
+
+**EXAMPLES**:
+- "What's the weather today?" → DIRECT_LLM (even if weather data exists in memory, fresh data is better)
+- "What did we discuss about the weather yesterday?" → FULL_PLANNING (requires memory retrieval)
+- "Explain quantum physics" → DIRECT_LLM (straightforward explanation)
+- "Update the quantum physics notes in my file" → FULL_PLANNING (requires file operations)
+
+Respond with a JSON object containing:
+{
+  "mode": "DIRECT_LLM" or "FULL_PLANNING",
+  "reasoning": "Brief explanation focusing on why this mode is most efficient",
+  "confidence": 0.0 to 1.0
+}`;
+
+const EXECUTION_MODE_DECISION_USER = `Analyze this user query and determine the most EFFICIENT execution mode:
+
+User Query: {{user_query}}
+
+Available Context:
+- Short-term memory: {{short_term_memory}}
+- Long-term relevant memory: {{long_term_memory}}
+- Recent interactions: {{recent_interactions}}
+- Self model: {{self_model}}
+- User model: {{user_model}}
+
+**IMPORTANT**: All memory/context is already available to you. The question is whether you need to USE this content to provide the correct answer.
+
+**DECISION CRITERIA**:
+1. Can this query be answered well with a single LLM call + web search? → DIRECT_LLM
+2. Does this query require file operations or multi-step tool coordination? → FULL_PLANNING
+3. Is the available memory content ESSENTIAL for the correct answer? → FULL_PLANNING
+4. Is fresh/current information more valuable than the available memory? → DIRECT_LLM
+5. Would ignoring the memory content result in a fundamentally wrong answer? → FULL_PLANNING
+
+**DEFAULT TO DIRECT_LLM** unless the memory content is truly essential or complex tool coordination is required.`;
+
 module.exports = {
   PLANNER_SYSTEM,
   PLANNER_USER,
@@ -281,5 +343,7 @@ module.exports = {
   STEP_SCHEMA,
   EVALUATOR_SYSTEM,
   EVALUATOR_USER,
-  EVALUATION_SCHEMA
+  EVALUATION_SCHEMA,
+  EXECUTION_MODE_DECISION_SYSTEM,
+  EXECUTION_MODE_DECISION_USER
 };

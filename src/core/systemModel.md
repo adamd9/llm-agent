@@ -8,7 +8,11 @@ The agent is built upon a modular, layered architecture with three primary compo
 
 *   **Ego Layer (`src/core/ego/`)**:  
     - The central orchestrator handling natural language understanding, task management, identity & personality, and user interaction.  
-    - Drives the main execution loop, including planning, execution, evaluation, and reflection.  
+    - **Intelligent Execution Mode Decision**: Uses an initial LLM call to determine whether queries require full strategic planning or can be handled with direct LLM execution using web search capabilities.  
+    - **Two Execution Modes**:
+      - `DIRECT_LLM`: For simple queries that can be answered with a single LLM call with web search (factual questions, current events, general knowledge)
+      - `FULL_PLANNING`: For complex queries requiring multi-step execution, tool usage, file operations, or complex reasoning
+    - Drives the main execution loop: LLM-based mode decision → execution (direct or planned) → evaluation → reflection.  
     - Stores user messages, execution results, and reflection insights in short-term memory; retrieves relevant memories (short-term & long-term) via LLM-based relevance filtering and summarization.  
     - Emits status, debug, system, and subsystem events for transparency and debugging with descriptive titles that include function names for LLM responses and tool names for tool executions and errors.  
     - After each assistant response, the task planner triggers the `reflection` tool, performing a lightweight analysis of recent interactions and storing lessons/insights into long-term memory.  

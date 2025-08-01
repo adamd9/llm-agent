@@ -64,6 +64,10 @@ function registerSettingsRoutes(app, { ego, toolManager }) {
           <span class="setting-input"><input type="text" name="plannerModel" value="${raw.plannerModel ?? ''}" placeholder="${defaults.plannerModel || baseModel}" /></span>
         </label>
         <label>
+          <span class="setting-name">Execution Mode Model:</span>
+          <span class="setting-input"><input type="text" name="executionModeModel" value="${raw.executionModeModel ?? ''}" placeholder="${defaults.executionModeModel || baseModel}" /></span>
+        </label>
+        <label>
           <span class="setting-name">Evaluator Model:</span>
           <span class="setting-input"><input type="text" name="evaluatorModel" value="${raw.evaluatorModel ?? ''}" placeholder="${defaults.evaluatorModel || baseModel}" /></span>
         </label>

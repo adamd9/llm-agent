@@ -5,12 +5,15 @@ An AI agent that chats and executes tasks using OpenAI models and a flexible too
 ## Features
 
 - Natural language conversation with a configurable personality
-- Strategy-guided REACT execution framework:
+- **Intelligent Execution Mode Selection**: LLM-based decision layer that determines optimal execution approach
+  - `DIRECT_LLM`: Simple queries answered with single LLM call + web search (factual questions, current events)
+  - `FULL_PLANNING`: Complex queries using strategy-guided REACT execution framework
+- Strategy-guided REACT execution framework (for complex queries):
   - Strategic planner that generates high-level approach and success criteria
   - Dynamic step-by-step execution with real-time evaluation
   - Adaptive planning based on execution results
   - Configurable iteration limits to prevent infinite loops
-  - Complexity-aware execution (handles simple tasks efficiently)
+  - Optimized execution flow based on LLM-determined complexity
 - Memory-informed planning using context from self, user, and system models
 - Session based logging and conversation history
 - WebSocket API for real-time interaction

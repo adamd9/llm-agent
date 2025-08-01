@@ -216,7 +216,7 @@ class Ego {
             });
         }
 
-        // Get strategy from strategic planner
+        // Get strategy from strategic planner (now includes execution mode decision)
         const strategyResult = await strategicPlanner(enrichedMessage);
         logger.debug('executeWithEvaluation', 'Strategic planner result', { strategyResult });
 
@@ -228,6 +228,12 @@ class Ego {
                     message: strategyResult.error
                 }
             };
+        }
+
+        // Check if strategic planner decided on direct LLM execution
+        if (strategyResult.executionMode === 'DIRECT_LLM') {
+            logger.debug('executeWithEvaluation', 'Strategic planner chose direct LLM execution');
+            return await this.executeDirectLLM(enrichedMessage);
         }
 
         await sharedEventEmitter.emit('systemStatusMessage', 'Starting execution with strategy...');
@@ -755,6 +761,83 @@ ${error.message}`
                     stack: error.stack
                 }
             });
+        }
+    }
+
+
+
+    /**
+     * Executes a direct LLM call with web search capability
+     * @param {Object} enrichedMessage - The enriched message with context
+     * @returns {Promise<Object>} Execution result
+     */
+    async executeDirectLLM(enrichedMessage) {
+        try {
+            logger.debug('executeDirectLLM', 'Starting direct LLM execution with web search');
+            
+            await sharedEventEmitter.emit('systemStatusMessage', 'Executing direct query with web search...');
+            
+            // Emit subsystem message for direct execution
+            await sharedEventEmitter.emit('subsystemMessage', {
+                module: 'ego',
+                content: {
+                    type: 'direct_llm_execution',
+                    message: enrichedMessage.original_message
+                }
+            });
+
+            // Get the llmqueryopenai tool
+            const toolManager = require('../../mcp');
+            const llmTool = toolManager.getTool('llmqueryopenai');
+            
+            if (!llmTool) {
+                throw new Error('llmqueryopenai tool not available');
+            }
+
+            // Execute the tool with the user's query
+            const toolResult = await llmTool.execute('query', [{
+                name: 'query',
+                value: enrichedMessage.original_message
+            }]);
+
+            logger.debug('executeDirectLLM', 'Direct LLM execution completed', { toolResult });
+
+            // Store the result in short-term memory
+            await memory.storeShortTerm('Direct LLM execution result', toolResult);
+            
+            await sharedEventEmitter.emit('systemStatusMessage', 'Direct execution complete.');
+
+            // Format the response similar to the full planning flow
+            let finalResponse;
+            if (toolResult?.data?.data?.result) {
+                finalResponse = toolResult.data.data.result;
+            } else if (toolResult?.data?.message) {
+                finalResponse = toolResult.data.message;
+            } else {
+                finalResponse = toolResult;
+            }
+
+            return {
+                type: 'task',
+                response: finalResponse,
+                enriched_message: enrichedMessage,
+                execution_mode: 'DIRECT_LLM'
+            };
+
+        } catch (error) {
+            logger.debug('executeDirectLLM', 'Error in direct LLM execution', {
+                error: {
+                    message: error.message,
+                    stack: error.stack
+                }
+            });
+            
+            return {
+                type: 'error',
+                error: {
+                    message: `Direct LLM execution failed: ${error.message}`
+                }
+            };
         }
     }
 }
